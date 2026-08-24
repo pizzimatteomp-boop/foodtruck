@@ -309,15 +309,39 @@ function computeEventPlan(ev){
 
   var ingTotals = {};
   var equipNeeded = {};
+  var prepTotals = {};
+
+  function recipeRef(r){
+    return { refType: r.refType || 'ingredient', refId: r.refId!=null ? r.refId : r.ingredientId, qty: r.qty||0 };
+  }
+
+  function expandInto(refType, refId, neededQty, visiting){
+    if(!refId || neededQty<=1e-9) return;
+    if(refType==='product'){
+      if(visiting[refId]) return; // cycle guard: a preparation can't (indirectly) contain itself
+      var sub = byId(db.products, refId);
+      if(!sub) return;
+      prepTotals[refId] = (prepTotals[refId]||0) + neededQty;
+      var yieldQty = sub.yieldQty>0 ? sub.yieldQty : 1;
+      var batches = neededQty / yieldQty;
+      var nextVisiting = Object.assign({}, visiting); nextVisiting[refId] = true;
+      (sub.recipe||[]).forEach(function(r){
+        var ref = recipeRef(r);
+        expandInto(ref.refType, ref.refId, ref.qty*batches, nextVisiting);
+      });
+      return;
+    }
+    var ing = byId(db.ingredients, refId);
+    if(!ing) return;
+    if(ing.type==='equipment'){ equipNeeded[ing.id]=true; }
+    else{ ingTotals[ing.id] = (ingTotals[ing.id]||0) + neededQty; }
+  }
+
   rows.forEach(function(r){
     if(r.qtyPlan<=0) return;
     (r.product.recipe||[]).forEach(function(ri){
-      var ing = byId(db.ingredients, ri.ingredientId);
-      if(!ing) return;
-      if(ing.type==='equipment'){ equipNeeded[ing.id]=true; }
-      else{
-        ingTotals[ing.id] = (ingTotals[ing.id]||0) + (ri.qty||0)*r.qtyPlan;
-      }
+      var ref = recipeRef(ri);
+      expandInto(ref.refType, ref.refId, ref.qty*r.qtyPlan, {});
     });
   });
   db.ingredients.forEach(function(ing){
@@ -332,23 +356,38 @@ function computeEventPlan(ev){
   }).filter(function(x){ return x.total>1e-9; })
     .sort(function(a,b){ return (a.ing.category||'').localeCompare(b.ing.category||'') || a.ing.name.localeCompare(b.ing.name); });
 
-  var loadItems = shopping.map(function(x){ return { ing:x.ing, sub: fmtNum(x.total,2)+' '+x.ing.unit + (x.packages? ' · '+x.packages+' conf.':'') }; });
+  var preparations = Object.keys(prepTotals).map(function(id){
+    var p = byId(db.products, id);
+    var total = prepTotals[id];
+    var yieldQty = p.yieldQty>0 ? p.yieldQty : 1;
+    var batches = Math.ceil(total/yieldQty - 1e-9);
+    return { product:p, total:total, yieldQty:yieldQty, batches:batches };
+  }).filter(function(x){ return x.product && x.total>1e-9; })
+    .sort(function(a,b){ return a.product.name.localeCompare(b.product.name); });
+
+  var loadItems = shopping.map(function(x){
+    return { id:'ing_'+x.ing.id, name:x.ing.name, location:x.ing.location, sub: fmtNum(x.total,2)+' '+x.ing.unit + (x.packages? ' · '+x.packages+' conf.':'') };
+  });
   Object.keys(equipNeeded).forEach(function(id){
     var ing = byId(db.ingredients, id);
-    if(ing) loadItems.push({ ing:ing, sub:'attrezzatura' });
+    if(ing) loadItems.push({ id:'eq_'+ing.id, name:ing.name, location:ing.location, sub:'attrezzatura' });
+  });
+  preparations.forEach(function(x){
+    loadItems.push({ id:'prep_'+x.product.id, name:x.product.name, location:x.product.location,
+      sub: fmtNum(x.total,2)+' '+(x.product.yieldUnit||'pz')+' · preparazione' });
   });
   var loading = { truck:[], van:[], common:[] };
   loadItems.forEach(function(it){
-    var loc = it.ing.location||'both';
+    var loc = it.location||'both';
     if(loc==='truck') loading.truck.push(it);
     else if(loc==='van') loading.van.push(it);
     else loading.common.push(it);
   });
   ['truck','van','common'].forEach(function(k){
-    loading[k].sort(function(a,b){ return a.ing.name.localeCompare(b.ing.name); });
+    loading[k].sort(function(a,b){ return a.name.localeCompare(b.name); });
   });
 
-  return { rows:rows, rawSum:rawSum, shopping:shopping, loading:loading };
+  return { rows:rows, rawSum:rawSum, shopping:shopping, preparations:preparations, loading:loading };
 }
 
 /* ================= GOOGLE SHEETS SYNC ================= */
@@ -455,79 +494,257 @@ function connectSheet(url){
 }
 
 /* ================= APPS SCRIPT TEMPLATE ================= */
-var APPS_SCRIPT_CODE =
-"// =====================================================\n"+
-"// Food Truck Planner — Apps Script (incolla intero)\n"+
-"// =====================================================\n"+
-"var DATA_SHEET = 'Data';\n"+
-"\n"+
-"function doGet(e) {\n"+
-"  var action = e && e.parameter && e.parameter.action;\n"+
-"  if (action === 'data') return jsonResponse(getData());\n"+
-"  if (action === 'meta') return jsonResponse(getMeta());\n"+
-"  return jsonResponse({ok:true, info:'VegMan Planner script attivo'});\n"+
-"}\n"+
-"\n"+
-"function doPost(e) {\n"+
-"  var lock = LockService.getScriptLock();\n"+
-"  lock.waitLock(10000);\n"+
-"  try {\n"+
-"    var payload = JSON.parse(e.postData.contents);\n"+
-"    var action = payload.action || 'save';\n"+
-"    if (action === 'ping') return jsonResponse({ok:true});\n"+
-"    if (action === 'save') return jsonResponse(saveData(payload));\n"+
-"    return jsonResponse({ok:false, error:'azione sconosciuta'});\n"+
-"  } catch(err) {\n"+
-"    return jsonResponse({ok:false, error:err.toString()});\n"+
-"  } finally {\n"+
-"    lock.releaseLock();\n"+
-"  }\n"+
-"}\n"+
-"\n"+
-"function getData() {\n"+
-"  var ss = SpreadsheetApp.getActiveSpreadsheet();\n"+
-"  var sh = ss.getSheetByName(DATA_SHEET);\n"+
-"  if (!sh) return {ok:true, db:null, updatedAt:null};\n"+
-"  var json = sh.getRange('A1').getValue();\n"+
-"  var updatedAt = sh.getRange('B1').getValue();\n"+
-"  if (!json) return {ok:true, db:null, updatedAt:null};\n"+
-"  try {\n"+
-"    return {ok:true, db: JSON.parse(json), updatedAt: updatedAt ? String(updatedAt) : null};\n"+
-"  } catch(e) {\n"+
-"    return {ok:true, db:null, updatedAt:null};\n"+
-"  }\n"+
-"}\n"+
-"\n"+
-"function getMeta() {\n"+
-"  var ss = SpreadsheetApp.getActiveSpreadsheet();\n"+
-"  var sh = ss.getSheetByName(DATA_SHEET);\n"+
-"  if (!sh) return {ok:true, updatedAt:null};\n"+
-"  var updatedAt = sh.getRange('B1').getValue();\n"+
-"  return {ok:true, updatedAt: updatedAt ? String(updatedAt) : null};\n"+
-"}\n"+
-"\n"+
-"// Scrive solo se nessun altro dispositivo ha salvato nel frattempo\n"+
-"// (confronta expectedUpdatedAt con l'updatedAt attualmente sul foglio).\n"+
-"// Cosi' due telefoni che sincronizzano insieme non si sovrascrivono a vicenda.\n"+
-"function saveData(payload) {\n"+
-"  var ss = SpreadsheetApp.getActiveSpreadsheet();\n"+
-"  var sh = ss.getSheetByName(DATA_SHEET);\n"+
-"  if (!sh) sh = ss.insertSheet(DATA_SHEET);\n"+
-"  var currentRaw = sh.getRange('B1').getValue();\n"+
-"  var current = currentRaw ? String(currentRaw) : null;\n"+
-"  if (!payload.force && current && payload.expectedUpdatedAt !== current) {\n"+
-"    return {ok:false, conflict:true, updatedAt:current};\n"+
-"  }\n"+
-"  var newUpdatedAt = payload.updatedAt || new Date().toISOString();\n"+
-"  sh.getRange('A1').setValue(JSON.stringify(payload.db));\n"+
-"  sh.getRange('B1').setValue(newUpdatedAt);\n"+
-"  sh.getRange('C1').setValue('Non modificare queste celle a mano: i dati sono gestiti dall\\'app.');\n"+
-"  return {ok:true, updatedAt:newUpdatedAt};\n"+
-"}\n"+
-"\n"+
-"function jsonResponse(obj) {\n"+
-"  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);\n"+
-"}\n";
+var APPS_SCRIPT_CODE = `// =====================================================
+// VegMan Planner — Apps Script (incolla intero)
+// =====================================================
+var DATA_SHEET = 'Data';
+
+function doGet(e) {
+  var action = e && e.parameter && e.parameter.action;
+  if (action === 'data') return jsonResponse(getData());
+  if (action === 'meta') return jsonResponse(getMeta());
+  return jsonResponse({ok:true, info:'VegMan Planner script attivo'});
+}
+
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var payload = JSON.parse(e.postData.contents);
+    var action = payload.action || 'save';
+    if (action === 'ping') return jsonResponse({ok:true});
+    if (action === 'save') return jsonResponse(saveData(payload));
+    return jsonResponse({ok:false, error:'azione sconosciuta'});
+  } catch(err) {
+    return jsonResponse({ok:false, error:err.toString()});
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getData() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(DATA_SHEET);
+  if (!sh) return {ok:true, db:null, updatedAt:null};
+  var json = sh.getRange('A1').getValue();
+  var updatedAt = sh.getRange('B1').getValue();
+  if (!json) return {ok:true, db:null, updatedAt:null};
+  try {
+    return {ok:true, db: JSON.parse(json), updatedAt: updatedAt ? String(updatedAt) : null};
+  } catch(e) {
+    return {ok:true, db:null, updatedAt:null};
+  }
+}
+
+function getMeta() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(DATA_SHEET);
+  if (!sh) return {ok:true, updatedAt:null};
+  var updatedAt = sh.getRange('B1').getValue();
+  return {ok:true, updatedAt: updatedAt ? String(updatedAt) : null};
+}
+
+// Scrive solo se nessun altro dispositivo ha salvato nel frattempo
+// (confronta expectedUpdatedAt con l'updatedAt attualmente sul foglio).
+// Cosi' due telefoni che sincronizzano insieme non si sovrascrivono a vicenda.
+function saveData(payload) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(DATA_SHEET);
+  if (!sh) sh = ss.insertSheet(DATA_SHEET);
+  var currentRaw = sh.getRange('B1').getValue();
+  var current = currentRaw ? String(currentRaw) : null;
+  if (!payload.force && current && payload.expectedUpdatedAt !== current) {
+    return {ok:false, conflict:true, updatedAt:current};
+  }
+  var db = payload.db || {ingredients:[], products:[], events:[]};
+  var newUpdatedAt = payload.updatedAt || new Date().toISOString();
+  sh.getRange('A1').setValue(JSON.stringify(db));
+  sh.getRange('B1').setValue(newUpdatedAt);
+  sh.getRange('C1').setValue("Non modificare queste celle a mano: i dati sono gestiti dall'app.");
+  try {
+    exportTables(ss, db);
+  } catch (exportErr) {
+    // L'export delle tabelle leggibili non deve mai far fallire il salvataggio vero e proprio.
+  }
+  return {ok:true, updatedAt:newUpdatedAt};
+}
+
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ===================== TABELLE LEGGIBILI (per analisi/pivot) =====================
+   Ad ogni salvataggio, oltre al blob dati in "Data", lo script scrive anche queste
+   tabelle vere e proprie, pronte per essere lette, filtrate o messe in una tabella
+   pivot direttamente su Google Sheets. Vengono rigenerate ad ogni sync: non
+   modificarle a mano (le modifiche andrebbero perse) — per analisi personalizzate
+   crea un foglio nuovo e referenzia questi dati con QUERY o una tabella pivot. */
+
+function getOrCreateSheet(ss, name) {
+  var sh = ss.getSheetByName(name);
+  if (!sh) sh = ss.insertSheet(name);
+  return sh;
+}
+
+function writeTable(sh, headers, rows) {
+  sh.clearContents();
+  sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+  if (rows.length) sh.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  sh.setFrozenRows(1);
+}
+
+function byId(list, id) {
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+  return null;
+}
+
+function locLabel(loc) {
+  if (loc === 'truck') return 'Food Truck';
+  if (loc === 'van') return 'Furgone';
+  return 'Entrambi';
+}
+
+function round2(n) { return Math.round((n || 0) * 100) / 100; }
+
+function exportTables(ss, db) {
+  var ingredients = (db.ingredients || []).slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  var products = (db.products || []).slice().sort(function(a,b){
+    var ak = a.kind==='component' ? 1 : 0, bk = b.kind==='component' ? 1 : 0;
+    return ak-bk || (a.name||'').localeCompare(b.name||'');
+  });
+  var events = (db.events || []).slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+
+  var ingRows = ingredients.map(function(i){
+    return [i.id, i.name||'', i.category||'', i.type==='equipment'?'Attrezzatura':'Consumabile',
+      i.unit||'', locLabel(i.location), i.packageSize||'', i.alwaysRequired?'Sì':''];
+  });
+  writeTable(getOrCreateSheet(ss,'Ingredienti'),
+    ['ID','Nome','Categoria','Tipo','Unità','Posizione','Formato confezione','Sempre necessaria'], ingRows);
+
+  var prodRows = products.map(function(p){
+    var isComp = p.kind==='component';
+    return [p.id, p.name||'', p.category||'', isComp?'Semilavorato':'In vendita',
+      isComp?'':(p.price||0), isComp?'':(p.pct||0),
+      isComp?(p.yieldQty||1):'', isComp?(p.yieldUnit||''):'', isComp?locLabel(p.location):''];
+  });
+  writeTable(getOrCreateSheet(ss,'Prodotti'),
+    ['ID','Nome','Categoria','Tipo','Prezzo','% storica','Resa quantità','Resa unità','Posizione'], prodRows);
+
+  var recipeRows = [];
+  products.forEach(function(p){
+    (p.recipe||[]).forEach(function(r){
+      var refType = r.refType||'ingredient';
+      var refId = r.refId!=null ? r.refId : r.ingredientId;
+      var refName = '(eliminato)', refUnit = '';
+      if (refType==='product') { var rp=byId(products,refId); if(rp){ refName=rp.name; refUnit=rp.yieldUnit||''; } }
+      else { var ri=byId(ingredients,refId); if(ri){ refName=ri.name; refUnit=ri.unit||''; } }
+      recipeRows.push([p.name, refType==='product'?'Preparazione':'Ingrediente', refName, r.qty||0, refUnit]);
+    });
+  });
+  writeTable(getOrCreateSheet(ss,'Ricette'),
+    ['Prodotto','Tipo riferimento','Riferimento','Quantità','Unità'], recipeRows);
+
+  var evRows = events.map(function(ev){
+    return [ev.id, ev.name||'', ev.date||'', ev.revenue||0, (ev.menu||[]).length];
+  });
+  writeTable(getOrCreateSheet(ss,'Eventi'),
+    ['ID','Nome','Data','Fatturato previsto','N. prodotti in menu'], evRows);
+
+  var salesRows = [], shopRows = [], prepRows = [];
+  events.forEach(function(ev){
+    var plan = computePlan(ev, products, ingredients);
+    plan.rows.forEach(function(r){
+      salesRows.push([ev.name||'', ev.date||'', r.product.name, round2(r.effPct), round2(r.revenue), r.qtyPlan]);
+    });
+    plan.shopping.forEach(function(x){
+      shopRows.push([ev.name||'', ev.date||'', x.ing.name, x.ing.category||'', round2(x.total), x.ing.unit||'', x.packages!=null?x.packages:'']);
+    });
+    plan.preparations.forEach(function(x){
+      prepRows.push([ev.name||'', ev.date||'', x.product.name, round2(x.total), x.product.yieldUnit||'', x.batches]);
+    });
+  });
+  writeTable(getOrCreateSheet(ss,'Eventi_Vendite'),
+    ['Evento','Data','Prodotto','% effettiva','Fatturato stimato','Quantità da preparare'], salesRows);
+  writeTable(getOrCreateSheet(ss,'Eventi_Spesa'),
+    ['Evento','Data','Ingrediente','Categoria','Quantità','Unità','Confezioni'], shopRows);
+  writeTable(getOrCreateSheet(ss,'Eventi_Preparazioni'),
+    ['Evento','Data','Semilavorato','Quantità','Unità','N. ricette'], prepRows);
+}
+
+/* Motore di calcolo — stessa identica logica usata nell'app (stima vendite,
+   espansione ricorsiva delle preparazioni fino agli ingredienti grezzi). */
+function computePlan(ev, products, ingredients) {
+  var menu = (ev.menu||[]).map(function(m){
+    var p = byId(products, m.productId);
+    return p ? {product:p, pctOverride:m.pctOverride} : null;
+  }).filter(function(x){ return x; });
+
+  var rawSum = 0;
+  menu.forEach(function(m){ rawSum += (m.pctOverride!=null ? m.pctOverride : (m.product.pct||0)); });
+
+  var rows = menu.map(function(m){
+    var pct = (m.pctOverride!=null ? m.pctOverride : (m.product.pct||0));
+    var effPct = rawSum>0 ? (pct/rawSum*100) : 0;
+    var revenue = (ev.revenue||0) * effPct/100;
+    var price = m.product.price||0;
+    var qtyRaw = price>0 ? revenue/price : 0;
+    var qtyPlan = qtyRaw>0 ? Math.ceil(qtyRaw - 1e-9) : 0;
+    return {product:m.product, pct:pct, effPct:effPct, revenue:revenue, qtyPlan:qtyPlan};
+  });
+
+  var ingTotals = {}, equipNeeded = {}, prepTotals = {};
+
+  function recipeRef(r) {
+    return {refType:r.refType||'ingredient', refId:(r.refId!=null?r.refId:r.ingredientId), qty:r.qty||0};
+  }
+  function expandInto(refType, refId, neededQty, visiting) {
+    if (!refId || neededQty<=1e-9) return;
+    if (refType==='product') {
+      if (visiting[refId]) return;
+      var sub = byId(products, refId);
+      if (!sub) return;
+      prepTotals[refId] = (prepTotals[refId]||0) + neededQty;
+      var yieldQty = sub.yieldQty>0 ? sub.yieldQty : 1;
+      var batches = neededQty/yieldQty;
+      var nextVisiting = {}; for (var k in visiting) nextVisiting[k]=visiting[k]; nextVisiting[refId]=true;
+      (sub.recipe||[]).forEach(function(r){
+        var ref = recipeRef(r);
+        expandInto(ref.refType, ref.refId, ref.qty*batches, nextVisiting);
+      });
+      return;
+    }
+    var ing = byId(ingredients, refId);
+    if (!ing) return;
+    if (ing.type==='equipment') equipNeeded[ing.id]=true;
+    else ingTotals[ing.id] = (ingTotals[ing.id]||0) + neededQty;
+  }
+
+  rows.forEach(function(r){
+    if (r.qtyPlan<=0) return;
+    (r.product.recipe||[]).forEach(function(ri){
+      var ref = recipeRef(ri);
+      expandInto(ref.refType, ref.refId, ref.qty*r.qtyPlan, {});
+    });
+  });
+
+  var shopping = Object.keys(ingTotals).map(function(id){
+    var ing = byId(ingredients, id);
+    var total = ingTotals[id];
+    var packages = ing.packageSize ? Math.ceil(total/ing.packageSize - 1e-9) : null;
+    return {ing:ing, total:total, packages:packages};
+  }).filter(function(x){ return x.total>1e-9; });
+
+  var preparations = Object.keys(prepTotals).map(function(id){
+    var p = byId(products, id);
+    var total = prepTotals[id];
+    var yieldQty = p ? (p.yieldQty>0?p.yieldQty:1) : 1;
+    var batches = Math.ceil(total/yieldQty - 1e-9);
+    return {product:p, total:total, yieldQty:yieldQty, batches:batches};
+  }).filter(function(x){ return x.product && x.total>1e-9; });
+
+  return {rows:rows, shopping:shopping, preparations:preparations};
+}
+`;
 
 /* ================= RENDER SHELL ================= */
 var BRANDMARK_SVG = '<div class="brandmark"><svg viewBox="0 0 100 100"><path d="M50 27c-9 0-15 8-15 20 0 14 7 24 15 24s15-10 15-24c0-12-6-20-15-20z" fill="#fff"/><path d="M50 14c1 4 1 9-1 13-3-2-8-2-11 1-1-4 1-9 4-12 2-2 5-3 8-2z" fill="#B9DED3"/><path d="M50 14c2 4 3 9 2 13 3-1 8 0 10 3 2-4 1-9-2-12-3-2-6-4-10-4z" fill="#B9DED3"/></svg></div>';
@@ -599,18 +816,19 @@ function viewEventForm(){
        '</div>';
 
   h += '<div class="section-title">Menu dell\'evento</div>';
-  if(db.products.length===0){
-    h += '<div class="callout">Non hai ancora prodotti a catalogo. Vai su "Prodotti" e crealo prima, con relativa % storica e ricetta.</div>';
+  var sellableProducts = db.products.filter(function(p){ return (p.kind||'sellable')!=='component'; });
+  if(sellableProducts.length===0){
+    h += '<div class="callout">Non hai ancora prodotti in vendita a catalogo. Vai su "Prodotti" e crealo prima, con relativa % storica e ricetta.</div>';
   } else {
     h += '<div class="card">';
     var draftIds = d.menu.map(function(m){return m.productId;});
     var rawSelSum = 0;
-    db.products.forEach(function(p){
+    sellableProducts.forEach(function(p){
       var picked = draftIds.indexOf(p.id)>=0;
       var mrow = picked ? d.menu.find(function(m){return m.productId===p.id;}) : null;
       if(picked) rawSelSum += (mrow.pctOverride!=null ? mrow.pctOverride : (p.pct||0));
     });
-    db.products.slice().sort(function(a,b){return (b.pct||0)-(a.pct||0);}).forEach(function(p){
+    sellableProducts.slice().sort(function(a,b){return (b.pct||0)-(a.pct||0);}).forEach(function(p){
       var picked = draftIds.indexOf(p.id)>=0;
       var mrow = picked ? d.menu.find(function(m){return m.productId===p.id;}) : null;
       var pctVal = mrow && mrow.pctOverride!=null ? mrow.pctOverride : (p.pct||0);
@@ -639,6 +857,7 @@ function viewEventDetail(){
   var plan = computeEventPlan(ev);
   ev.shopChecked = ev.shopChecked||{};
   ev.loadChecked = ev.loadChecked||{};
+  ev.prepChecked = ev.prepChecked||{};
 
   var h = header(ev.name||'Evento', { back:'App.goTab(\'events\')', actionIcon:'✎', actionFn:'App.editEvent(\''+ev.id+'\')' });
 
@@ -654,6 +873,18 @@ function viewEventDetail(){
     h += '<tr><td>'+esc(r.product.name)+'</td><td class="num">'+fmtNum(r.effPct,1)+'%</td><td class="num">'+fmtEuro(r.revenue)+'</td><td class="num strong">'+r.qtyPlan+' pz</td></tr>';
   });
   h += '</tbody></table></div>';
+
+  if(plan.preparations.length>0){
+    h += '<div class="row between" style="margin-top:18px"><div class="section-title" style="margin:0">Preparazioni da fare</div><button class="btn small no-print" onclick="App.copyPreparations(\''+ev.id+'\')">📋 Copia</button></div>';
+    h += '<div class="card">';
+    plan.preparations.forEach(function(x){
+      var checked = !!ev.prepChecked[x.product.id];
+      var sub = fmtNum(x.total,2)+' '+esc(x.product.yieldUnit||'pz')+(x.yieldQty>1? ' · ≈ '+x.batches+' ricette da '+fmtNum(x.yieldQty,2)+' '+esc(x.product.yieldUnit||'pz') : '');
+      h += '<div class="check-item '+(checked?'done':'')+'"><input type="checkbox" '+(checked?'checked':'')+' onchange="App.togglePrepCheck(\''+ev.id+'\',\''+x.product.id+'\')">'+
+        '<div class="grow"><div class="item-name">'+esc(x.product.name)+'</div><div class="item-sub">'+sub+'</div></div></div>';
+    });
+    h += '</div>';
+  }
 
   h += '<div class="row between" style="margin-top:18px"><div class="section-title" style="margin:0">Lista spesa</div><button class="btn small no-print" onclick="App.copyShopping(\''+ev.id+'\')">📋 Copia</button></div>';
   if(plan.shopping.length===0){
@@ -687,10 +918,10 @@ function renderLoadGroup(title, key, items, ev){
   if(items.length===0) return '';
   var h = '<div class="card"><div class="strong" style="margin-bottom:6px">'+title+'</div>';
   items.forEach(function(it){
-    var ckey = 'load_'+key+'_'+it.ing.id;
+    var ckey = 'load_'+key+'_'+it.id;
     var checked = !!ev.loadChecked[ckey];
     h += '<div class="check-item '+(checked?'done':'')+'"><input type="checkbox" '+(checked?'checked':'')+' onchange="App.toggleLoadCheck(\''+ev.id+'\',\''+ckey+'\')">'+
-      '<div class="grow"><div class="item-name">'+esc(it.ing.name)+'</div><div class="item-sub">'+esc(it.sub)+'</div></div></div>';
+      '<div class="grow"><div class="item-name">'+esc(it.name)+'</div><div class="item-sub">'+esc(it.sub)+'</div></div></div>';
   });
   h += '</div>';
   return h;
@@ -699,10 +930,12 @@ function renderLoadGroup(title, key, items, ev){
 /* ================= PRODUCTS ================= */
 function viewProductsList(){
   var h = header('Prodotti', { actionIcon:'+', actionPrimary:true, actionFn:'App.newProduct()' });
-  var totalPct = db.products.reduce(function(s,p){ return s+(p.pct||0); },0);
-  if(db.products.length>0){
+  var sellable = db.products.filter(function(p){ return (p.kind||'sellable')!=='component'; });
+  var components = db.products.filter(function(p){ return p.kind==='component'; });
+  var totalPct = sellable.reduce(function(s,p){ return s+(p.pct||0); },0);
+  if(sellable.length>0){
     var ok = Math.abs(totalPct-100)<=2;
-    h += '<div class="card"><div class="row between"><span class="muted">Totale % storica catalogo</span><span class="badge '+(ok?'pos':'warn')+'">'+fmtNum(totalPct,1)+'%</span></div>'+
+    h += '<div class="card"><div class="row between"><span class="muted">Totale % storica (prodotti in vendita)</span><span class="badge '+(ok?'pos':'warn')+'">'+fmtNum(totalPct,1)+'%</span></div>'+
       '<div class="pctbar"><div class="fill '+(totalPct>100?'over':'')+'" style="width:'+Math.min(100,totalPct)+'%"></div></div>'+
       (ok?'':'<div class="faint" style="margin-top:6px">Dovrebbe sommare a circa 100% se rappresenta l\'intero storico vendite.</div>')+
       '</div>';
@@ -712,46 +945,82 @@ function viewProductsList(){
       '<button class="btn primary" onclick="App.newProduct()">+ Nuovo prodotto</button></div>';
     return h;
   }
-  h += '<div class="section-title">Catalogo</div>';
-  db.products.slice().sort(function(a,b){return (b.pct||0)-(a.pct||0);}).forEach(function(p){
+  function card(p){
     var nIng = (p.recipe||[]).length;
-    h += '<div class="card tap" onclick="App.openProduct(\''+p.id+'\')">'+
-      '<div class="row between"><span class="strong">'+esc(p.name)+'</span><span class="badge accent">'+fmtNum(p.pct,1)+'%</span></div>'+
-      '<div class="muted" style="margin-top:4px">'+fmtEuro(p.price)+(p.category?' · '+esc(p.category):'')+'</div>'+
+    var isComp = p.kind==='component';
+    var badge = isComp ? '<span class="badge warn">Semilavorato</span>' : '<span class="badge accent">'+fmtNum(p.pct,1)+'%</span>';
+    var sub = isComp ? ('Resa: '+fmtNum(p.yieldQty||1,2)+' '+esc(p.yieldUnit||'pz')) : fmtEuro(p.price);
+    return '<div class="card tap" onclick="App.openProduct(\''+p.id+'\')">'+
+      '<div class="row between"><span class="strong">'+esc(p.name)+'</span>'+badge+'</div>'+
+      '<div class="muted" style="margin-top:4px">'+sub+(p.category?' · '+esc(p.category):'')+'</div>'+
       (nIng>0 ? '<div class="faint" style="margin-top:4px">Ricetta: '+nIng+' ingredienti</div>' : '<div class="faint" style="margin-top:4px;color:var(--warn)">⚠️ nessuna ricetta impostata</div>')+
       '</div>';
-  });
+  }
+  if(sellable.length){
+    h += '<div class="section-title">In vendita</div>';
+    sellable.slice().sort(function(a,b){return (b.pct||0)-(a.pct||0);}).forEach(function(p){ h += card(p); });
+  }
+  if(components.length){
+    h += '<div class="section-title">Semilavorati</div>';
+    components.slice().sort(function(a,b){return a.name.localeCompare(b.name);}).forEach(function(p){ h += card(p); });
+  }
   return h;
 }
 
 function viewProductForm(){
   var isEdit = !!state.params.id;
   var d = state.draftProduct;
+  var isComponent = d.kind === 'component';
 
   var h = header(isEdit?'Modifica prodotto':'Nuovo prodotto', { back:'App.cancelProductForm()' });
   h += '<div class="field"><label>Nome prodotto</label><input type="text" id="f-name" value="'+esc(d.name)+'" placeholder="Es. Panino Burger" oninput="App.setProductField(\'name\',this.value)"></div>';
   var cats = catList(db.products);
   h += '<div class="field"><label>Categoria</label><input type="text" id="f-category" list="cat-list" value="'+esc(d.category)+'" placeholder="Es. Panini, Bevande..." oninput="App.setProductField(\'category\',this.value)"><datalist id="cat-list">'+cats.map(function(c){return '<option value="'+esc(c)+'">';}).join('')+'</datalist></div>';
-  h += '<div class="field-row">'+
+
+  h += '<div class="field"><label>Tipo</label><div class="grid-toggle">'+
+    '<button type="button" class="'+(!isComponent?'active':'')+'" onclick="App.setProductField(\'kind\',\'sellable\',true)">In vendita</button>'+
+    '<button type="button" class="'+(isComponent?'active':'')+'" onclick="App.setProductField(\'kind\',\'component\',true)">Semilavorato</button>'+
+    '</div></div>';
+
+  if(isComponent){
+    h += '<div class="field hint" style="margin-top:-8px;margin-bottom:14px">Una preparazione interna (es. salsa, impasto) usata come ingrediente dentro altri prodotti — non appare nel menu degli eventi.</div>';
+    h += '<div class="field-row">'+
+       '<div class="field"><label>Resa della ricetta</label><input type="number" id="f-yieldqty" min="0" step="0.01" value="'+(d.yieldQty||'')+'" placeholder="Es. 1000" oninput="App.setProductField(\'yieldQty\',parseFloat(this.value)||0)"></div>'+
+       '<div class="field"><label>Unità resa</label><input type="text" id="f-yieldunit" value="'+esc(d.yieldUnit||'')+'" placeholder="g, kg, ml, pz" oninput="App.setProductField(\'yieldUnit\',this.value)"></div>'+
+       '</div>';
+    h += '<div class="field hint" style="margin-top:-8px">Quanto produce la ricetta scritta sotto. Es. "1000 g" se la ricetta della salsa fa un chilo — verrà scalata in automatico in base a quanta ne serve.</div>';
+    h += '<div class="field"><label>Posizione predefinita (per la lista di carico)</label><div class="grid-toggle">'+
+      '<button type="button" class="'+(d.location==='truck'?'active':'')+'" onclick="App.setProductField(\'location\',\'truck\',true)">🚚 Truck</button>'+
+      '<button type="button" class="'+(d.location==='van'?'active':'')+'" onclick="App.setProductField(\'location\',\'van\',true)">🚐 Furgone</button>'+
+      '<button type="button" class="'+(!d.location||d.location==='both'?'active':'')+'" onclick="App.setProductField(\'location\',\'both\',true)">↔️ Entrambi</button>'+
+      '</div></div>';
+  } else {
+    h += '<div class="field-row">'+
        '<div class="field"><label>Prezzo di vendita</label><input type="number" id="f-price" min="0" step="0.10" value="'+(d.price||'')+'" oninput="App.setProductField(\'price\',parseFloat(this.value)||0)"></div>'+
        '<div class="field"><label>% storica sul fatturato</label><input type="number" id="f-pct" min="0" max="100" step="0.1" value="'+(d.pct||'')+'" oninput="App.setProductField(\'pct\',parseFloat(this.value)||0)"></div>'+
        '</div>';
-  h += '<div class="field hint" style="margin-top:-8px">La % storica indica quanto pesa questo prodotto sul fatturato totale, in base ai dati passati.</div>';
+    h += '<div class="field hint" style="margin-top:-8px">La % storica indica quanto pesa questo prodotto sul fatturato totale, in base ai dati passati.</div>';
+  }
 
-  h += '<div class="section-title">Ricetta (per 1 unità venduta)</div>';
-  if(db.ingredients.length===0){
+  h += '<div class="section-title">Ricetta'+(isComponent?'':' (per 1 unità venduta)')+'</div>';
+  var hasComponents = db.products.some(function(p){ return p.id!==d.id; });
+  if(db.ingredients.length===0 && !hasComponents){
     h += '<div class="callout">Nessun ingrediente a magazzino. Vai su "Magazzino" e aggiungine prima di creare la ricetta.</div>';
   } else {
     h += '<div class="card">';
     d.recipe.forEach(function(r,i){
-      var ing = byId(db.ingredients, r.ingredientId);
+      var refType = r.refType || 'ingredient';
+      var refId = r.refId!=null ? r.refId : r.ingredientId;
+      var unit = '';
+      if(refType==='product'){ var rp=byId(db.products,refId); unit = rp? (rp.yieldUnit||'pz') : ''; }
+      else { var ing=byId(db.ingredients,refId); unit = ing? ing.unit : ''; }
       h += '<div class="recipe-row">'+
         '<select onchange="App.setRecipeIngredient('+i+',this.value)">'+
           '<option value="">Seleziona…</option>'+
-          renderIngredientOptions(r.ingredientId)+
+          renderIngredientOptions(refType+':'+refId, d.id)+
         '</select>'+
         '<input type="number" min="0" step="0.01" placeholder="Qtà" value="'+(r.qty||'')+'" oninput="App.setRecipeQty('+i+',this.value)">'+
-        '<span class="unit">'+(ing?esc(ing.unit):'')+'</span>'+
+        '<span class="unit">'+esc(unit)+'</span>'+
         '<button class="rm" onclick="App.removeRecipeRow('+i+')">✕</button>'+
         '</div>';
     });
@@ -766,18 +1035,24 @@ function viewProductForm(){
   return h;
 }
 
-function renderIngredientOptions(selectedId){
+function renderIngredientOptions(selectedVal, excludeProductId){
   var cons = db.ingredients.filter(function(i){return i.type!=='equipment';});
   var eq = db.ingredients.filter(function(i){return i.type==='equipment';});
+  var comps = db.products.filter(function(p){return p.id!==excludeProductId;});
   var h = '';
   if(cons.length){
     h += '<optgroup label="Consumabili">';
-    cons.forEach(function(i){ h += '<option value="'+i.id+'" '+(i.id===selectedId?'selected':'')+'>'+esc(i.name)+'</option>'; });
+    cons.forEach(function(i){ var v='ingredient:'+i.id; h += '<option value="'+v+'" '+(v===selectedVal?'selected':'')+'>'+esc(i.name)+'</option>'; });
+    h += '</optgroup>';
+  }
+  if(comps.length){
+    h += '<optgroup label="Preparazioni">';
+    comps.forEach(function(p){ var v='product:'+p.id; h += '<option value="'+v+'" '+(v===selectedVal?'selected':'')+'>'+esc(p.name)+((p.kind||'sellable')==='sellable'?' (prodotto)':'')+'</option>'; });
     h += '</optgroup>';
   }
   if(eq.length){
     h += '<optgroup label="Attrezzatura">';
-    eq.forEach(function(i){ h += '<option value="'+i.id+'" '+(i.id===selectedId?'selected':'')+'>'+esc(i.name)+'</option>'; });
+    eq.forEach(function(i){ var v='ingredient:'+i.id; h += '<option value="'+v+'" '+(v===selectedVal?'selected':'')+'>'+esc(i.name)+'</option>'; });
     h += '</optgroup>';
   }
   return h;
@@ -893,6 +1168,8 @@ function viewSettings(){
 
   h += '<div class="callout info">Protezione anti-sovrascrittura: prima di inviare, l\'app verifica che nessun altro dispositivo abbia salvato nel frattempo. Se è successo, l\'invio si blocca automaticamente e qui sopra puoi scegliere quali dati tenere — non capita mai una sovrascrittura silenziosa.</div>';
 
+  h += '<div class="callout info">Ad ogni sincronizzazione lo script scrive anche delle <b>tabelle leggibili</b> sul foglio — Ingredienti, Prodotti, Ricette, Eventi, e i calcoli per ogni evento (Eventi_Vendite, Eventi_Spesa, Eventi_Preparazioni) — pronte per grafici o tabelle pivot. Vengono rigenerate ad ogni sync: non modificarle a mano, per analisi personalizzate crea un foglio nuovo che le referenzia.</div>';
+
   h += '<div class="section-title">Backup dati</div>';
   h += '<div class="card"><p class="muted" style="margin-bottom:12px">'+(connected
       ? 'Anche con il foglio Google collegato, questo resta utile: è una copia indipendente che funziona se il foglio o lo script hanno un problema, e serve per portare i dati su un dispositivo che non hai ancora collegato al foglio.'
@@ -971,6 +1248,12 @@ window.App = {
     ev.loadChecked[key] = !ev.loadChecked[key];
     saveDB(); render();
   },
+  togglePrepCheck: function(evId, productId){
+    var ev = byId(db.events, evId); if(!ev) return;
+    ev.prepChecked = ev.prepChecked||{};
+    ev.prepChecked[productId] = !ev.prepChecked[productId];
+    saveDB(); render();
+  },
   copyShopping: function(evId){
     var ev = byId(db.events, evId); var plan = computeEventPlan(ev);
     var lines = ['Lista spesa — '+(ev.name||'')+' ('+fmtDate(ev.date)+')',''];
@@ -981,10 +1264,18 @@ window.App = {
     });
     copyText(lines.join('\n'));
   },
+  copyPreparations: function(evId){
+    var ev = byId(db.events, evId); var plan = computeEventPlan(ev);
+    var lines = ['Preparazioni da fare — '+(ev.name||'')+' ('+fmtDate(ev.date)+')',''];
+    plan.preparations.forEach(function(x){
+      lines.push('☐ '+x.product.name+': '+fmtNum(x.total,2)+' '+(x.product.yieldUnit||'pz'));
+    });
+    copyText(lines.join('\n'));
+  },
   copyLoading: function(evId){
     var ev = byId(db.events, evId); var plan = computeEventPlan(ev);
     var lines = ['Lista carico — '+(ev.name||'')+' ('+fmtDate(ev.date)+')',''];
-    function block(title, items){ if(!items.length) return; lines.push(title); items.forEach(function(it){ lines.push('☐ '+it.ing.name+' — '+it.sub); }); lines.push(''); }
+    function block(title, items){ if(!items.length) return; lines.push(title); items.forEach(function(it){ lines.push('☐ '+it.name+' — '+it.sub); }); lines.push(''); }
     block('🚚 FOOD TRUCK', plan.loading.truck);
     block('🚐 FURGONE', plan.loading.van);
     block('📦 COMUNE / DA ASSEGNARE', plan.loading.common);
@@ -992,31 +1283,54 @@ window.App = {
   },
 
   /* products */
-  newProduct: function(){ state.draftProduct = {id:uid(), name:'', category:'', price:0, pct:0, recipe:[]}; nav('productForm', {}); },
+  newProduct: function(){ state.draftProduct = {id:uid(), name:'', category:'', kind:'sellable', price:0, pct:0, yieldQty:1, yieldUnit:'pz', location:'both', recipe:[]}; nav('productForm', {}); },
   openProduct: function(id){
     var p = byId(db.products, id);
-    state.draftProduct = Object.assign({}, p, { recipe:(p.recipe||[]).map(function(r){ return Object.assign({},r); }) });
+    state.draftProduct = Object.assign({kind:'sellable', yieldQty:1, yieldUnit:'pz', location:'both'}, p, {
+      recipe:(p.recipe||[]).map(function(r){
+        return { refType: r.refType||'ingredient', refId: r.refId!=null?r.refId:r.ingredientId, qty: r.qty||0 };
+      })
+    });
     nav('productForm', {id:id});
   },
   cancelProductForm: function(){ state.draftProduct=null; nav('products'); },
-  setProductField: function(field, val){ state.draftProduct[field]=val; },
-  addRecipeRow: function(){ state.draftProduct.recipe.push({ingredientId:'',qty:0}); render(); },
+  setProductField: function(field, val, rerender){ state.draftProduct[field]=val; if(rerender) render(); },
+  addRecipeRow: function(){ state.draftProduct.recipe.push({refType:'ingredient', refId:'', qty:0}); render(); },
   removeRecipeRow: function(i){ state.draftProduct.recipe.splice(i,1); render(); },
-  setRecipeIngredient: function(i,val){ state.draftProduct.recipe[i].ingredientId=val; render(); },
+  setRecipeIngredient: function(i,val){
+    var parts = val.split(':'); var refType = parts[0]; var refId = parts.slice(1).join(':');
+    state.draftProduct.recipe[i].refType = refType||'ingredient';
+    state.draftProduct.recipe[i].refId = refId||'';
+    render();
+  },
   setRecipeQty: function(i,val){ state.draftProduct.recipe[i].qty=parseFloat(val)||0; },
   saveProduct: function(id){
     var d = state.draftProduct;
     if(!d.name || !d.name.trim()){ alert('Inserisci un nome per il prodotto.'); return; }
-    var recipe = d.recipe.filter(function(r){return r.ingredientId;});
+    var recipe = d.recipe.filter(function(r){return r.refId;}).map(function(r){ return {refType:r.refType||'ingredient', refId:r.refId, qty:r.qty||0}; });
+    var kind = d.kind==='component' ? 'component' : 'sellable';
     var p = byId(db.products, id);
     if(!p){ p={id:id}; db.products.push(p); }
-    p.name=d.name.trim(); p.price=d.price||0; p.pct=d.pct||0; p.category=(d.category||'').trim(); p.recipe=recipe;
+    p.name=d.name.trim(); p.category=(d.category||'').trim(); p.kind=kind; p.recipe=recipe;
+    if(kind==='component'){
+      p.yieldQty = d.yieldQty>0 ? d.yieldQty : 1;
+      p.yieldUnit = (d.yieldUnit||'pz').trim() || 'pz';
+      p.location = d.location||'both';
+      p.price = 0; p.pct = 0;
+    } else {
+      p.price=d.price||0; p.pct=d.pct||0;
+      p.yieldQty=1; p.yieldUnit='pz'; p.location='both';
+    }
     saveDB(); state.draftProduct=null;
     nav('products');
   },
   deleteProduct: function(id){
-    if(!confirm('Eliminare questo prodotto? Verrà rimosso anche dai menu degli eventi che lo includono.')) return;
+    var usedIn = db.products.filter(function(p){ return p.id!==id && (p.recipe||[]).some(function(r){ return (r.refType||'ingredient')==='product' && r.refId===id; }); });
+    var msg = 'Eliminare questo prodotto? Verrà rimosso anche dai menu degli eventi che lo includono.';
+    if(usedIn.length) msg += '\n\nÈ usato come preparazione dentro: '+usedIn.map(function(p){return p.name;}).join(', ')+' — verrà rimosso anche da lì.';
+    if(!confirm(msg)) return;
     db.products = db.products.filter(function(p){return p.id!==id;});
+    db.products.forEach(function(p){ p.recipe = (p.recipe||[]).filter(function(r){ return !((r.refType||'ingredient')==='product' && r.refId===id); }); });
     db.events.forEach(function(ev){ ev.menu = (ev.menu||[]).filter(function(m){return m.productId!==id;}); });
     saveDB(); state.draftProduct=null; nav('products');
   },
@@ -1052,7 +1366,7 @@ window.App = {
   deleteIngredient: function(id){
     if(!confirm('Eliminare questo elemento? Verrà rimosso anche dalle ricette dei prodotti che lo usano.')) return;
     db.ingredients = db.ingredients.filter(function(i){return i.id!==id;});
-    db.products.forEach(function(p){ p.recipe = (p.recipe||[]).filter(function(r){return r.ingredientId!==id;}); });
+    db.products.forEach(function(p){ p.recipe = (p.recipe||[]).filter(function(r){ return !((r.refType||'ingredient')==='ingredient' && (r.refId!=null?r.refId:r.ingredientId)===id); }); });
     saveDB(); state.draftIngredient=null; nav('ingredients');
   },
 
