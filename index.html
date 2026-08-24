@@ -3,37 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-<meta name="theme-color" content="#241A14">
+<meta name="theme-color" content="#6B77B7">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Food Truck · Planner</title>
-<link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;:&quot;Food Truck Planner&quot;,&quot;short_name&quot;:&quot;FT Planner&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%23FBF6EE&quot;,&quot;theme_color&quot;:&quot;%23241A14&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%23241A14'/%3E%3Ctext x='256' y='340' font-size='260' text-anchor='middle'%3E%F0%9F%9A%9A%3C/text%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='68' font-size='60' text-anchor='middle'%3E%F0%9F%9A%9A%3C/text%3E%3C/svg%3E">
+<title>VegMan · Planner</title>
+<link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;:&quot;VegMan Planner&quot;,&quot;short_name&quot;:&quot;VegMan&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%23F6F3EA&quot;,&quot;theme_color&quot;:&quot;%236B77B7&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%236B77B7'/%3E%3Cpath d='M50 27c-9 0-15 8-15 20 0 14 7 24 15 24s15-10 15-24c0-12-6-20-15-20z' fill='%23fff'/%3E%3Cpath d='M50 14c1 4 1 9-1 13-3-2-8-2-11 1-1-4 1-9 4-12 2-2 5-3 8-2z' fill='%237BAE8F'/%3E%3Cpath d='M50 14c2 4 3 9 2 13 3-1 8 0 10 3 2-4 1-9-2-12-3-2-6-4-10-4z' fill='%237BAE8F'/%3E%3Crect x='45' y='38' width='3' height='8' fill='%236B77B7' opacity='.5'/%3E%3Crect x='52' y='50' width='3' height='8' fill='%236B77B7' opacity='.5'/%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%236B77B7'/%3E%3Cpath d='M50 27c-9 0-15 8-15 20 0 14 7 24 15 24s15-10 15-24c0-12-6-20-15-20z' fill='%23fff'/%3E%3Cpath d='M50 14c1 4 1 9-1 13-3-2-8-2-11 1-1-4 1-9 4-12 2-2 5-3 8-2z' fill='%237BAE8F'/%3E%3Cpath d='M50 14c2 4 3 9 2 13 3-1 8 0 10 3 2-4 1-9-2-12-3-2-6-4-10-4z' fill='%237BAE8F'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#FBF6EE;
+  --bg:#F6F3EA;
   --surface:#FFFFFF;
-  --surface-2:#FFF7ED;
-  --ink:#241A14;
-  --ink-soft:#6B5B4D;
-  --ink-faint:#A6978A;
-  --line:#EBE0D3;
-  --accent:#D9481E;
-  --accent-press:#B23A17;
-  --accent-soft:#FBE4D8;
-  --pos:#3E7C5A;
-  --pos-soft:#E4F0E8;
-  --neg:#B24A3A;
-  --neg-soft:#FBE7E2;
-  --warn:#B8862E;
-  --warn-soft:#FBF0DD;
-  --truck:#2E7D6B;
-  --truck-soft:#E3F1EC;
-  --van:#35508C;
-  --van-soft:#E6EAF5;
-  --shadow:0 1px 2px rgba(36,26,20,.06),0 6px 18px rgba(36,26,20,.07);
-  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --surface-2:#F1EDE0;
+  --ink:#1C1A22;
+  --ink-soft:#615C6C;
+  --ink-faint:#9C97A6;
+  --line:#E7E1D2;
+  --accent:#6B77B7;
+  --accent-press:#565F97;
+  --accent-soft:#E7E9F5;
+  --orange:#F08A39;
+  --orange-press:#C46A22;
+  --orange-soft:#FCE9D6;
+  --pos:#2F7D63;
+  --pos-soft:#DFF0EA;
+  --neg:#B7426F;
+  --neg-soft:#F7E5EC;
+  --warn:#C46A22;
+  --warn-soft:#FCE9D6;
+  --truck:#2F7D63;
+  --truck-soft:#DFF0EA;
+  --van:#565F97;
+  --van-soft:#E7E9F5;
+  --shadow:0 1px 2px rgba(28,26,34,.06),0 6px 18px rgba(28,26,34,.07);
+  --sans:'Poppins',system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --display:'Baloo 2',var(--sans);
   --maxw:560px;
   --navh:64px;
   --safe-b:env(safe-area-inset-bottom,0px);
@@ -54,14 +61,16 @@ a{color:inherit}
 
 .header{
   position:sticky;top:0;z-index:20;
-  background:rgba(251,246,238,.92);backdrop-filter:blur(8px);
+  background:rgba(246,243,234,.92);backdrop-filter:blur(8px);
   padding:calc(var(--safe-t) + 12px) 0 10px 0;
   display:flex;align-items:center;gap:8px;
   border-bottom:1px solid var(--line);
   margin-bottom:14px;
 }
 .header-inner{max-width:var(--maxw);margin:0 auto;padding:0 14px;display:flex;align-items:center;gap:8px;width:100%}
-.header h1{font-size:19px;font-weight:800;flex:1;letter-spacing:-.01em}
+.header h1{font-family:var(--display);font-size:21px;font-weight:800;flex:1;letter-spacing:0}
+.brandmark{width:38px;height:38px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--accent);box-shadow:var(--shadow)}
+.brandmark svg{width:22px;height:22px;display:block}
 .iconbtn{
   width:38px;height:38px;border-radius:12px;border:none;background:var(--surface-2);
   color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:18px;
@@ -107,7 +116,7 @@ a{color:inherit}
 .grow{flex:1;min-width:0}
 .muted{color:var(--ink-soft);font-size:13px}
 .faint{color:var(--ink-faint);font-size:12px}
-.strong{font-weight:800}
+.strong{font-family:var(--display);font-weight:700}
 .truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .badge{
@@ -123,7 +132,7 @@ a{color:inherit}
 .badge.van{background:var(--van-soft);color:var(--van)}
 
 .btn{
-  border:none;border-radius:13px;padding:13px 18px;font-weight:800;font-size:15px;
+  border:none;border-radius:13px;padding:13px 18px;font-weight:700;font-size:15.5px;font-family:var(--display);
   background:var(--surface-2);color:var(--ink);width:100%;
   display:flex;align-items:center;justify-content:center;gap:8px;
 }
@@ -156,7 +165,7 @@ a{color:inherit}
 .check-item:last-child{border-bottom:none}
 .check-item input[type=checkbox]{width:22px;height:22px;flex-shrink:0;accent-color:var(--accent)}
 .check-item.done .item-name{text-decoration:line-through;color:var(--ink-faint)}
-.item-name{font-weight:700;font-size:14.5px}
+.item-name{font-family:var(--display);font-weight:700;font-size:15.5px}
 .item-sub{font-size:12px;color:var(--ink-soft)}
 
 table.plan{width:100%;border-collapse:collapse;font-size:13.5px}
@@ -201,7 +210,7 @@ table.plan td.num{text-align:right;font-variant-numeric:tabular-nums}
 <nav class="nav no-print">
   <div class="nav-inner">
     <button class="nav-btn" data-nav="events" onclick="App.goTab('events')"><span class="ic">📅</span>Eventi</button>
-    <button class="nav-btn" data-nav="products" onclick="App.goTab('products')"><span class="ic">🍔</span>Prodotti</button>
+    <button class="nav-btn" data-nav="products" onclick="App.goTab('products')"><span class="ic">🥕</span>Prodotti</button>
     <button class="nav-btn" data-nav="ingredients" onclick="App.goTab('ingredients')"><span class="ic">📦</span>Magazzino</button>
     <button class="nav-btn" data-nav="settings" onclick="App.goTab('settings')"><span class="ic">⚙️</span>Impostazioni</button>
   </div>
@@ -344,28 +353,39 @@ function computeEventPlan(ev){
 
 /* ================= GOOGLE SHEETS SYNC ================= */
 var syncing = false;
+var syncConflict = false;
 var autoSyncTimer = null;
 
-function postSheet(payload){
+function postSheetRaw(payload){
   var url = cfg.sheetUrl;
   return fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)})
-    .then(function(r){ return r.json(); }).then(function(j){ return j && j.ok===true; })
+    .then(function(r){ return r.json(); })
     .catch(function(){
+      // CORS/network fallback: fire the request blind (no-cors), we can't read the result
+      // so we can't verify success or detect a conflict on this path.
       return fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)})
-        .then(function(){ return true; }).catch(function(){ return false; });
+        .then(function(){ return {ok:true, blind:true}; }).catch(function(){ return {ok:false, error:'network'}; });
     });
 }
 
-function pushToSheet(silent){
+function pushToSheet(silent, force){
   if(!cfg.sheetUrl){ if(!silent) toast('Nessun foglio collegato'); return Promise.resolve(false); }
   syncing = true; if(state.view==='settings') render();
   var ts = new Date().toISOString();
-  return postSheet({action:'save', db:db, updatedAt:ts}).then(function(ok){
+  return postSheetRaw({action:'save', db:db, updatedAt:ts, expectedUpdatedAt: cfg.lastSync||null, force:!!force}).then(function(j){
     syncing = false;
-    if(ok){ cfg.lastSync = ts; saveCfg(); if(!silent) toast('Dati inviati al foglio ✓'); }
-    else if(!silent) toast('Invio non riuscito — riprovo più tardi');
+    if(j && j.ok){
+      syncConflict = false;
+      cfg.lastSync = ts; saveCfg();
+      if(!silent) toast('Dati inviati al foglio ✓');
+    } else if(j && j.conflict){
+      syncConflict = true;
+      toast('⚠️ Il foglio è stato aggiornato da un altro dispositivo: invio bloccato per non perdere dati. Vai su Impostazioni.');
+    } else if(!silent){
+      toast('Invio non riuscito — riprovo più tardi');
+    }
     if(state.view==='settings') render();
-    return ok;
+    return !!(j && j.ok);
   }).catch(function(){
     syncing = false; if(!silent) toast('Errore di rete durante l\'invio');
     if(state.view==='settings') render();
@@ -388,6 +408,7 @@ function pullFromSheet(silent){
         if(!db.events) db.events=[];
         lsSet(KEY, JSON.stringify(db));
       }
+      syncConflict = false;
       cfg.lastSync = j.updatedAt || new Date().toISOString(); saveCfg();
       if(!silent) toast('Dati scaricati dal foglio ✓');
       render();
@@ -401,10 +422,16 @@ function pullFromSheet(silent){
 }
 
 function queueAutoSync(){
-  if(!cfg.sheetUrl || !cfg.auto) return;
+  if(!cfg.sheetUrl || !cfg.auto || syncConflict) return;
   if(autoSyncTimer) clearTimeout(autoSyncTimer);
   autoSyncTimer = setTimeout(function(){ autoSyncTimer=null; pushToSheet(true); }, 800);
 }
+
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden || !cfg.sheetUrl || !cfg.auto) return;
+  if(syncing || autoSyncTimer || syncConflict) return;
+  pullFromSheet(true);
+});
 
 function connectSheet(url){
   cfg.sheetUrl = url; saveCfg(); render();
@@ -417,7 +444,7 @@ function connectSheet(url){
       );
       if(remoteHasData && localHasData){
         var useRemote = confirm('Il foglio collegato contiene già dei dati salvati.\n\nOK = scarica i dati dal foglio (sostituisce quelli su questo dispositivo)\nAnnulla = invia i dati di questo dispositivo al foglio (sostituisce quelli sul foglio)');
-        if(useRemote) pullFromSheet(false); else pushToSheet(false);
+        if(useRemote){ pullFromSheet(false); } else { cfg.lastSync = j.updatedAt||null; pushToSheet(false, true); }
       } else if(remoteHasData){
         pullFromSheet(false);
       } else {
@@ -437,18 +464,23 @@ var APPS_SCRIPT_CODE =
 "function doGet(e) {\n"+
 "  var action = e && e.parameter && e.parameter.action;\n"+
 "  if (action === 'data') return jsonResponse(getData());\n"+
-"  return jsonResponse({ok:true, info:'Food Truck Planner script attivo'});\n"+
+"  if (action === 'meta') return jsonResponse(getMeta());\n"+
+"  return jsonResponse({ok:true, info:'VegMan Planner script attivo'});\n"+
 "}\n"+
 "\n"+
 "function doPost(e) {\n"+
+"  var lock = LockService.getScriptLock();\n"+
+"  lock.waitLock(10000);\n"+
 "  try {\n"+
 "    var payload = JSON.parse(e.postData.contents);\n"+
 "    var action = payload.action || 'save';\n"+
 "    if (action === 'ping') return jsonResponse({ok:true});\n"+
-"    if (action === 'save') { saveData(payload.db, payload.updatedAt); return jsonResponse({ok:true}); }\n"+
+"    if (action === 'save') return jsonResponse(saveData(payload));\n"+
 "    return jsonResponse({ok:false, error:'azione sconosciuta'});\n"+
 "  } catch(err) {\n"+
 "    return jsonResponse({ok:false, error:err.toString()});\n"+
+"  } finally {\n"+
+"    lock.releaseLock();\n"+
 "  }\n"+
 "}\n"+
 "\n"+
@@ -466,13 +498,31 @@ var APPS_SCRIPT_CODE =
 "  }\n"+
 "}\n"+
 "\n"+
-"function saveData(dbObj, updatedAt) {\n"+
+"function getMeta() {\n"+
+"  var ss = SpreadsheetApp.getActiveSpreadsheet();\n"+
+"  var sh = ss.getSheetByName(DATA_SHEET);\n"+
+"  if (!sh) return {ok:true, updatedAt:null};\n"+
+"  var updatedAt = sh.getRange('B1').getValue();\n"+
+"  return {ok:true, updatedAt: updatedAt ? String(updatedAt) : null};\n"+
+"}\n"+
+"\n"+
+"// Scrive solo se nessun altro dispositivo ha salvato nel frattempo\n"+
+"// (confronta expectedUpdatedAt con l'updatedAt attualmente sul foglio).\n"+
+"// Cosi' due telefoni che sincronizzano insieme non si sovrascrivono a vicenda.\n"+
+"function saveData(payload) {\n"+
 "  var ss = SpreadsheetApp.getActiveSpreadsheet();\n"+
 "  var sh = ss.getSheetByName(DATA_SHEET);\n"+
 "  if (!sh) sh = ss.insertSheet(DATA_SHEET);\n"+
-"  sh.getRange('A1').setValue(JSON.stringify(dbObj));\n"+
-"  sh.getRange('B1').setValue(updatedAt || new Date().toISOString());\n"+
+"  var currentRaw = sh.getRange('B1').getValue();\n"+
+"  var current = currentRaw ? String(currentRaw) : null;\n"+
+"  if (!payload.force && current && payload.expectedUpdatedAt !== current) {\n"+
+"    return {ok:false, conflict:true, updatedAt:current};\n"+
+"  }\n"+
+"  var newUpdatedAt = payload.updatedAt || new Date().toISOString();\n"+
+"  sh.getRange('A1').setValue(JSON.stringify(payload.db));\n"+
+"  sh.getRange('B1').setValue(newUpdatedAt);\n"+
 "  sh.getRange('C1').setValue('Non modificare queste celle a mano: i dati sono gestiti dall\\'app.');\n"+
+"  return {ok:true, updatedAt:newUpdatedAt};\n"+
 "}\n"+
 "\n"+
 "function jsonResponse(obj) {\n"+
@@ -480,12 +530,14 @@ var APPS_SCRIPT_CODE =
 "}\n";
 
 /* ================= RENDER SHELL ================= */
+var BRANDMARK_SVG = '<div class="brandmark"><svg viewBox="0 0 100 100"><path d="M50 27c-9 0-15 8-15 20 0 14 7 24 15 24s15-10 15-24c0-12-6-20-15-20z" fill="#fff"/><path d="M50 14c1 4 1 9-1 13-3-2-8-2-11 1-1-4 1-9 4-12 2-2 5-3 8-2z" fill="#B9DED3"/><path d="M50 14c2 4 3 9 2 13 3-1 8 0 10 3 2-4 1-9-2-12-3-2-6-4-10-4z" fill="#B9DED3"/></svg></div>';
+
 function header(title, opts){
   opts = opts||{};
-  var back = opts.back ? '<button class="iconbtn" onclick="'+opts.back+'">‹</button>' : '';
+  var back = opts.back ? '<button class="iconbtn" onclick="'+opts.back+'">‹</button>' : BRANDMARK_SVG;
   var action = opts.actionIcon ? '<button class="iconbtn '+(opts.actionPrimary?'primary':'')+'" onclick="'+opts.actionFn+'">'+opts.actionIcon+'</button>' : '<div style="width:38px"></div>';
   return '<div class="header no-print"><div class="header-inner">'+
-    (back || '<div style="width:38px"></div>') +
+    back +
     '<h1>'+esc(title)+'</h1>' + action +
     '</div></div>';
 }
@@ -656,7 +708,7 @@ function viewProductsList(){
       '</div>';
   }
   if(db.products.length===0){
-    h += '<div class="empty"><span class="emoji">🍔</span><p>Nessun prodotto a catalogo.<br>Aggiungi i prodotti che vendi con prezzo e % storica di vendita.</p>'+
+    h += '<div class="empty"><span class="emoji">🥕</span><p>Nessun prodotto a catalogo.<br>Aggiungi i prodotti che vendi con prezzo e % storica di vendita.</p>'+
       '<button class="btn primary" onclick="App.newProduct()">+ Nuovo prodotto</button></div>';
     return h;
   }
@@ -802,7 +854,7 @@ function viewSettings(){
   var lastSyncTxt = cfg.lastSync ? new Date(cfg.lastSync).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'mai';
   h += '<div class="card">'+
     '<div class="row between"><span class="strong">Collegamento foglio</span>'+
-    (syncing ? '<span class="badge warn">sincronizzazione…</span>' : connected ? '<span class="badge pos">collegato ✓</span>' : '<span class="badge">non collegato</span>')+
+    (syncing ? '<span class="badge warn">sincronizzazione…</span>' : syncConflict ? '<span class="badge neg">⚠️ conflitto</span>' : connected ? '<span class="badge pos">collegato ✓</span>' : '<span class="badge">non collegato</span>')+
     '</div>'+
     '<p class="muted" style="margin:8px 0 12px 0">Collega l\'app a un tuo Google Sheet: i dati (ingredienti, prodotti, eventi) restano sincronizzati e accessibili da qualsiasi telefono o computer collegato allo stesso foglio.</p>'+
     '<div class="field" style="margin-bottom:10px"><label>URL Web App (finisce con /exec)</label><input type="url" id="f-sheeturl" value="'+esc(cfg.sheetUrl)+'" placeholder="https://script.google.com/macros/s/.../exec"></div>'+
@@ -814,6 +866,18 @@ function viewSettings(){
       '<div class="btn-row"><button class="btn small" onclick="App.pushNow()">⬆️ Invia adesso</button><button class="btn small ghost" onclick="App.pullNow()">⬇️ Scarica adesso</button></div>'
     ) : '')+
     '</div>';
+
+  if(syncConflict){
+    h += '<div class="card" style="border:1.5px solid var(--neg)">'+
+      '<div class="strong" style="color:var(--neg);margin-bottom:8px">⚠️ Modifiche in conflitto</div>'+
+      '<p class="muted" style="margin-bottom:12px">Un altro dispositivo ha salvato sul foglio dopo l\'ultima sincronizzazione di questo telefono. Per non perdere dati, l\'invio automatico è stato bloccato: scegli tu come procedere.</p>'+
+      '<div class="btn-row" style="margin-top:0">'+
+      '<button class="btn small" onclick="App.resolveKeepRemote()">⬇️ Tieni il foglio</button>'+
+      '<button class="btn small danger" onclick="App.resolveKeepLocal()">⬆️ Tieni questo telefono</button>'+
+      '</div>'+
+      '<div class="faint" style="margin-top:8px">"Tieni il foglio" scarica le modifiche dell\'altro dispositivo (perdi quelle fatte qui dall\'ultima sincronizzazione). "Tieni questo telefono" invia i dati locali sovrascrivendo quelli dell\'altro dispositivo.</div>'+
+      '</div>';
+  }
 
   h += '<div class="card">'+
     '<div class="strong" style="margin-bottom:8px">Come collegarlo (una volta sola)</div>'+
@@ -827,10 +891,13 @@ function viewSettings(){
     '<button class="btn small" style="margin-top:12px" onclick="App.copyAppsScript()">📋 Copia script Apps Script</button>'+
     '</div>';
 
-  h += '<div class="callout">I dati vengono salvati come un unico blocco: se modifichi da due dispositivi nello stesso momento, l\'ultimo che sincronizza sovrascrive l\'altro. Evita di lavorare in contemporanea da più telefoni sullo stesso evento.</div>';
+  h += '<div class="callout info">Protezione anti-sovrascrittura: prima di inviare, l\'app verifica che nessun altro dispositivo abbia salvato nel frattempo. Se è successo, l\'invio si blocca automaticamente e qui sopra puoi scegliere quali dati tenere — non capita mai una sovrascrittura silenziosa.</div>';
 
   h += '<div class="section-title">Backup dati</div>';
-  h += '<div class="card"><p class="muted" style="margin-bottom:12px">Tutti i dati sono salvati solo su questo dispositivo/browser. Esporta un backup per trasferirlo su un altro telefono o conservarlo.</p>'+
+  h += '<div class="card"><p class="muted" style="margin-bottom:12px">'+(connected
+      ? 'Anche con il foglio Google collegato, questo resta utile: è una copia indipendente che funziona se il foglio o lo script hanno un problema, e serve per portare i dati su un dispositivo che non hai ancora collegato al foglio.'
+      : 'Tutti i dati sono salvati solo su questo dispositivo/browser. Esporta un backup per trasferirlo su un altro telefono o conservarlo — oppure collega un Google Sheet qui sopra per la sincronizzazione automatica.')+
+    '</p>'+
     '<div class="btn-row" style="margin-top:0"><button class="btn" onclick="App.exportData()">⬇️ Esporta backup</button>'+
     '<button class="btn" onclick="document.getElementById(\'import-file\').click()">⬆️ Importa backup</button></div>'+
     '<input type="file" id="import-file" accept="application/json" style="display:none" onchange="App.importData(this.files[0])">'+
@@ -845,6 +912,7 @@ function viewSettings(){
     '3. Ogni prodotto ha una ricetta pesata (ingredienti per 1 unità) → moltiplicata per la quantità stimata dà la lista della spesa.<br>'+
     '4. Ogni ingrediente/attrezzatura ha una posizione (Food Truck / Furgone) → da qui la lista di carico divisa per mezzo.'+
     '</div>';
+  h += '<div style="text-align:center;padding:20px 0 4px 0" class="faint">🥕 VegMan — Streetfood Superhero</div>';
   return h;
 }
 
@@ -1003,13 +1071,18 @@ window.App = {
     if(!u){ toast('Inserisci prima l\'indirizzo'); return; }
     cfg.sheetUrl = u; saveCfg();
     toast('Invio di prova in corso…');
-    postSheet({action:'ping'}).then(function(ok){ toast(ok? 'Connessione riuscita ✓' : 'Nessuna risposta dal foglio'); });
+    postSheetRaw({action:'ping'}).then(function(j){ toast(j&&j.ok? 'Connessione riuscita ✓' : 'Nessuna risposta dal foglio'); });
   },
   toggleAutoSync: function(checked){ cfg.auto=checked; saveCfg(); if(checked) queueAutoSync(); },
   pushNow: function(){ pushToSheet(false); },
   pullNow: function(){
     if(!confirm('Scaricare i dati dal foglio sovrascriverà i dati presenti su questo dispositivo. Continuare?')) return;
     pullFromSheet(false);
+  },
+  resolveKeepRemote: function(){ pullFromSheet(false); },
+  resolveKeepLocal: function(){
+    if(!confirm('Invierai i dati di questo dispositivo sovrascrivendo quelli salvati nel frattempo dall\'altro dispositivo. Continuare?')) return;
+    pushToSheet(false, true);
   },
   copyAppsScript: function(){ copyText(APPS_SCRIPT_CODE); },
 
