@@ -277,7 +277,7 @@ function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){ mem[k]=v; } }
 
 function uid(){ return 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2,9); }
 
-function defaultDB(){ return { ingredients: [], products: [], events: [] }; }
+function defaultDB(){ return { ingredients: [], products: [], events: [], purchases: [], priceArticles: [] }; }
 
 function loadDB(){
   var raw = lsGet(KEY);
@@ -287,6 +287,8 @@ function loadDB(){
     if(!d.ingredients) d.ingredients=[];
     if(!d.products) d.products=[];
     if(!d.events) d.events=[];
+    if(!d.purchases) d.purchases=[];
+    if(!d.priceArticles) d.priceArticles=[];
     return d;
   }catch(e){ return defaultDB(); }
 }
@@ -448,7 +450,8 @@ function computeEventPlan(ev){
   var ingTotals = {}, equipNeeded = {}, prepTotals = {};
   var acc = accumulateEventInto(ev, ingTotals, equipNeeded, prepTotals);
   var built = buildPlanOutputs(ingTotals, equipNeeded, prepTotals);
-  return { rows:acc.rows, rawSum:acc.rawSum, shopping:built.shopping, preparations:built.preparations, loading:built.loading };
+  var cost = computeCostSummary(acc.rows, ev.revenue||0);
+  return { rows:acc.rows, rawSum:acc.rawSum, shopping:built.shopping, preparations:built.preparations, loading:built.loading, cost:cost };
 }
 
 // Combines the ingredient/preparation needs of several events into one plan — e.g. two nearby
@@ -456,12 +459,118 @@ function computeEventPlan(ev){
 // just the sum of each event's rounded numbers (which would over-count).
 function computeCombinedPlan(events){
   var ingTotals = {}, equipNeeded = {}, prepTotals = {};
+  var allRows = [];
+  var totalRevenue = 0;
   var perEvent = events.map(function(ev){
     var acc = accumulateEventInto(ev, ingTotals, equipNeeded, prepTotals);
+    allRows = allRows.concat(acc.rows);
+    totalRevenue += ev.revenue||0;
     return { event:ev, rows:acc.rows, rawSum:acc.rawSum };
   });
   var built = buildPlanOutputs(ingTotals, equipNeeded, prepTotals);
-  return { perEvent:perEvent, shopping:built.shopping, preparations:built.preparations, loading:built.loading };
+  var cost = computeCostSummary(allRows, totalRevenue);
+  return { perEvent:perEvent, shopping:built.shopping, preparations:built.preparations, loading:built.loading, cost:cost };
+}
+
+/* ================= FOOD COST ================= */
+
+// Weighted-average price of a canonical price-list article, recomputed live from every
+// purchase line linked to it (never a stale stored number).
+function getArticleStats(articleId){
+  var lines = db.purchases.filter(function(p){ return p.articleId===articleId; });
+  if(!lines.length) return null;
+  var qtySum = 0, valueSum = 0, suppliers = {}, lastDate = null;
+  lines.forEach(function(p){
+    var q = p.qty||0, price = p.unitPrice||0;
+    qtySum += q; valueSum += q*price;
+    if(p.supplier) suppliers[p.supplier]=true;
+    if(!lastDate || (p.date||'') > lastDate) lastDate = p.date;
+  });
+  return {
+    avgPrice: qtySum>1e-9 ? valueSum/qtySum : 0,
+    totalQty: qtySum, purchaseCount: lines.length,
+    supplierCount: Object.keys(suppliers).length, lastDate: lastDate
+  };
+}
+
+// Cost of 1 unit of an ingredient (in the ingredient's own unit), from its linked price article.
+// Returns null if not linked or the article has no purchase history yet.
+function getIngredientUnitCost(ing){
+  if(!ing || !ing.priceArticleId) return null;
+  var stats = getArticleStats(ing.priceArticleId);
+  if(!stats) return null;
+  var factor = ing.priceFactor>0 ? ing.priceFactor : 1;
+  return stats.avgPrice / factor;
+}
+
+// Cost to produce 1 unit of a product (sellable or component), expanding sub-recipes recursively.
+// `complete` is false if any ingredient along the way has no linked/priced price article — the
+// number returned is then a partial/lower-bound cost, so callers must check `complete` before
+// treating it as the real food cost.
+function computeProductCost(productId, visiting){
+  visiting = visiting || {};
+  var p = byId(db.products, productId);
+  if(!p) return { cost:0, complete:false, missing:['(prodotto eliminato)'] };
+  if(visiting[productId]) return { cost:0, complete:true, missing:[] };
+  var nextVisiting = Object.assign({}, visiting); nextVisiting[productId]=true;
+
+  var cost = 0, complete = true, missing = [];
+  (p.recipe||[]).forEach(function(r){
+    var ref = recipeRef(r);
+    if(!ref.refId || ref.qty<=0) return;
+    if(ref.refType==='product'){
+      var sub = byId(db.products, ref.refId);
+      if(!sub){ complete=false; missing.push('(componente eliminato)'); return; }
+      var subRes = computeProductCost(ref.refId, nextVisiting);
+      var yieldQty = sub.yieldQty>0 ? sub.yieldQty : 1;
+      cost += (ref.qty/yieldQty) * subRes.cost;
+      if(!subRes.complete){ complete=false; missing = missing.concat(subRes.missing); }
+    } else {
+      var ing = byId(db.ingredients, ref.refId);
+      if(!ing){ complete=false; missing.push('(ingrediente eliminato)'); return; }
+      var unitCost = getIngredientUnitCost(ing);
+      if(unitCost==null){ complete=false; missing.push(ing.name); return; }
+      cost += ref.qty * unitCost;
+    }
+  });
+  return { cost:cost, complete:complete, missing:missing };
+}
+
+// Rolls per-product cost up to an event (or combined set of events): total ingredient cost,
+// estimated margin, and which ingredients (if any) are missing a linked price so the number
+// shown is known to be partial rather than silently wrong.
+function computeCostSummary(rows, revenue){
+  var totalCost = 0, complete = true, missingSet = {};
+  rows.forEach(function(r){
+    if(r.qtyPlan<=0) return;
+    var res = computeProductCost(r.product.id, {});
+    totalCost += res.cost * r.qtyPlan;
+    if(!res.complete){ complete=false; res.missing.forEach(function(m){ missingSet[m]=true; }); }
+  });
+  var margin = revenue - totalCost;
+  var marginPct = revenue>0 ? (margin/revenue*100) : 0;
+  return { totalCost:totalCost, complete:complete, missing:Object.keys(missingSet), revenue:revenue, margin:margin, marginPct:marginPct };
+}
+
+// Simple, dependency-free name-similarity score for suggesting price-article matches
+// (e.g. typing ingredient "cavolo" suggests the existing article "Cavolo cappuccio").
+function nameSimilarity(a, b){
+  a = (a||'').toLowerCase().trim(); b = (b||'').toLowerCase().trim();
+  if(!a || !b) return 0;
+  if(a===b) return 100;
+  if(b.indexOf(a)>=0 || a.indexOf(b)>=0) return 80;
+  var wa = a.split(/[^a-z0-9àèéìòù]+/i).filter(Boolean);
+  var wb = b.split(/[^a-z0-9àèéìòù]+/i).filter(Boolean);
+  if(!wa.length || !wb.length) return 0;
+  var shared = wa.filter(function(w){ return w.length>2 && wb.indexOf(w)>=0; }).length;
+  return shared>0 ? Math.round(shared/Math.max(wa.length,wb.length)*60) : 0;
+}
+
+function suggestArticleMatches(name, limit){
+  return db.priceArticles.map(function(art){ return { article:art, score:nameSimilarity(name, art.name) }; })
+    .filter(function(x){ return x.score>0; })
+    .sort(function(a,b){ return b.score-a.score; })
+    .slice(0, limit||5);
 }
 
 /* ================= GOOGLE SHEETS SYNC ================= */
@@ -695,14 +804,37 @@ function exportTables(ss, db) {
   writeTable(getOrCreateSheet(ss,'Ingredienti'),
     ['ID','Nome','Categoria','Tipo','Unità','Posizione','Formato confezione','Sempre necessaria'], ingRows);
 
+  var purchases = db.purchases || [];
+  var priceArticles = (db.priceArticles || []).slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+
   var prodRows = products.map(function(p){
     var isComp = p.kind==='component';
+    var costRes = computeProductCostGAS(p.id, ingredients, products, purchases, {});
+    var costTxt = costRes.complete ? round2(costRes.cost) : (round2(costRes.cost)+' (parziale)');
+    var fcPct = (!isComp && p.price>0 && costRes.complete) ? round2(costRes.cost/p.price*100) : '';
     return [p.id, p.name||'', p.category||'', isComp?'Semilavorato':'In vendita',
       isComp?'':(p.price||0), isComp?'':(p.pct||0),
-      isComp?(p.yieldQty||1):'', isComp?(p.yieldUnit||''):'', isComp?locLabel(p.location):''];
+      isComp?(p.yieldQty||1):'', isComp?(p.yieldUnit||''):'', isComp?locLabel(p.location):'',
+      costTxt, fcPct];
   });
   writeTable(getOrCreateSheet(ss,'Prodotti'),
-    ['ID','Nome','Categoria','Tipo','Prezzo','% storica','Resa quantità','Resa unità','Posizione'], prodRows);
+    ['ID','Nome','Categoria','Tipo','Prezzo','% storica','Resa quantità','Resa unità','Posizione','Food cost','Food cost %'], prodRows);
+
+  var artRows = priceArticles.map(function(a){
+    var stats = getArticleStatsGAS(a.id, purchases);
+    return [a.id, a.name||'', a.unit||'', stats?round2(stats.avgPrice):'', stats?round2(stats.totalQty):0,
+      stats?stats.supplierCount:0, stats?stats.purchaseCount:0, stats?stats.lastDate:''];
+  });
+  writeTable(getOrCreateSheet(ss,'Prezzi'),
+    ['ID','Articolo','Unità','Prezzo medio ponderato','Quantità totale acquistata','N. fornitori','N. acquisti','Ultimo acquisto'], artRows);
+
+  var purchRows = purchases.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).map(function(p){
+    var art = p.articleId ? byId(priceArticles, p.articleId) : null;
+    return [p.date||'', p.supplier||'', p.invoiceNumber||'', p.description||'', p.qty||0, p.unit||'', p.unitPrice||0,
+      round2((p.qty||0)*(p.unitPrice||0)), art?art.name:'(non collegato)'];
+  });
+  writeTable(getOrCreateSheet(ss,'Acquisti'),
+    ['Data','Fornitore','N. fattura','Descrizione','Quantità','Unità','Prezzo unitario','Totale riga','Articolo collegato'], purchRows);
 
   var recipeRows = [];
   products.forEach(function(p){
@@ -719,10 +851,13 @@ function exportTables(ss, db) {
     ['Prodotto','Tipo riferimento','Riferimento','Quantità','Unità'], recipeRows);
 
   var evRows = events.map(function(ev){
-    return [ev.id, ev.name||'', ev.date||'', ev.revenue||0, (ev.menu||[]).length];
+    var plan = computePlan(ev, products, ingredients);
+    var cost = costSummaryGAS(plan.rows, ev.revenue||0, ingredients, products, purchases);
+    return [ev.id, ev.name||'', ev.date||'', ev.revenue||0, (ev.menu||[]).length,
+      cost.complete?round2(cost.totalCost):(round2(cost.totalCost)+' (parziale)'), round2(cost.margin), round2(cost.marginPct)];
   });
   writeTable(getOrCreateSheet(ss,'Eventi'),
-    ['ID','Nome','Data','Fatturato previsto','N. prodotti in menu'], evRows);
+    ['ID','Nome','Data','Fatturato previsto','N. prodotti in menu','Costo ingredienti stimato','Margine stimato','Margine %'], evRows);
 
   var salesRows = [], shopRows = [], prepRows = [];
   events.forEach(function(ev){
@@ -817,6 +952,73 @@ function computePlan(ev, products, ingredients) {
   }).filter(function(x){ return x.product && x.total>1e-9; });
 
   return {rows:rows, shopping:shopping, preparations:preparations};
+}
+
+/* ----- food cost: stessa logica del motore prezzi dell'app ----- */
+function getArticleStatsGAS(articleId, purchases) {
+  var lines = purchases.filter(function(p){ return p.articleId===articleId; });
+  if (!lines.length) return null;
+  var qtySum=0, valueSum=0, suppliers={}, lastDate=null;
+  lines.forEach(function(p){
+    var q=p.qty||0, price=p.unitPrice||0;
+    qtySum += q; valueSum += q*price;
+    if (p.supplier) suppliers[p.supplier]=true;
+    if (!lastDate || (p.date||'')>lastDate) lastDate=p.date;
+  });
+  return { avgPrice: qtySum>1e-9?valueSum/qtySum:0, totalQty:qtySum, purchaseCount:lines.length,
+    supplierCount:Object.keys(suppliers).length, lastDate:lastDate };
+}
+
+function getIngredientUnitCostGAS(ing, purchases) {
+  if (!ing || !ing.priceArticleId) return null;
+  var stats = getArticleStatsGAS(ing.priceArticleId, purchases);
+  if (!stats) return null;
+  var factor = ing.priceFactor>0 ? ing.priceFactor : 1;
+  return stats.avgPrice/factor;
+}
+
+function computeProductCostGAS(productId, ingredients, products, purchases, visiting) {
+  visiting = visiting || {};
+  var p = byId(products, productId);
+  if (!p) return {cost:0, complete:false, missing:['(prodotto eliminato)']};
+  if (visiting[productId]) return {cost:0, complete:true, missing:[]};
+  var nextVisiting = {}; for (var k in visiting) nextVisiting[k]=visiting[k]; nextVisiting[productId]=true;
+
+  var cost=0, complete=true, missing=[];
+  (p.recipe||[]).forEach(function(r){
+    var refType = r.refType||'ingredient';
+    var refId = r.refId!=null ? r.refId : r.ingredientId;
+    var qty = r.qty||0;
+    if (!refId || qty<=0) return;
+    if (refType==='product') {
+      var sub = byId(products, refId);
+      if (!sub) { complete=false; missing.push('(componente eliminato)'); return; }
+      var subRes = computeProductCostGAS(refId, ingredients, products, purchases, nextVisiting);
+      var yieldQty = sub.yieldQty>0 ? sub.yieldQty : 1;
+      cost += (qty/yieldQty) * subRes.cost;
+      if (!subRes.complete) { complete=false; missing = missing.concat(subRes.missing); }
+    } else {
+      var ing = byId(ingredients, refId);
+      if (!ing) { complete=false; missing.push('(ingrediente eliminato)'); return; }
+      var unitCost = getIngredientUnitCostGAS(ing, purchases);
+      if (unitCost==null) { complete=false; missing.push(ing.name); return; }
+      cost += qty*unitCost;
+    }
+  });
+  return {cost:cost, complete:complete, missing:missing};
+}
+
+function costSummaryGAS(rows, revenue, ingredients, products, purchases) {
+  var totalCost=0, complete=true;
+  rows.forEach(function(r){
+    if (r.qtyPlan<=0) return;
+    var res = computeProductCostGAS(r.product.id, ingredients, products, purchases, {});
+    totalCost += res.cost*r.qtyPlan;
+    if (!res.complete) complete=false;
+  });
+  var margin = revenue-totalCost;
+  var marginPct = revenue>0 ? (margin/revenue*100) : 0;
+  return {totalCost:totalCost, complete:complete, margin:margin, marginPct:marginPct};
 }
 `;
 
@@ -958,6 +1160,8 @@ function viewEventDetail(){
 
   h += '<div class="card no-print"><div class="row between"><span class="muted">'+fmtDate(ev.date)+'</span><span class="badge accent">'+fmtEuro(ev.revenue)+' previsti</span></div></div>';
 
+  h += renderCostCard(plan.cost);
+
   if(plan.rows.length===0){
     h += '<div class="callout">Nessun prodotto nel menu di questo evento. <a onclick="App.editEvent(\''+ev.id+'\')" style="color:inherit;text-decoration:underline;cursor:pointer">Modifica evento</a> per aggiungerne.</div>';
     return h;
@@ -1046,6 +1250,7 @@ function viewCombinedPlan(){
   h += '</div>';
 
   var plan = computeCombinedPlan(events);
+  h += renderCostCard(plan.cost);
 
   if(plan.preparations.length>0){
     h += '<div class="row between" style="margin-top:18px"><div class="section-title" style="margin:0">Preparazioni da fare</div><button class="btn small no-print" onclick="App.copyCombinedPreparations()">📋 Copia</button></div>';
@@ -1095,6 +1300,19 @@ function renderCombinedLoadGroup(title, items){
   return h;
 }
 
+function renderCostCard(cost){
+  if(!cost || (cost.revenue<=0 && cost.totalCost<=0)) return '';
+  var h = '<div class="card"><div class="row between"><span class="muted">Costo ingredienti stimato</span><span class="badge '+(cost.complete?'accent':'warn')+'">'+fmtEuro(cost.totalCost)+(cost.complete?'':' (parziale)')+'</span></div>';
+  if(cost.revenue>0){
+    h += '<div class="row between" style="margin-top:6px"><span class="muted">Margine stimato</span><span class="badge '+(cost.margin>=0?'pos':'neg')+'">'+fmtEuro(cost.margin)+' · '+fmtNum(cost.marginPct,1)+'%</span></div>';
+  }
+  if(!cost.complete){
+    h += '<div class="faint no-print" style="margin-top:8px">Mancano i prezzi per: '+cost.missing.map(function(m){return esc(m);}).join(', ')+'. Vai su Impostazioni → Food cost per collegarli.</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
 /* ================= PRODUCTS ================= */
 function viewProductsList(){
   var h = header('Prodotti', { actionIcon:'+', actionPrimary:true, actionFn:'App.newProduct()' });
@@ -1118,10 +1336,22 @@ function viewProductsList(){
     var isComp = p.kind==='component';
     var badge = isComp ? '<span class="badge warn">Semilavorato</span>' : '<span class="badge accent">'+fmtNum(p.pct,1)+'%</span>';
     var sub = isComp ? ('Resa: '+fmtNum(p.yieldQty||1,2)+' '+esc(p.yieldUnit||'pz')) : fmtEuro(p.price);
+    var costLine = '';
+    if(nIng>0){
+      var costRes = computeProductCost(p.id, {});
+      if(costRes.complete){
+        var costTxt = fmtEuro(costRes.cost)+(isComp?('/'+(p.yieldQty||1)+' '+esc(p.yieldUnit||'pz')):'');
+        var pctTxt = (!isComp && p.price>0) ? (' · '+fmtNum(costRes.cost/p.price*100,1)+'% food cost') : '';
+        costLine = '<div class="faint" style="margin-top:2px">Costo: '+costTxt+pctTxt+'</div>';
+      } else {
+        costLine = '<div class="faint" style="margin-top:2px;color:var(--warn)">Costo incompleto (prezzi mancanti)</div>';
+      }
+    }
     return '<div class="card tap" onclick="App.openProduct(\''+p.id+'\')">'+
       '<div class="row between"><span class="strong">'+esc(p.name)+'</span>'+badge+'</div>'+
       '<div class="muted" style="margin-top:4px">'+sub+(p.category?' · '+esc(p.category):'')+'</div>'+
       (nIng>0 ? '<div class="faint" style="margin-top:4px">Ricetta: '+nIng+' ingredienti</div>' : '<div class="faint" style="margin-top:4px;color:var(--warn)">⚠️ nessuna ricetta impostata</div>')+
+      costLine+
       '</div>';
   }
   if(sellable.length){
@@ -1267,6 +1497,8 @@ function viewIngredientForm(){
 
   h += '<div id="type-fields">' + renderIngredientTypeFields(d) + '</div>';
 
+  if(d.type!=='equipment') h += renderIngredientPriceFields(d);
+
   h += '<div class="field"><label>Posizione predefinita</label><div class="grid-toggle">'+
     '<button type="button" class="'+(d.location==='truck'?'active':'')+'" onclick="App.setIngredientField(\'location\',\'truck\',true)">🚚 Truck</button>'+
     '<button type="button" class="'+(d.location==='van'?'active':'')+'" onclick="App.setIngredientField(\'location\',\'van\',true)">🚐 Furgone</button>'+
@@ -1280,6 +1512,41 @@ function viewIngredientForm(){
   return h;
 }
 
+function renderIngredientPriceFields(d){
+  var h = '<div class="section-title">Prezzo (food cost)</div>';
+  var linked = d.priceArticleId ? byId(db.priceArticles, d.priceArticleId) : null;
+
+  if(!d.priceArticleId && d.name && d.name.trim().length>1){
+    var best = suggestArticleMatches(d.name, 1)[0];
+    if(best && best.score>=40){
+      h += '<div class="callout info">Forse corrisponde a "'+esc(best.article.name)+'" nel database prezzi — '+
+        '<a onclick="App.setIngredientField(\'priceArticleId\',\''+best.article.id+'\',true)" style="text-decoration:underline;cursor:pointer;color:inherit">collega</a></div>';
+    }
+  }
+
+  h += '<div class="field"><label>Collegato a</label><select id="f-pricearticle" onchange="App.setIngredientField(\'priceArticleId\', this.value||null, true)">'+
+    '<option value="">— nessun collegamento —</option>'+
+    db.priceArticles.slice().sort(byName).map(function(a){
+      return '<option value="'+a.id+'" '+(a.id===d.priceArticleId?'selected':'')+'>'+esc(a.name)+' ('+esc(a.unit)+')</option>';
+    }).join('')+
+    '</select></div>';
+
+  if(linked){
+    var stats = getArticleStats(linked.id);
+    h += '<div class="field-row">'+
+      '<div class="field"><label>Quanti "'+esc(d.unit||'?')+'" per 1 "'+esc(linked.unit)+'"</label><input type="number" id="f-pricefactor" min="0.0001" step="0.0001" value="'+(d.priceFactor||1)+'" oninput="App.setIngredientField(\'priceFactor\',parseFloat(this.value)||1)"></div>'+
+      '</div>';
+    h += '<div class="field hint" style="margin-top:-8px">Es. se l\'ingrediente è in grammi e l\'articolo è prezzato al kg, scrivi 1000.</div>';
+    if(stats){
+      var unitCost = stats.avgPrice / (d.priceFactor>0?d.priceFactor:1);
+      h += '<div class="callout info">Prezzo medio articolo: '+fmtEuro(stats.avgPrice)+'/'+esc(linked.unit)+' → costo stimato '+fmtEuro(unitCost)+'/'+esc(d.unit||'unità')+'</div>';
+    } else {
+      h += '<div class="callout">Nessun acquisto ancora collegato a questo articolo: il costo sarà 0 finché non carichi una fattura.</div>';
+    }
+  }
+  return h;
+}
+
 function renderIngredientTypeFields(d){
   if(d.type==='equipment'){
     return '<div class="field"><label><input type="checkbox" id="f-always" '+(d.alwaysRequired?'checked':'')+' style="width:18px;height:18px;vertical-align:middle;margin-right:8px;accent-color:var(--accent)" onchange="App.setIngredientField(\'alwaysRequired\',this.checked)">Sempre necessaria, indipendentemente dal menu dell\'evento</label></div>';
@@ -1288,6 +1555,87 @@ function renderIngredientTypeFields(d){
     '<div class="field"><label>Unità di misura</label><input type="text" id="f-unit" value="'+esc(d.unit||'g')+'" placeholder="g, kg, ml, l, pz" oninput="App.setIngredientField(\'unit\',this.value)"></div>'+
     '<div class="field"><label>Formato confezione (opz.)</label><input type="number" id="f-package" min="0" step="0.01" value="'+(d.packageSize||'')+'" placeholder="es. 1000" oninput="App.setIngredientField(\'packageSize\',parseFloat(this.value)||null)"></div>'+
     '</div>';
+}
+
+/* ================= FOOD COST ================= */
+function viewFoodCostSection(){
+  var h = '<div class="section-title">Food cost — fatture d\'acquisto</div>';
+  h += '<div class="card">'+
+    '<p class="muted" style="margin-bottom:10px">Carica le fatture elettroniche XML dei fornitori: l\'app estrae le righe acquistate e calcola il prezzo medio ponderato di ogni articolo. Collegando poi gli ingredienti del magazzino a questi articoli ottieni il food cost dei prodotti, aggiornato ad ogni nuova fattura.</p>'+
+    '<button class="btn small" onclick="document.getElementById(\'invoice-file\').click()">📄 Carica fatture XML</button>'+
+    '<input type="file" id="invoice-file" accept=".xml" multiple style="display:none" onchange="App.importInvoices(this.files)">'+
+    '</div>';
+
+  var invoiceGroups = {};
+  db.purchases.forEach(function(p){
+    var key = p.invoiceId || 'legacy';
+    if(!invoiceGroups[key]) invoiceGroups[key] = { id:key, supplier:p.supplier, invoiceNumber:p.invoiceNumber, date:p.date, count:0 };
+    invoiceGroups[key].count++;
+  });
+  var invoiceList = Object.keys(invoiceGroups).map(function(k){ return invoiceGroups[k]; })
+    .sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  if(invoiceList.length){
+    h += '<div class="card">';
+    invoiceList.forEach(function(inv){
+      h += '<div class="row between" style="padding:7px 0;border-bottom:1px solid var(--line)">'+
+        '<div><div class="strong" style="font-size:13.5px">'+esc(inv.supplier)+(inv.invoiceNumber?' · n. '+esc(inv.invoiceNumber):'')+'</div>'+
+        '<div class="faint">'+fmtDate(inv.date)+' · '+inv.count+' righe</div></div>'+
+        '<button class="iconbtn" style="width:32px;height:32px" onclick="App.deleteInvoice(\''+inv.id+'\')">🗑️</button>'+
+        '</div>';
+    });
+    h += '</div>';
+  }
+
+  var unmatchedMap = {};
+  db.purchases.filter(function(p){ return !p.articleId; }).forEach(function(p){
+    var key = p.description;
+    if(!unmatchedMap[key]) unmatchedMap[key] = { description:key, unit:p.unit, count:0, totalQty:0 };
+    unmatchedMap[key].count++;
+    unmatchedMap[key].totalQty += p.qty||0;
+  });
+  var unmatchedList = Object.keys(unmatchedMap).map(function(k){ return unmatchedMap[k]; })
+    .sort(function(a,b){ return a.description.localeCompare(b.description); });
+
+  h += '<div class="section-title">Articoli da collegare'+(unmatchedList.length?' ('+unmatchedList.length+')':'')+'</div>';
+  if(unmatchedList.length===0){
+    h += '<div class="callout info">Nessun articolo in attesa. Le nuove righe non riconosciute da una fattura futura compariranno qui.</div>';
+  } else {
+    h += '<div class="card">';
+    unmatchedList.forEach(function(u, idx){
+      var suggestions = suggestArticleMatches(u.description, 3);
+      var selectId = 'match-sel-'+idx;
+      h += '<div class="unmatched-row" data-desc="'+esc(u.description)+'" data-unit="'+esc(u.unit)+'" style="padding:10px 0;border-bottom:1px solid var(--line)">'+
+        '<div class="item-name" style="font-size:13.5px">'+esc(u.description)+'</div>'+
+        '<div class="item-sub" style="margin-bottom:8px">'+u.count+' righe · '+fmtNum(u.totalQty,2)+' '+esc(u.unit)+' totali</div>'+
+        '<select id="'+selectId+'" style="width:100%;margin-bottom:6px;border:1.5px solid var(--line);border-radius:10px;padding:8px;background:var(--surface)">'+
+          '<option value="__new__">+ Nuovo articolo: "'+esc(u.description)+'"</option>'+
+          (suggestions.length? ('<optgroup label="Suggeriti">'+suggestions.map(function(s){ return '<option value="'+s.article.id+'">'+esc(s.article.name)+' ('+s.score+'% simile)</option>'; }).join('')+'</optgroup>') : '')+
+          (db.priceArticles.length? ('<optgroup label="Tutti gli articoli">'+db.priceArticles.slice().sort(byName).map(function(a){ return '<option value="'+a.id+'">'+esc(a.name)+'</option>'; }).join('')+'</optgroup>') : '')+
+        '</select>'+
+        '<button class="btn small" onclick="App.linkPurchaseRow(this)">Collega</button>'+
+        '</div>';
+    });
+    h += '</div>';
+  }
+
+  h += '<div class="section-title">Database prezzi'+(db.priceArticles.length?' ('+db.priceArticles.length+')':'')+'</div>';
+  if(!db.priceArticles.length){
+    h += '<div class="callout info">Ancora nessun articolo. Carica delle fatture e collega le righe qui sopra per iniziare a costruire il database prezzi.</div>';
+  } else {
+    h += '<div class="card">';
+    db.priceArticles.slice().sort(byName).forEach(function(a){
+      var stats = getArticleStats(a.id);
+      h += '<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)">'+
+        '<div><div class="strong" style="font-size:13.5px">'+esc(a.name)+'</div>'+
+        '<div class="faint">'+(stats? (fmtNum(stats.totalQty,2)+' '+esc(a.unit)+' · '+stats.supplierCount+' fornitori · agg. '+fmtDate(stats.lastDate)) : 'nessun acquisto collegato')+'</div></div>'+
+        '<div class="row" style="gap:8px;flex-shrink:0">'+
+        '<span class="badge accent">'+(stats? (fmtEuro(stats.avgPrice)+'/'+esc(a.unit)) : '—')+'</span>'+
+        '<button class="iconbtn" style="width:32px;height:32px" onclick="App.deletePriceArticle(\''+a.id+'\')">🗑️</button>'+
+        '</div></div>';
+    });
+    h += '</div>';
+  }
+  return h;
 }
 
 /* ================= SETTINGS ================= */
@@ -1339,6 +1687,8 @@ function viewSettings(){
   h += '<div class="callout info">Protezione anti-sovrascrittura: prima di inviare, l\'app verifica che nessun altro dispositivo abbia salvato nel frattempo. Se è successo, l\'invio si blocca automaticamente e qui sopra puoi scegliere quali dati tenere — non capita mai una sovrascrittura silenziosa.</div>';
 
   h += '<div class="callout info">Ad ogni sincronizzazione lo script scrive anche delle <b>tabelle leggibili</b> sul foglio — Ingredienti, Prodotti, Ricette, Eventi, e i calcoli per ogni evento (Eventi_Vendite, Eventi_Spesa, Eventi_Preparazioni) — pronte per grafici o tabelle pivot. Vengono rigenerate ad ogni sync: non modificarle a mano, per analisi personalizzate crea un foglio nuovo che le referenzia.</div>';
+
+  h += viewFoodCostSection();
 
   h += '<div class="section-title">Backup dati</div>';
   h += '<div class="card"><p class="muted" style="margin-bottom:12px">'+(connected
@@ -1548,10 +1898,10 @@ window.App = {
 
   /* ingredients */
   newIngredient: function(){
-    state.draftIngredient = {id:uid(), name:'', category:'', unit:'g', type:'consumable', location:'both', packageSize:null, alwaysRequired:false};
+    state.draftIngredient = {id:uid(), name:'', category:'', unit:'g', type:'consumable', location:'both', packageSize:null, alwaysRequired:false, priceArticleId:null, priceFactor:1};
     nav('ingredientForm', {});
   },
-  openIngredient: function(id){ state.draftIngredient = Object.assign({}, byId(db.ingredients, id)); nav('ingredientForm', {id:id}); },
+  openIngredient: function(id){ state.draftIngredient = Object.assign({priceFactor:1}, byId(db.ingredients, id)); nav('ingredientForm', {id:id}); },
   cancelIngredientForm: function(){ state.draftIngredient=null; nav('ingredients'); },
   setIngredientField: function(field, val, rerender){
     state.draftIngredient[field]=val;
@@ -1566,10 +1916,13 @@ window.App = {
     if(i.type==='equipment'){
       i.alwaysRequired = !!d.alwaysRequired;
       i.unit = i.unit || 'pz'; i.packageSize=null;
+      i.priceArticleId=null; i.priceFactor=1;
     } else {
       i.unit = (d.unit||'pz').trim() || 'pz';
       i.packageSize = d.packageSize ? parseFloat(d.packageSize) : null;
       i.alwaysRequired=false;
+      i.priceArticleId = d.priceArticleId || null;
+      i.priceFactor = d.priceFactor>0 ? d.priceFactor : 1;
     }
     saveDB(); state.draftIngredient=null;
     nav('ingredients');
@@ -1611,6 +1964,83 @@ window.App = {
   },
   copyAppsScript: function(){ copyText(APPS_SCRIPT_CODE); },
 
+  /* food cost */
+  importInvoices: function(fileList){
+    if(!fileList || !fileList.length) return;
+    var files = Array.prototype.slice.call(fileList);
+    toast('Lettura di '+files.length+' file…');
+    Promise.all(files.map(function(file){
+      return new Promise(function(resolve){
+        var reader = new FileReader();
+        reader.onload = function(){ resolve({name:file.name, text:reader.result}); };
+        reader.onerror = function(){ resolve({name:file.name, text:null}); };
+        reader.readAsText(file);
+      });
+    })).then(function(results){
+      var knownDescToArticle = {};
+      db.purchases.forEach(function(p){ if(p.articleId) knownDescToArticle[(p.description||'').trim().toLowerCase()] = p.articleId; });
+
+      var totalLines=0, okFiles=0, errFiles=[];
+      results.forEach(function(r){
+        if(!r.text){ errFiles.push(r.name+' (lettura fallita)'); return; }
+        var res = parseFatturaXML(r.text, r.name);
+        if(!res.ok){ errFiles.push(r.name+': '+res.error); return; }
+        var invoiceId = uid();
+        res.lines.forEach(function(line){
+          var autoArticleId = knownDescToArticle[(line.description||'').trim().toLowerCase()] || null;
+          db.purchases.push({
+            id: uid(), invoiceId: invoiceId,
+            date: line.date, supplier: line.supplier, invoiceNumber: line.invoiceNumber,
+            description: line.description, qty: line.qty, unit: line.unit, unitPrice: line.unitPrice,
+            articleId: autoArticleId
+          });
+        });
+        totalLines += res.lines.length;
+        okFiles++;
+      });
+      saveDB();
+      var fileInput = document.getElementById('invoice-file');
+      if(fileInput) fileInput.value='';
+      render();
+      var msg = okFiles+' fattur'+(okFiles===1?'a':'e')+' importat'+(okFiles===1?'a':'e')+' · '+totalLines+' righe';
+      if(errFiles.length) msg += ' · '+errFiles.length+' con errori';
+      toast(msg);
+      if(errFiles.length) console.warn('Errori import fatture:', errFiles);
+    });
+  },
+  deleteInvoice: function(invoiceId){
+    if(!confirm('Eliminare questa fattura e tutte le sue righe? Gli articoli del database prezzi restano, con la media ricalcolata sulle righe rimanenti.')) return;
+    db.purchases = db.purchases.filter(function(p){ return p.invoiceId!==invoiceId; });
+    saveDB(); render();
+  },
+  linkPurchaseRow: function(btn){
+    var row = btn.closest('.unmatched-row');
+    var desc = row.getAttribute('data-desc');
+    var unit = row.getAttribute('data-unit');
+    var select = row.querySelector('select');
+    var val = select.value;
+    var articleId;
+    if(val==='__new__'){
+      articleId = uid();
+      db.priceArticles.push({ id:articleId, name:desc, unit: unit||'pz' });
+    } else {
+      articleId = val;
+    }
+    db.purchases.forEach(function(p){ if(p.description===desc && !p.articleId) p.articleId = articleId; });
+    saveDB(); render();
+    toast('Collegato al database prezzi');
+  },
+  deletePriceArticle: function(articleId){
+    var usedBy = db.ingredients.filter(function(i){ return i.priceArticleId===articleId; });
+    var msg = 'Eliminare questo articolo dal database prezzi?';
+    if(usedBy.length) msg += '\n\nÈ collegato a: '+usedBy.map(function(i){return i.name;}).join(', ')+' — verrà scollegato.';
+    if(!confirm(msg)) return;
+    db.priceArticles = db.priceArticles.filter(function(a){ return a.id!==articleId; });
+    db.purchases.forEach(function(p){ if(p.articleId===articleId) p.articleId=null; });
+    db.ingredients.forEach(function(i){ if(i.priceArticleId===articleId){ i.priceArticleId=null; i.priceFactor=1; } });
+    saveDB(); render();
+  },
+
   /* settings */
   exportData: function(){
     var blob = new Blob([JSON.stringify(db,null,2)], {type:'application/json'});
@@ -1647,6 +2077,71 @@ function fallbackCopy(text){
   try{ document.execCommand('copy'); toast('Copiato negli appunti'); }catch(e){ alert(text); }
   document.body.removeChild(ta);
 }
+/* ================= FATTURA ELETTRONICA (SDI) XML PARSER ================= */
+// Namespace-agnostic tag lookup: real invoices use different namespace prefixes
+// (p:, ns2:, none...) depending on the software that generated them.
+function xmlAll(root, localName){
+  return Array.prototype.filter.call(root.getElementsByTagName('*'), function(el){
+    return el.localName===localName || el.tagName===localName || el.tagName.split(':').pop()===localName;
+  });
+}
+function xmlOne(root, localName){ return xmlAll(root, localName)[0]||null; }
+function xmlText(root, localName){ var el=xmlOne(root, localName); return el ? el.textContent.trim() : ''; }
+function xmlNum(root, localName){ var t=xmlText(root, localName); var n=parseFloat(t.replace(',','.')); return isNaN(n)?null:n; }
+
+// Parses one Fattura Elettronica XML (SDI standard) into raw purchase lines.
+// Credit notes (TD04/TD08) are skipped — v1 only imports purchase invoices.
+function parseFatturaXML(xmlText_, sourceName){
+  var doc;
+  try{ doc = new DOMParser().parseFromString(xmlText_, 'application/xml'); }
+  catch(e){ return { ok:false, error:'XML non leggibile' }; }
+  if(doc.getElementsByTagName('parsererror').length){
+    return { ok:false, error:'XML non valido' };
+  }
+  var bodies = xmlAll(doc, 'FatturaElettronicaBody');
+  if(!bodies.length) return { ok:false, error:'Non sembra una Fattura Elettronica (manca FatturaElettronicaBody)' };
+
+  var header = xmlOne(doc, 'FatturaElettronicaHeader');
+  var cedente = header ? xmlOne(header, 'CedentePrestatore') : null;
+  var supplier = '';
+  if(cedente){
+    var anagrafica = xmlOne(cedente, 'Anagrafica');
+    if(anagrafica){
+      var denom = xmlText(anagrafica, 'Denominazione');
+      supplier = denom || (xmlText(anagrafica,'Nome')+' '+xmlText(anagrafica,'Cognome')).trim();
+    }
+  }
+  supplier = supplier || 'Fornitore sconosciuto';
+
+  var lines = [];
+  var skippedCreditNotes = 0;
+  bodies.forEach(function(body){
+    var datiGen = xmlOne(body, 'DatiGeneraliDocumento');
+    var tipoDoc = datiGen ? xmlText(datiGen, 'TipoDocumento') : '';
+    if(tipoDoc==='TD04' || tipoDoc==='TD08'){ skippedCreditNotes++; return; }
+    var date = datiGen ? xmlText(datiGen, 'Data') : '';
+    var invoiceNum = datiGen ? xmlText(datiGen, 'Numero') : '';
+    var beniServizi = xmlOne(body, 'DatiBeniServizi');
+    if(!beniServizi) return;
+    xmlAll(beniServizi, 'DettaglioLinee').forEach(function(row){
+      var desc = xmlText(row, 'Descrizione');
+      var qty = xmlNum(row, 'Quantita');
+      var unitPrice = xmlNum(row, 'PrezzoUnitario');
+      var unit = xmlText(row, 'UnitaMisura');
+      if(!desc || qty==null || unitPrice==null || qty<=0) return;
+      lines.push({
+        date: date, supplier: supplier, invoiceNumber: invoiceNum,
+        description: desc, qty: qty, unit: unit||'', unitPrice: unitPrice
+      });
+    });
+  });
+
+  if(!lines.length){
+    return { ok:false, error: skippedCreditNotes>0 ? 'Contiene solo note di credito (non importate)' : 'Nessuna riga con quantità e prezzo unitario valorizzati' };
+  }
+  return { ok:true, supplier:supplier, lines:lines, skippedCreditNotes:skippedCreditNotes };
+}
+
 function toast(msg){
   var t=document.createElement('div');
   t.textContent=msg;
