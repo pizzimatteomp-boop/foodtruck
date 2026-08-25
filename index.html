@@ -284,7 +284,7 @@ function catList(arr){
 }
 
 /* ---------------- state ---------------- */
-var state = { view:'events', params:{}, draftIngredient:null, draftProduct:null, draftEvent:null };
+var state = { view:'events', params:{}, draftIngredient:null, draftProduct:null, draftEvent:null, eventSelectMode:false, selectedEventIds:[] };
 
 function nav(view, params){
   state.view = view;
@@ -295,7 +295,13 @@ function nav(view, params){
 }
 
 /* ================= CALCULATION ================= */
-function computeEventPlan(ev){
+function recipeRef(r){
+  return { refType: r.refType || 'ingredient', refId: r.refId!=null ? r.refId : r.ingredientId, qty: r.qty||0 };
+}
+
+// Accumulates one event's ingredient/equipment/preparation needs into shared totals
+// (so multiple events can be combined by calling this repeatedly with the same accumulators).
+function accumulateEventInto(ev, ingTotals, equipNeeded, prepTotals){
   var menu = (ev.menu||[]).map(function(m){
     var p = byId(db.products, m.productId);
     return p ? { product:p, pctOverride:m.pctOverride } : null;
@@ -313,14 +319,6 @@ function computeEventPlan(ev){
     var qtyPlan = ceilSafe(qtyRaw);
     return { product:m.product, pct:pct, effPct:effPct, revenue:revenue, qtyRaw:qtyRaw, qtyPlan:qtyPlan };
   }).sort(function(a,b){ return b.effPct - a.effPct; });
-
-  var ingTotals = {};
-  var equipNeeded = {};
-  var prepTotals = {};
-
-  function recipeRef(r){
-    return { refType: r.refType || 'ingredient', refId: r.refId!=null ? r.refId : r.ingredientId, qty: r.qty||0 };
-  }
 
   function expandInto(refType, refId, neededQty, visiting){
     if(!refId || neededQty<=1e-9) return;
@@ -351,6 +349,12 @@ function computeEventPlan(ev){
       expandInto(ref.refType, ref.refId, ref.qty*r.qtyPlan, {});
     });
   });
+
+  return { rows:rows, rawSum:rawSum };
+}
+
+// Turns raw accumulated totals into the shopping/preparations/loading structures shown in the UI.
+function buildPlanOutputs(ingTotals, equipNeeded, prepTotals){
   db.ingredients.forEach(function(ing){
     if(ing.type==='equipment' && ing.alwaysRequired) equipNeeded[ing.id]=true;
   });
@@ -394,7 +398,27 @@ function computeEventPlan(ev){
     loading[k].sort(function(a,b){ return a.name.localeCompare(b.name); });
   });
 
-  return { rows:rows, rawSum:rawSum, shopping:shopping, preparations:preparations, loading:loading };
+  return { shopping:shopping, preparations:preparations, loading:loading };
+}
+
+function computeEventPlan(ev){
+  var ingTotals = {}, equipNeeded = {}, prepTotals = {};
+  var acc = accumulateEventInto(ev, ingTotals, equipNeeded, prepTotals);
+  var built = buildPlanOutputs(ingTotals, equipNeeded, prepTotals);
+  return { rows:acc.rows, rawSum:acc.rawSum, shopping:built.shopping, preparations:built.preparations, loading:built.loading };
+}
+
+// Combines the ingredient/preparation needs of several events into one plan — e.g. two nearby
+// events prepped together. Totals are summed BEFORE package/batch rounding, so the result isn't
+// just the sum of each event's rounded numbers (which would over-count).
+function computeCombinedPlan(events){
+  var ingTotals = {}, equipNeeded = {}, prepTotals = {};
+  var perEvent = events.map(function(ev){
+    var acc = accumulateEventInto(ev, ingTotals, equipNeeded, prepTotals);
+    return { event:ev, rows:acc.rows, rawSum:acc.rawSum };
+  });
+  var built = buildPlanOutputs(ingTotals, equipNeeded, prepTotals);
+  return { perEvent:perEvent, shopping:built.shopping, preparations:built.preparations, loading:built.loading };
 }
 
 /* ================= GOOGLE SHEETS SYNC ================= */
@@ -772,6 +796,7 @@ function render(){
     case 'events': html = viewEventsList(); break;
     case 'eventForm': html = viewEventForm(); break;
     case 'eventDetail': html = viewEventDetail(); break;
+    case 'combinedPlan': html = viewCombinedPlan(); break;
     case 'products': html = viewProductsList(); break;
     case 'productForm': html = viewProductForm(); break;
     case 'ingredients': html = viewIngredientsList(); break;
@@ -782,7 +807,7 @@ function render(){
   document.getElementById('app').innerHTML = html;
   document.querySelectorAll('.nav-btn').forEach(function(b){
     var tab = b.getAttribute('data-nav');
-    var active = (tab==='events' && ['events','eventForm','eventDetail'].includes(state.view)) ||
+    var active = (tab==='events' && ['events','eventForm','eventDetail','combinedPlan'].includes(state.view)) ||
                  (tab==='products' && ['products','productForm'].includes(state.view)) ||
                  (tab==='ingredients' && ['ingredients','ingredientForm'].includes(state.view)) ||
                  (tab==='settings' && state.view==='settings');
@@ -793,21 +818,39 @@ function render(){
 /* ================= EVENTS ================= */
 function viewEventsList(){
   var events = db.events.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
-  var h = header('Eventi', { actionIcon:'+', actionPrimary:true, actionFn:'App.newEvent()' });
+  var selectMode = !!state.eventSelectMode;
+  var selected = state.selectedEventIds || [];
+  var h = header('Eventi', selectMode
+    ? { actionIcon:'✕', actionFn:'App.exitEventSelectMode()' }
+    : { actionIcon:'+', actionPrimary:true, actionFn:'App.newEvent()' });
   if(events.length===0){
     h += '<div class="empty"><span class="emoji">🚚</span>'+
       '<p>Nessun evento pianificato.<br>Crea il primo evento per stimare vendite, spesa e carico.</p>'+
       '<button class="btn primary" onclick="App.newEvent()">+ Nuovo evento</button></div>';
     return h;
   }
-  h += '<div class="section-title">In programma</div>';
+  h += '<div class="row between"><div class="section-title" style="margin:0">In programma</div>'+
+    (events.length>1 ? (selectMode
+      ? '<button class="btn small ghost no-print" onclick="App.exitEventSelectMode()">Annulla</button>'
+      : '<button class="btn small ghost no-print" onclick="App.enterEventSelectMode()">Seleziona</button>') : '')+
+    '</div>';
   events.forEach(function(ev){
     var plan = computeEventPlan(ev);
-    h += '<div class="card tap" onclick="App.openEvent(\''+ev.id+'\')">'+
+    var isSel = selected.indexOf(ev.id)>=0;
+    var onclick = selectMode ? "App.toggleEventSelected('"+ev.id+"')" : "App.openEvent('"+ev.id+"')";
+    h += '<div class="card tap" onclick="'+onclick+'"><div class="row" style="gap:10px;align-items:flex-start">'+
+      (selectMode ? '<input type="checkbox" '+(isSel?'checked':'')+' onclick="event.stopPropagation()" onchange="App.toggleEventSelected(\''+ev.id+'\')" style="width:22px;height:22px;margin-top:2px;flex-shrink:0;accent-color:var(--accent)">' : '')+
+      '<div class="grow">'+
       '<div class="row between"><span class="strong">'+esc(ev.name||'Evento senza nome')+'</span><span class="badge accent">'+fmtEuro(ev.revenue)+'</span></div>'+
       '<div class="muted" style="margin-top:4px">'+fmtDate(ev.date)+' · '+(ev.menu||[]).length+' prodotti nel menu · '+plan.shopping.length+' ingredienti</div>'+
-      '</div>';
+      '</div></div></div>';
   });
+  if(selectMode && selected.length>0){
+    h += '<div class="card no-print" style="position:sticky;bottom:8px;border:1.5px solid var(--accent)">'+
+      '<div class="strong" style="margin-bottom:8px">'+selected.length+' event'+(selected.length===1?'o':'i')+' selezionat'+(selected.length===1?'o':'i')+'</div>'+
+      '<button class="btn primary" onclick="App.openCombinedPlan()">Vedi lista combinata</button>'+
+      '</div>';
+  }
   return h;
 }
 
@@ -835,7 +878,7 @@ function viewEventForm(){
       var mrow = picked ? d.menu.find(function(m){return m.productId===p.id;}) : null;
       if(picked) rawSelSum += (mrow.pctOverride!=null ? mrow.pctOverride : (p.pct||0));
     });
-    sellableProducts.slice().sort(function(a,b){return (b.pct||0)-(a.pct||0);}).forEach(function(p){
+    sellableProducts.slice().sort(byName).forEach(function(p){
       var picked = draftIds.indexOf(p.id)>=0;
       var mrow = picked ? d.menu.find(function(m){return m.productId===p.id;}) : null;
       var pctVal = mrow && mrow.pctOverride!=null ? mrow.pctOverride : (p.pct||0);
@@ -934,6 +977,71 @@ function renderLoadGroup(title, key, items, ev){
   return h;
 }
 
+function viewCombinedPlan(){
+  var ids = state.params.ids || [];
+  var events = ids.map(function(id){ return byId(db.events, id); }).filter(Boolean);
+  var h = header('Lista combinata', { back:'App.exitCombinedPlan()' });
+  if(events.length===0){
+    h += '<div class="callout">Nessun evento selezionato.</div>';
+    return h;
+  }
+  var sortedEvents = events.slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+  h += '<div class="card"><div class="strong" style="margin-bottom:8px">Eventi inclusi</div>';
+  sortedEvents.forEach(function(ev){
+    h += '<div class="row between" style="padding:6px 0"><span>'+esc(ev.name||'Evento')+'</span><span class="faint">'+fmtDate(ev.date)+'</span></div>';
+  });
+  var totalRevenue = events.reduce(function(s,ev){ return s+(ev.revenue||0); },0);
+  h += '<div class="row between" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><span class="muted">Fatturato previsto totale</span><span class="badge accent">'+fmtEuro(totalRevenue)+'</span></div>';
+  h += '</div>';
+
+  var plan = computeCombinedPlan(events);
+
+  if(plan.preparations.length>0){
+    h += '<div class="row between" style="margin-top:18px"><div class="section-title" style="margin:0">Preparazioni da fare</div><button class="btn small no-print" onclick="App.copyCombinedPreparations()">📋 Copia</button></div>';
+    h += '<div class="card">';
+    plan.preparations.forEach(function(x){
+      var sub = fmtNum(x.total,2)+' '+esc(x.product.yieldUnit||'pz')+(x.yieldQty>1? ' · ≈ '+x.batches+' ricette da '+fmtNum(x.yieldQty,2)+' '+esc(x.product.yieldUnit||'pz') : '');
+      h += '<div class="check-item"><div class="grow"><div class="item-name">'+esc(x.product.name)+'</div><div class="item-sub">'+sub+'</div></div></div>';
+    });
+    h += '</div>';
+  }
+
+  h += '<div class="row between" style="margin-top:18px"><div class="section-title" style="margin:0">Lista spesa</div><button class="btn small no-print" onclick="App.copyCombinedShopping()">📋 Copia</button></div>';
+  if(plan.shopping.length===0){
+    h += '<div class="callout info">Nessun ingrediente calcolato.</div>';
+  } else {
+    var lastCat = null;
+    h += '<div class="card">';
+    plan.shopping.forEach(function(x,i){
+      if(x.ing.category !== lastCat){
+        h += '<div class="faint" style="margin:'+(i>0?'12':'0')+'px 0 4px 0;text-transform:uppercase;font-weight:700">'+esc(x.ing.category||'Altro')+'</div>';
+        lastCat = x.ing.category;
+      }
+      h += '<div class="check-item"><div class="grow"><div class="item-name">'+esc(x.ing.name)+'</div><div class="item-sub">'+fmtNum(x.total,2)+' '+esc(x.ing.unit)+(x.packages!=null? ' · <b>'+x.packages+'</b> confezioni':'')+'</div></div></div>';
+    });
+    h += '</div>';
+  }
+
+  h += '<div class="row between" style="margin-top:18px"><div class="section-title" style="margin:0">Lista carico</div><button class="btn small no-print" onclick="App.copyCombinedLoading()">📋 Copia</button></div>';
+  h += renderCombinedLoadGroup('🚚 Food Truck', plan.loading.truck);
+  h += renderCombinedLoadGroup('🚐 Furgone', plan.loading.van);
+  h += renderCombinedLoadGroup('📦 Comune / da assegnare', plan.loading.common);
+
+  h += '<div class="callout info">Vista di sola lettura: somma gli eventi selezionati per darti una visione d\'insieme. Le spunte fatte/comprate/caricate restano sui singoli eventi.</div>';
+  h += '<div class="btn-row no-print"><button class="btn ghost" onclick="window.print()">🖨️ Stampa riepilogo</button></div>';
+  return h;
+}
+
+function renderCombinedLoadGroup(title, items){
+  if(items.length===0) return '';
+  var h = '<div class="card"><div class="strong" style="margin-bottom:6px">'+title+'</div>';
+  items.forEach(function(it){
+    h += '<div class="check-item"><div class="grow"><div class="item-name">'+esc(it.name)+'</div><div class="item-sub">'+esc(it.sub)+'</div></div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+
 /* ================= PRODUCTS ================= */
 function viewProductsList(){
   var h = header('Prodotti', { actionIcon:'+', actionPrimary:true, actionFn:'App.newProduct()' });
@@ -965,7 +1073,7 @@ function viewProductsList(){
   }
   if(sellable.length){
     h += '<div class="section-title">In vendita</div>';
-    sellable.slice().sort(function(a,b){return (b.pct||0)-(a.pct||0);}).forEach(function(p){ h += card(p); });
+    sellable.slice().sort(byName).forEach(function(p){ h += card(p); });
   }
   if(components.length){
     h += '<div class="section-title">Semilavorati</div>';
@@ -1042,10 +1150,12 @@ function viewProductForm(){
   return h;
 }
 
+function byName(a,b){ return (a.name||'').localeCompare(b.name||''); }
+
 function renderIngredientOptions(selectedVal, excludeProductId){
-  var cons = db.ingredients.filter(function(i){return i.type!=='equipment';});
-  var eq = db.ingredients.filter(function(i){return i.type==='equipment';});
-  var comps = db.products.filter(function(p){return p.id!==excludeProductId;});
+  var cons = db.ingredients.filter(function(i){return i.type!=='equipment';}).sort(byName);
+  var eq = db.ingredients.filter(function(i){return i.type==='equipment';}).sort(byName);
+  var comps = db.products.filter(function(p){return p.id!==excludeProductId;}).sort(byName);
   var h = '';
   if(cons.length){
     h += '<optgroup label="Consumabili">';
@@ -1201,7 +1311,7 @@ function viewSettings(){
 
 /* ================= APP ACTIONS ================= */
 window.App = {
-  goTab: function(t){ nav(t); },
+  goTab: function(t){ if(t!=='events'){ state.eventSelectMode=false; state.selectedEventIds=[]; } nav(t); },
 
   /* events */
   newEvent: function(){
@@ -1209,6 +1319,48 @@ window.App = {
     nav('eventForm', {});
   },
   openEvent: function(id){ nav('eventDetail', {id:id}); },
+  enterEventSelectMode: function(){ state.eventSelectMode=true; state.selectedEventIds=[]; render(); },
+  exitEventSelectMode: function(){ state.eventSelectMode=false; state.selectedEventIds=[]; render(); },
+  toggleEventSelected: function(id){
+    var arr = state.selectedEventIds||[];
+    var idx = arr.indexOf(id);
+    if(idx>=0) arr.splice(idx,1); else arr.push(id);
+    state.selectedEventIds = arr;
+    render();
+  },
+  openCombinedPlan: function(){
+    if(!state.selectedEventIds || !state.selectedEventIds.length) return;
+    nav('combinedPlan', {ids: state.selectedEventIds.slice()});
+  },
+  exitCombinedPlan: function(){ state.eventSelectMode=false; state.selectedEventIds=[]; nav('events'); },
+  copyCombinedPreparations: function(){
+    var events = (state.params.ids||[]).map(function(id){return byId(db.events,id);}).filter(Boolean);
+    var plan = computeCombinedPlan(events);
+    var lines = ['Preparazioni da fare — '+events.map(function(e){return e.name;}).join(' + '), ''];
+    plan.preparations.forEach(function(x){ lines.push('☐ '+x.product.name+': '+fmtNum(x.total,2)+' '+(x.product.yieldUnit||'pz')); });
+    copyText(lines.join('\n'));
+  },
+  copyCombinedShopping: function(){
+    var events = (state.params.ids||[]).map(function(id){return byId(db.events,id);}).filter(Boolean);
+    var plan = computeCombinedPlan(events);
+    var lines = ['Lista spesa — '+events.map(function(e){return e.name;}).join(' + '), ''];
+    var lastCat=null;
+    plan.shopping.forEach(function(x){
+      if(x.ing.category!==lastCat){ lines.push('— '+(x.ing.category||'Altro')+' —'); lastCat=x.ing.category; }
+      lines.push('☐ '+x.ing.name+': '+fmtNum(x.total,2)+' '+x.ing.unit+(x.packages!=null?' ('+x.packages+' confezioni)':''));
+    });
+    copyText(lines.join('\n'));
+  },
+  copyCombinedLoading: function(){
+    var events = (state.params.ids||[]).map(function(id){return byId(db.events,id);}).filter(Boolean);
+    var plan = computeCombinedPlan(events);
+    var lines = ['Lista carico — '+events.map(function(e){return e.name;}).join(' + '), ''];
+    function block(title, items){ if(!items.length) return; lines.push(title); items.forEach(function(it){ lines.push('☐ '+it.name+' — '+it.sub); }); lines.push(''); }
+    block('🚚 FOOD TRUCK', plan.loading.truck);
+    block('🚐 FURGONE', plan.loading.van);
+    block('📦 COMUNE / DA ASSEGNARE', plan.loading.common);
+    copyText(lines.join('\n'));
+  },
   editEvent: function(id){
     var ev = byId(db.events, id);
     state.draftEvent = Object.assign({}, ev, { menu:(ev.menu||[]).map(function(m){ return Object.assign({},m); }) });
