@@ -8,8 +8,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>VegMan · Planner</title>
-<link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;:&quot;VegMan Planner&quot;,&quot;short_name&quot;:&quot;VegMan&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%23F6F3EA&quot;,&quot;theme_color&quot;:&quot;%236B77B7&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%236B77B7'/%3E%3Cpath d='M50 27c-9 0-15 8-15 20 0 14 7 24 15 24s15-10 15-24c0-12-6-20-15-20z' fill='%23fff'/%3E%3Cpath d='M50 14c1 4 1 9-1 13-3-2-8-2-11 1-1-4 1-9 4-12 2-2 5-3 8-2z' fill='%237BAE8F'/%3E%3Cpath d='M50 14c2 4 3 9 2 13 3-1 8 0 10 3 2-4 1-9-2-12-3-2-6-4-10-4z' fill='%237BAE8F'/%3E%3Crect x='45' y='38' width='3' height='8' fill='%236B77B7' opacity='.5'/%3E%3Crect x='52' y='50' width='3' height='8' fill='%236B77B7' opacity='.5'/%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%236B77B7'/%3E%3Cpath d='M50 27c-9 0-15 8-15 20 0 14 7 24 15 24s15-10 15-24c0-12-6-20-15-20z' fill='%23fff'/%3E%3Cpath d='M50 14c1 4 1 9-1 13-3-2-8-2-11 1-1-4 1-9 4-12 2-2 5-3 8-2z' fill='%237BAE8F'/%3E%3Cpath d='M50 14c2 4 3 9 2 13 3-1 8 0 10 3 2-4 1-9-2-12-3-2-6-4-10-4z' fill='%237BAE8F'/%3E%3C/svg%3E">
+<link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;:&quot;VegMan Planner&quot;,&quot;short_name&quot;:&quot;VegMan&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%23F6F3EA&quot;,&quot;theme_color&quot;:&quot;%236B77B7&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%236B77B7'/%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M30,28 L70,28 L60,74 L40,74 Z M43,27 C42,38 44,52 50,64 C56,52 58,38 57,27 Z'/%3E%3Cellipse cx='50' cy='18' rx='8' ry='10' fill='%23fff'/%3E%3Cellipse cx='40' cy='23' rx='6.5' ry='8' fill='%23fff'/%3E%3Cellipse cx='60' cy='23' rx='6.5' ry='8' fill='%23fff'/%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%236B77B7'/%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M30,28 L70,28 L60,74 L40,74 Z M43,27 C42,38 44,52 50,64 C56,52 58,38 57,27 Z'/%3E%3Cellipse cx='50' cy='18' rx='8' ry='10' fill='%23fff'/%3E%3Cellipse cx='40' cy='23' rx='6.5' ry='8' fill='%23fff'/%3E%3Cellipse cx='60' cy='23' rx='6.5' ry='8' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -202,11 +202,47 @@ table.plan td.num{text-align:right;font-variant-numeric:tabular-nums}
 .pctbar .fill{height:100%;background:var(--pos)}
 .pctbar .fill.over{background:var(--neg)}
 
+.print-header{display:none}
 @media print{
-  .header,.nav,.no-print{display:none!important}
-  body{display:block;height:auto;overflow:visible;background:#fff}
-  #app{overflow:visible;height:auto;max-width:none}
-  .card{box-shadow:none;border:1px solid #ddd}
+  @page{ margin:14mm 12mm; }
+  .header,.nav,.no-print,.pctbar,.callout{display:none!important}
+  body{display:block;height:auto;overflow:visible;background:#fff;color:#000;font-size:12.5px}
+  #app{overflow:visible;height:auto;max-width:none;padding:0}
+  .print-header{
+    display:block;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #000;
+    break-after:avoid;
+  }
+  .print-header .brand{font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.02em}
+  .print-header h2{font-family:var(--display);font-weight:800;font-size:22px;margin:4px 0 2px 0}
+  .print-header .meta{font-size:12.5px;color:#333}
+  .section-title{
+    color:#000;font-size:12px;border-bottom:1.5px solid #000;padding-bottom:4px;
+    margin-top:18px;break-after:avoid;
+  }
+  .card{
+    box-shadow:none;border:1px solid #bbb;border-radius:4px;background:#fff;
+    padding:6px 10px;
+  }
+  table.plan{break-inside:auto}
+  table.plan tr{break-inside:avoid}
+  .check-item{
+    padding:7px 2px;border-bottom:1px solid #ddd;break-inside:avoid;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;
+  }
+  .check-item input[type=checkbox]{
+    appearance:none;-webkit-appearance:none;width:14px;height:14px;
+    border:1.5px solid #000;border-radius:3px;background:#fff!important;
+    accent-color:#000;
+  }
+  .check-item input[type=checkbox]:checked{background:#000!important}
+  .item-name{color:#000;font-size:13.5px}
+  .item-sub{color:#444}
+  .check-item.done .item-name{color:#666}
+  .badge{border:1px solid #666;background:none!important;color:#000!important}
+  .strong{color:#000}
+  .faint[style*="text-transform:uppercase"]{color:#000!important;font-weight:800}
+  table.plan th{color:#444}
+  table.plan td{color:#000}
 }
 </style>
 </head>
@@ -778,7 +814,7 @@ function computePlan(ev, products, ingredients) {
 `;
 
 /* ================= RENDER SHELL ================= */
-var BRANDMARK_SVG = '<div class="brandmark"><svg viewBox="0 0 100 100"><path d="M50 27c-9 0-15 8-15 20 0 14 7 24 15 24s15-10 15-24c0-12-6-20-15-20z" fill="#fff"/><path d="M50 14c1 4 1 9-1 13-3-2-8-2-11 1-1-4 1-9 4-12 2-2 5-3 8-2z" fill="#B9DED3"/><path d="M50 14c2 4 3 9 2 13 3-1 8 0 10 3 2-4 1-9-2-12-3-2-6-4-10-4z" fill="#B9DED3"/></svg></div>';
+var BRANDMARK_SVG = '<div class="brandmark"><svg viewBox="0 0 100 100"><path fill="#fff" fill-rule="evenodd" d="M30,28 L70,28 L60,74 L40,74 Z M43,27 C42,38 44,52 50,64 C56,52 58,38 57,27 Z"/><ellipse cx="50" cy="18" rx="8" ry="10" fill="#fff"/><ellipse cx="40" cy="23" rx="6.5" ry="8" fill="#fff"/><ellipse cx="60" cy="23" rx="6.5" ry="8" fill="#fff"/></svg></div>';
 
 function header(title, opts){
   opts = opts||{};
@@ -911,7 +947,9 @@ function viewEventDetail(){
 
   var h = header(ev.name||'Evento', { back:'App.goTab(\'events\')', actionIcon:'✎', actionFn:'App.editEvent(\''+ev.id+'\')' });
 
-  h += '<div class="card"><div class="row between"><span class="muted">'+fmtDate(ev.date)+'</span><span class="badge accent">'+fmtEuro(ev.revenue)+' previsti</span></div></div>';
+  h += '<div class="print-header"><div class="brand">🥕 VegMan Planner</div><h2>'+esc(ev.name||'Evento')+'</h2><div class="meta">'+fmtDate(ev.date)+' · Fatturato previsto '+fmtEuro(ev.revenue)+'</div></div>';
+
+  h += '<div class="card no-print"><div class="row between"><span class="muted">'+fmtDate(ev.date)+'</span><span class="badge accent">'+fmtEuro(ev.revenue)+' previsti</span></div></div>';
 
   if(plan.rows.length===0){
     h += '<div class="callout">Nessun prodotto nel menu di questo evento. <a onclick="App.editEvent(\''+ev.id+'\')" style="color:inherit;text-decoration:underline;cursor:pointer">Modifica evento</a> per aggiungerne.</div>';
@@ -986,11 +1024,15 @@ function viewCombinedPlan(){
     return h;
   }
   var sortedEvents = events.slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
-  h += '<div class="card"><div class="strong" style="margin-bottom:8px">Eventi inclusi</div>';
+  var totalRevenue = events.reduce(function(s,ev){ return s+(ev.revenue||0); },0);
+  h += '<div class="print-header"><div class="brand">🥕 VegMan Planner</div><h2>Lista combinata</h2><div class="meta">'+
+    sortedEvents.map(function(ev){ return esc(ev.name||'Evento')+' ('+fmtDate(ev.date)+')'; }).join(' + ')+
+    ' · Fatturato previsto totale '+fmtEuro(totalRevenue)+'</div></div>';
+
+  h += '<div class="card no-print"><div class="strong" style="margin-bottom:8px">Eventi inclusi</div>';
   sortedEvents.forEach(function(ev){
     h += '<div class="row between" style="padding:6px 0"><span>'+esc(ev.name||'Evento')+'</span><span class="faint">'+fmtDate(ev.date)+'</span></div>';
   });
-  var totalRevenue = events.reduce(function(s,ev){ return s+(ev.revenue||0); },0);
   h += '<div class="row between" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><span class="muted">Fatturato previsto totale</span><span class="badge accent">'+fmtEuro(totalRevenue)+'</span></div>';
   h += '</div>';
 
