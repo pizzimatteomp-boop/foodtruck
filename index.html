@@ -204,45 +204,52 @@ table.plan td.num{text-align:right;font-variant-numeric:tabular-nums}
 
 .print-header{display:none}
 @media print{
-  @page{ margin:14mm 12mm; }
+  @page{ size:A4; margin:9mm 10mm; }
   .header,.nav,.no-print,.pctbar,.callout{display:none!important}
-  body{display:block;height:auto;overflow:visible;background:#fff;color:#000;font-size:12.5px}
+  body{display:block;height:auto;overflow:visible;background:#fff;color:#000;font-size:9.5px;line-height:1.25}
   #app{overflow:visible;height:auto;max-width:none;padding:0}
   .print-header{
-    display:block;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #000;
+    display:block;margin-bottom:6px;padding-bottom:5px;border-bottom:1.5px solid #000;
     break-after:avoid;
   }
-  .print-header .brand{font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.02em}
-  .print-header h2{font-family:var(--display);font-weight:800;font-size:22px;margin:4px 0 2px 0}
-  .print-header .meta{font-size:12.5px;color:#333}
+  .print-header .brand{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.02em}
+  .print-header h2{font-family:var(--display);font-weight:800;font-size:15px;margin:1px 0 1px 0}
+  .print-header .meta{font-size:9.5px;color:#333}
   .section-title{
-    color:#000;font-size:12px;border-bottom:1.5px solid #000;padding-bottom:4px;
-    margin-top:18px;break-after:avoid;
+    font-family:var(--sans);color:#000;font-size:9.5px;border-bottom:1px solid #000;padding-bottom:2px;
+    margin:8px 0 3px 0;break-after:avoid;
   }
+  .section-title:first-of-type{margin-top:2px}
+  .row.between>.section-title{margin:8px 0 3px 0}
   .card{
-    box-shadow:none;border:1px solid #bbb;border-radius:4px;background:#fff;
-    padding:6px 10px;
+    box-shadow:none;border:1px solid #bbb;border-radius:3px;background:#fff;
+    padding:2px 8px;margin-bottom:5px;
   }
-  table.plan{break-inside:auto}
+  table.plan{break-inside:auto;font-size:9.5px}
   table.plan tr{break-inside:avoid}
+  table.plan th{color:#444;padding:0 6px 3px 6px}
+  table.plan td{color:#000;padding:3px 6px}
+  .check-list-columns{column-count:2;column-gap:16px}
   .check-item{
-    padding:7px 2px;border-bottom:1px solid #ddd;break-inside:avoid;
+    padding:2.5px 2px;border-bottom:1px solid #ddd;break-inside:avoid;
+    display:flex;align-items:center;gap:6px;
     -webkit-print-color-adjust:exact;print-color-adjust:exact;
   }
   .check-item input[type=checkbox]{
-    appearance:none;-webkit-appearance:none;width:14px;height:14px;
-    border:1.5px solid #000;border-radius:3px;background:#fff!important;
-    accent-color:#000;
+    appearance:none;-webkit-appearance:none;width:9px;height:9px;
+    border:1px solid #000;border-radius:2px;background:#fff!important;
+    accent-color:#000;flex-shrink:0;margin:0;
   }
   .check-item input[type=checkbox]:checked{background:#000!important}
-  .item-name{color:#000;font-size:13.5px}
-  .item-sub{color:#444}
+  .item-name{font-family:var(--sans);color:#000;font-size:9.5px;font-weight:700}
+  .item-sub{font-size:8.5px;color:#444}
   .check-item.done .item-name{color:#666}
-  .badge{border:1px solid #666;background:none!important;color:#000!important}
-  .strong{color:#000}
-  .faint[style*="text-transform:uppercase"]{color:#000!important;font-weight:800}
-  table.plan th{color:#444}
-  table.plan td{color:#000}
+  .badge{border:1px solid #666;background:none!important;color:#000!important;padding:1px 6px;font-size:8.5px}
+  .strong{font-family:var(--sans);color:#000;font-size:10px}
+  .faint[style*="text-transform:uppercase"]{color:#000!important;font-weight:700;font-size:8.5px!important;margin:4px 0 1px 0!important}
+  .load-groups{display:flex;gap:10px;align-items:flex-start}
+  .load-groups>div{flex:1;min-width:0;margin-bottom:0}
+  .btn-row{display:none}
 }
 </style>
 </head>
@@ -964,7 +971,7 @@ function viewEventDetail(){
 
   if(plan.preparations.length>0){
     h += '<div class="row between" style="margin-top:18px"><div class="section-title" style="margin:0">Preparazioni da fare</div><button class="btn small no-print" onclick="App.copyPreparations(\''+ev.id+'\')">📋 Copia</button></div>';
-    h += '<div class="card">';
+    h += '<div class="card check-list-columns">';
     plan.preparations.forEach(function(x){
       var checked = !!ev.prepChecked[x.product.id];
       var sub = fmtNum(x.total,2)+' '+esc(x.product.yieldUnit||'pz')+(x.yieldQty>1? ' · ≈ '+x.batches+' ricette da '+fmtNum(x.yieldQty,2)+' '+esc(x.product.yieldUnit||'pz') : '');
@@ -979,7 +986,7 @@ function viewEventDetail(){
     h += '<div class="callout info">Nessun ingrediente calcolato: aggiungi le ricette ai prodotti in menu.</div>';
   } else {
     var lastCat = null;
-    h += '<div class="card">';
+    h += '<div class="card check-list-columns">';
     plan.shopping.forEach(function(x,i){
       if(x.ing.category !== lastCat){
         if(i>0) {}
@@ -994,9 +1001,11 @@ function viewEventDetail(){
   }
 
   h += '<div class="row between" style="margin-top:18px"><div class="section-title" style="margin:0">Lista carico</div><button class="btn small no-print" onclick="App.copyLoading(\''+ev.id+'\')">📋 Copia</button></div>';
+  h += '<div class="load-groups">';
   h += renderLoadGroup('🚚 Food Truck','truck',plan.loading.truck,ev);
   h += renderLoadGroup('🚐 Furgone','van',plan.loading.van,ev);
   h += renderLoadGroup('📦 Comune / da assegnare','common',plan.loading.common,ev);
+  h += '</div>';
 
   h += '<div class="btn-row no-print"><button class="btn ghost" onclick="window.print()">🖨️ Stampa riepilogo</button></div>';
   return h;
@@ -1040,7 +1049,7 @@ function viewCombinedPlan(){
 
   if(plan.preparations.length>0){
     h += '<div class="row between" style="margin-top:18px"><div class="section-title" style="margin:0">Preparazioni da fare</div><button class="btn small no-print" onclick="App.copyCombinedPreparations()">📋 Copia</button></div>';
-    h += '<div class="card">';
+    h += '<div class="card check-list-columns">';
     plan.preparations.forEach(function(x){
       var sub = fmtNum(x.total,2)+' '+esc(x.product.yieldUnit||'pz')+(x.yieldQty>1? ' · ≈ '+x.batches+' ricette da '+fmtNum(x.yieldQty,2)+' '+esc(x.product.yieldUnit||'pz') : '');
       h += '<div class="check-item"><div class="grow"><div class="item-name">'+esc(x.product.name)+'</div><div class="item-sub">'+sub+'</div></div></div>';
@@ -1053,7 +1062,7 @@ function viewCombinedPlan(){
     h += '<div class="callout info">Nessun ingrediente calcolato.</div>';
   } else {
     var lastCat = null;
-    h += '<div class="card">';
+    h += '<div class="card check-list-columns">';
     plan.shopping.forEach(function(x,i){
       if(x.ing.category !== lastCat){
         h += '<div class="faint" style="margin:'+(i>0?'12':'0')+'px 0 4px 0;text-transform:uppercase;font-weight:700">'+esc(x.ing.category||'Altro')+'</div>';
@@ -1065,9 +1074,11 @@ function viewCombinedPlan(){
   }
 
   h += '<div class="row between" style="margin-top:18px"><div class="section-title" style="margin:0">Lista carico</div><button class="btn small no-print" onclick="App.copyCombinedLoading()">📋 Copia</button></div>';
+  h += '<div class="load-groups">';
   h += renderCombinedLoadGroup('🚚 Food Truck', plan.loading.truck);
   h += renderCombinedLoadGroup('🚐 Furgone', plan.loading.van);
   h += renderCombinedLoadGroup('📦 Comune / da assegnare', plan.loading.common);
+  h += '</div>';
 
   h += '<div class="callout info">Vista di sola lettura: somma gli eventi selezionati per darti una visione d\'insieme. Le spunte fatte/comprate/caricate restano sui singoli eventi.</div>';
   h += '<div class="btn-row no-print"><button class="btn ghost" onclick="window.print()">🖨️ Stampa riepilogo</button></div>';
