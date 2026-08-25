@@ -51,9 +51,14 @@ html,body{margin:0;height:100%}
 body{
   background:var(--bg);color:var(--ink);font-family:var(--sans);
   font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased;
-  padding-bottom:calc(var(--navh) + var(--safe-b) + 12px);
+  display:flex;flex-direction:column;
+  height:100vh;height:100dvh;
+  overflow:hidden;
 }
-#app{max-width:var(--maxw);margin:0 auto;padding:0 14px}
+#app{
+  flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  max-width:var(--maxw);width:100%;margin:0 auto;padding:0 14px;
+}
 h1,h2,h3,p{margin:0}
 button{font:inherit;cursor:pointer}
 input,select,textarea{font:inherit}
@@ -80,7 +85,7 @@ a{color:inherit}
 .iconbtn.primary{background:var(--accent);color:#fff}
 
 .nav{
-  position:fixed;left:0;right:0;bottom:0;z-index:30;
+  flex:0 0 auto;
   background:var(--surface);border-top:1px solid var(--line);
   padding-bottom:var(--safe-b);
 }
@@ -199,7 +204,8 @@ table.plan td.num{text-align:right;font-variant-numeric:tabular-nums}
 
 @media print{
   .header,.nav,.no-print{display:none!important}
-  body{padding-bottom:0;background:#fff}
+  body{display:block;height:auto;overflow:visible;background:#fff}
+  #app{overflow:visible;height:auto;max-width:none}
   .card{box-shadow:none;border:1px solid #ddd}
 }
 </style>
@@ -284,7 +290,8 @@ function nav(view, params){
   state.view = view;
   state.params = params||{};
   render();
-  window.scrollTo(0,0);
+  var appEl = document.getElementById('app');
+  if(appEl) appEl.scrollTop = 0;
 }
 
 /* ================= CALCULATION ================= */
