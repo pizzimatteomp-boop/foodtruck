@@ -1561,9 +1561,9 @@ function renderIngredientTypeFields(d){
 function viewFoodCostSection(){
   var h = '<div class="section-title">Food cost — fatture d\'acquisto</div>';
   h += '<div class="card">'+
-    '<p class="muted" style="margin-bottom:10px">Carica le fatture elettroniche XML dei fornitori: l\'app estrae le righe acquistate e calcola il prezzo medio ponderato di ogni articolo. Collegando poi gli ingredienti del magazzino a questi articoli ottieni il food cost dei prodotti, aggiornato ad ogni nuova fattura.</p>'+
-    '<button class="btn small" onclick="document.getElementById(\'invoice-file\').click()">📄 Carica fatture XML</button>'+
-    '<input type="file" id="invoice-file" accept=".xml" multiple style="display:none" onchange="App.importInvoices(this.files)">'+
+    '<p class="muted" style="margin-bottom:10px">Carica le fatture elettroniche dei fornitori (.xml oppure .xml.p7m firmate digitalmente): l\'app estrae le righe acquistate e calcola il prezzo medio ponderato di ogni articolo. Collegando poi gli ingredienti del magazzino a questi articoli ottieni il food cost dei prodotti, aggiornato ad ogni nuova fattura.</p>'+
+    '<button class="btn small" onclick="document.getElementById(\'invoice-file\').click()">📄 Carica fatture (.xml / .p7m)</button>'+
+    '<input type="file" id="invoice-file" accept=".xml,.p7m,application/xml" multiple style="display:none" onchange="App.importInvoices(this.files)">'+
     '</div>';
 
   var invoiceGroups = {};
@@ -1972,9 +1972,14 @@ window.App = {
     Promise.all(files.map(function(file){
       return new Promise(function(resolve){
         var reader = new FileReader();
-        reader.onload = function(){ resolve({name:file.name, text:reader.result}); };
+        reader.onload = function(){
+          var text;
+          try{ text = new TextDecoder('utf-8', {fatal:false}).decode(reader.result); }
+          catch(e){ text = null; }
+          resolve({name:file.name, text:text});
+        };
         reader.onerror = function(){ resolve({name:file.name, text:null}); };
-        reader.readAsText(file);
+        reader.readAsArrayBuffer(file);
       });
     })).then(function(results){
       var knownDescToArticle = {};
@@ -1983,7 +1988,9 @@ window.App = {
       var totalLines=0, okFiles=0, errFiles=[];
       results.forEach(function(r){
         if(!r.text){ errFiles.push(r.name+' (lettura fallita)'); return; }
-        var res = parseFatturaXML(r.text, r.name);
+        var xmlText = resolveInvoiceXmlText(r.text, r.name);
+        if(!xmlText){ errFiles.push(r.name+': impossibile estrarre l\'XML (file firmato .p7m non riconosciuto)'); return; }
+        var res = parseFatturaXML(xmlText, r.name);
         if(!res.ok){ errFiles.push(r.name+': '+res.error); return; }
         var invoiceId = uid();
         res.lines.forEach(function(line){
@@ -2088,6 +2095,45 @@ function xmlAll(root, localName){
 function xmlOne(root, localName){ return xmlAll(root, localName)[0]||null; }
 function xmlText(root, localName){ var el=xmlOne(root, localName); return el ? el.textContent.trim() : ''; }
 function xmlNum(root, localName){ var t=xmlText(root, localName); var n=parseFloat(t.replace(',','.')); return isNaN(n)?null:n; }
+
+// Fatture firmate digitalmente arrivano come .p7m: una busta binaria CAdES (CMS/PKCS#7) che
+// racchiude l'XML. Non serve verificare la firma per leggere i dati — basta ritagliare l'XML
+// dalla busta. Decodificando l'intero file come UTF-8 "permissivo", il testo XML incapsulato
+// (che è a sua volta UTF-8 valido) rimane intatto e leggibile in mezzo al binario circostante
+// (che invece diventa una sequenza di caratteri U+FFFD, innocua per la ricerca dei tag).
+// Alcuni firmatari codificano il contenuto della busta CMS come OCTET STRING "costruito" a
+// blocchi anziché come blocco unico: ad ogni giunzione tra un blocco e l'altro (di solito ogni
+// ~1000 byte) restano alcuni byte dell'intestazione DER del blocco successivo incollati in
+// mezzo al testo XML — pochi byte binari isolati, non validi come carattere XML. Vanno tolti,
+// altrimenti l'XML risulta malformato pur essendo per il resto perfettamente leggibile.
+function stripInvalidXmlChars(s){
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F�]/g, '');
+}
+
+function extractXmlFromP7M(rawText){
+  var start = rawText.indexOf('<?xml');
+  if(start<0) start = rawText.search(/<([\w.-]+:)?FatturaElettronica[\s>]/);
+  if(start<0) return null;
+  var head = rawText.slice(start, start+2000);
+  var tagMatch = head.match(/<\?xml[^>]*\?>\s*<([\w.-]+:)?([\w.-]+)/) || head.match(/<([\w.-]+:)?([\w.-]+)/);
+  if(!tagMatch) return null;
+  var closeTag = '</'+(tagMatch[1]||'')+tagMatch[2]+'>';
+  var closeIdx = rawText.indexOf(closeTag, start);
+  if(closeIdx<0) return null;
+  return stripInvalidXmlChars(rawText.slice(start, closeIdx+closeTag.length));
+}
+
+// Un file .xml è già testo pulito; un .p7m (o un .xml.p7m) va prima "sbustato". Come fallback
+// difensivo, se un file .xml per qualche motivo non sembra XML valido si tenta comunque
+// l'estrazione, nel caso l'estensione sia fuorviante.
+function resolveInvoiceXmlText(rawText, filename){
+  var head = rawText.slice(0,200).replace(/^﻿/, '').replace(/^\s+/, '');
+  var looksLikeXml = /^<(\?xml|[\w.-]+:?FatturaElettronica)/.test(head);
+  var isP7m = /\.p7m$/i.test(filename||'');
+  if(looksLikeXml && !isP7m) return stripInvalidXmlChars(rawText);
+  var extracted = extractXmlFromP7M(rawText);
+  return extracted || (looksLikeXml ? stripInvalidXmlChars(rawText) : null);
+}
 
 // Parses one Fattura Elettronica XML (SDI standard) into raw purchase lines.
 // Credit notes (TD04/TD08) are skipped — v1 only imports purchase invoices.
