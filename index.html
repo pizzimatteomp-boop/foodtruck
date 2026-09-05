@@ -901,6 +901,21 @@ function exportTables(ss, db) {
     ['Evento','Data','Ingrediente','Categoria','Quantità','Unità','Confezioni'], shopRows);
   writeTable(getOrCreateSheet(ss,'Eventi_Preparazioni'),
     ['Evento','Data','Semilavorato','Quantità','Unità','N. ricette'], prepRows);
+
+  var orderArticles = (db.orderArticles || []).slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  var orderArtRows = orderArticles.map(function(a){ return [a.id, a.name||'', a.price||0]; });
+  writeTable(getOrCreateSheet(ss,'Comande_Articoli'), ['ID','Nome','Prezzo'], orderArtRows);
+
+  var salesHistory = (db.salesHistory || []).slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  var saleRows = [];
+  salesHistory.forEach(function(s){
+    (s.items || []).forEach(function(it){
+      saleRows.push([(s.date||'').slice(0,10), (s.date||'').slice(11,16), s.customerName||'',
+        it.name||'', it.qty||0, it.price||0, round2((it.price||0)*(it.qty||0))]);
+    });
+  });
+  writeTable(getOrCreateSheet(ss,'Comande_Vendite'),
+    ['Data','Ora','Cliente','Articolo','Quantità','Prezzo unitario','Totale riga'], saleRows);
 }
 
 /* Motore di calcolo — stessa identica logica usata nell'app (stima vendite,
