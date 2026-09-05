@@ -191,6 +191,22 @@ table.plan td.num{text-align:right;font-variant-numeric:tabular-nums}
 .recipe-row .unit{width:38px;font-size:12px;color:var(--ink-soft);text-align:center;flex-shrink:0}
 .recipe-row .rm{width:34px;height:34px;flex-shrink:0;border:none;background:var(--neg-soft);color:var(--neg);border-radius:9px;font-size:16px}
 
+.article-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.article-chip{
+  background:var(--surface);border:1.5px solid var(--line);border-radius:12px;
+  padding:10px 14px;box-shadow:var(--shadow);text-align:left;flex:1 1 auto;min-width:110px;
+}
+.article-chip:active{transform:scale(.96)}
+.article-chip .name{font-family:var(--display);font-weight:700;font-size:14px}
+.article-chip .price{font-size:12px;color:var(--ink-soft);margin-top:2px}
+
+.cart-row{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line)}
+.cart-row:last-child{border-bottom:none}
+.qty-stepper{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.qty-stepper button{width:28px;height:28px;border-radius:8px;border:none;background:var(--surface-2);font-weight:800;font-size:15px}
+.qty-stepper span{min-width:20px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.cart-row .rm{width:30px;height:30px;flex-shrink:0;border:none;background:var(--neg-soft);color:var(--neg);border-radius:9px;font-size:15px}
+
 .grid-toggle{display:flex;background:var(--surface-2);border-radius:12px;padding:3px;gap:3px}
 .grid-toggle button{flex:1;border:none;background:none;padding:9px 6px;border-radius:9px;font-size:13px;font-weight:700;color:var(--ink-soft)}
 .grid-toggle button.active{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
@@ -203,6 +219,7 @@ table.plan td.num{text-align:right;font-variant-numeric:tabular-nums}
 .pctbar .fill.over{background:var(--neg)}
 
 .print-header{display:none}
+.print-only{display:none}
 @media print{
   @page{ size:A4; margin:9mm 10mm; }
   .header,.nav,.no-print,.pctbar,.callout{display:none!important}
@@ -215,6 +232,7 @@ table.plan td.num{text-align:right;font-variant-numeric:tabular-nums}
   .print-header .brand{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.02em}
   .print-header h2{font-family:var(--display);font-weight:800;font-size:15px;margin:1px 0 1px 0}
   .print-header .meta{font-size:9.5px;color:#333}
+  .print-only{display:block}
   .section-title{
     font-family:var(--sans);color:#000;font-size:9.5px;border-bottom:1px solid #000;padding-bottom:2px;
     margin:8px 0 3px 0;break-after:avoid;
@@ -261,6 +279,7 @@ table.plan td.num{text-align:right;font-variant-numeric:tabular-nums}
     <button class="nav-btn" data-nav="events" onclick="App.goTab('events')"><span class="ic">📅</span>Eventi</button>
     <button class="nav-btn" data-nav="products" onclick="App.goTab('products')"><span class="ic">🥕</span>Prodotti</button>
     <button class="nav-btn" data-nav="ingredients" onclick="App.goTab('ingredients')"><span class="ic">📦</span>Magazzino</button>
+    <button class="nav-btn" data-nav="orders" onclick="App.goTab('orders')"><span class="ic">🧾</span>Comande</button>
     <button class="nav-btn" data-nav="settings" onclick="App.goTab('settings')"><span class="ic">⚙️</span>Impostazioni</button>
   </div>
 </nav>
@@ -277,7 +296,7 @@ function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){ mem[k]=v; } }
 
 function uid(){ return 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2,9); }
 
-function defaultDB(){ return { ingredients: [], products: [], events: [], purchases: [], priceArticles: [] }; }
+function defaultDB(){ return { ingredients: [], products: [], events: [], purchases: [], priceArticles: [], orderArticles: [] }; }
 
 function loadDB(){
   var raw = lsGet(KEY);
@@ -289,6 +308,7 @@ function loadDB(){
     if(!d.events) d.events=[];
     if(!d.purchases) d.purchases=[];
     if(!d.priceArticles) d.priceArticles=[];
+    if(!d.orderArticles) d.orderArticles=[];
     return d;
   }catch(e){ return defaultDB(); }
 }
@@ -329,7 +349,7 @@ function catList(arr){
 }
 
 /* ---------------- state ---------------- */
-var state = { view:'events', params:{}, draftIngredient:null, draftProduct:null, draftEvent:null, eventSelectMode:false, selectedEventIds:[], selectedUnmatched:[], bulkTargetArticleId:null };
+var state = { view:'events', params:{}, draftIngredient:null, draftProduct:null, draftEvent:null, eventSelectMode:false, selectedEventIds:[], selectedUnmatched:[], bulkTargetArticleId:null, draftOrderArticle:null, currentOrder:{items:[], customerName:''} };
 
 function nav(view, params){
   state.view = view;
@@ -1022,6 +1042,158 @@ function costSummaryGAS(rows, revenue, ingredients, products, purchases) {
 }
 `;
 
+/* ================= STAMPA BLUETOOTH (COMANDE) ================= */
+// Molte mini-stampanti termiche economiche espongono la stampa su un servizio BLE
+// generico (non su un profilo standard): l'elenco qui sotto raccoglie gli UUID di
+// servizio più diffusi tra i cloni in commercio. Il Web Bluetooth API richiede che un
+// servizio sia elencato in anticipo (in optionalServices) per poterlo poi leggere: non
+// è possibile "scoprire" un servizio arbitrario su un dispositivo sconosciuto.
+var BT_SERVICE_UUIDS = [
+  '000018f0-0000-1000-8000-00805f9b34fb',
+  '0000ff00-0000-1000-8000-00805f9b34fb',
+  '0000ffe0-0000-1000-8000-00805f9b34fb',
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+  '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
+];
+var BT_DEVICEID_KEY = 'ftplanner_btprinter_id';
+var btDevice = null, btChar = null;
+
+function requestPrinterDevice(){
+  return navigator.bluetooth.requestDevice({ acceptAllDevices:true, optionalServices:BT_SERVICE_UUIDS });
+}
+
+// Cerca, tra tutti i servizi concessi dall'utente, la prima caratteristica scrivibile:
+// non sappiamo a priori quale servizio/caratteristica usi il modello di stampante collegato.
+function findWritableChar(server){
+  return server.getPrimaryServices().then(function(services){
+    var chain = Promise.resolve(null);
+    services.forEach(function(svc){
+      chain = chain.then(function(found){
+        if(found) return found;
+        return svc.getCharacteristics().then(function(chars){
+          return chars.find(function(c){ return c.properties.write || c.properties.writeWithoutResponse; }) || null;
+        }).catch(function(){ return null; });
+      });
+    });
+    return chain;
+  }).then(function(found){
+    if(!found) throw new Error('Nessuna caratteristica scrivibile trovata su questo dispositivo.');
+    return found;
+  });
+}
+
+function connectPrinter(forceNew){
+  if(!navigator.bluetooth){
+    return Promise.reject(new Error('Bluetooth non supportato da questo browser. Usa Chrome o Edge su Android o su desktop, con il Bluetooth attivo.'));
+  }
+  if(!forceNew && btDevice && btDevice.gatt && btDevice.gatt.connected && btChar) return Promise.resolve(btChar);
+
+  function afterDevice(device){
+    btDevice = device;
+    lsSet(BT_DEVICEID_KEY, device.id);
+    device.addEventListener('gattserverdisconnected', function(){ btChar=null; });
+    return device.gatt.connect().then(findWritableChar).then(function(ch){ btChar=ch; render(); return ch; });
+  }
+
+  // navigator.bluetooth.getDevices() permette di riconnettersi a un dispositivo già
+  // autorizzato in passato senza mostrare di nuovo il popup di scelta (se il browser lo
+  // supporta); altrimenti si richiede sempre una nuova selezione.
+  if(!forceNew && navigator.bluetooth.getDevices){
+    var savedId = lsGet(BT_DEVICEID_KEY);
+    if(savedId){
+      return navigator.bluetooth.getDevices().then(function(devices){
+        var d = devices.find(function(x){ return x.id===savedId; });
+        return afterDevice(d || null);
+      }).catch(function(){ return null; }).then(function(res){
+        if(res) return res;
+        return requestPrinterDevice().then(afterDevice);
+      });
+    }
+  }
+  return requestPrinterDevice().then(afterDevice);
+}
+
+function forgetPrinter(){
+  if(btDevice && btDevice.gatt && btDevice.gatt.connected){ try{ btDevice.gatt.disconnect(); }catch(e){} }
+  btDevice = null; btChar = null;
+  try{ localStorage.removeItem(BT_DEVICEID_KEY); }catch(e){}
+}
+
+function writeChunk(characteristic, chunk){
+  if(characteristic.properties.writeWithoutResponse && !characteristic.properties.write){
+    return characteristic.writeValueWithoutResponse(chunk);
+  }
+  return characteristic.writeValue(chunk);
+}
+
+function writeInChunks(characteristic, bytes){
+  var CHUNK = 180; // dimensione prudente: molti moduli BLE negoziano un MTU ridotto
+  var i = 0;
+  function next(){
+    if(i>=bytes.length) return Promise.resolve();
+    var slice = bytes.slice(i, i+CHUNK);
+    i += CHUNK;
+    return writeChunk(characteristic, slice).then(next);
+  }
+  return next();
+}
+
+// Molte stampanti ESC/POS economiche non gestiscono in modo affidabile l'UTF-8 e le
+// tabelle codici accentate: si rimuovono i diacritici (è→e) per garantire un testo
+// sempre leggibile, indipendentemente dalla tabella codici della stampante collegata.
+function stripDiacritics(s){
+  return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function textBytes(s){ return Array.prototype.slice.call(new TextEncoder().encode(stripDiacritics(s))); }
+
+function buildOrderTicketBytes(order, articles){
+  var ESC=0x1B, GS=0x1D;
+  var out = [];
+  function push(){ for(var i=0;i<arguments.length;i++) out.push(arguments[i]); }
+  function line(s){ out = out.concat(textBytes(s)); push(0x0A); }
+  var LINE = '--------------------------------'; // 32 caratteri: larghezza sicura per carta da 58mm
+
+  push(ESC,0x40); // reset stampante
+  push(ESC,0x61,1); // centrato
+  push(GS,0x21,0x11); // doppia altezza+larghezza
+  line('COMANDA');
+  push(GS,0x21,0x00); // dimensione normale
+  var now = new Date();
+  line(now.toLocaleDateString('it-IT')+' '+now.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}));
+  push(ESC,0x61,0); // allineato a sinistra
+  line(LINE);
+  push(ESC,0x45,1); // grassetto on
+  line('Cliente: '+(order.customerName||'—'));
+  push(ESC,0x45,0); // grassetto off
+  line(LINE);
+
+  var hasPrice = order.items.some(function(it){ var a=byId(articles,it.articleId); return a && a.price>0; });
+  var total = 0;
+  order.items.forEach(function(it){
+    var a = byId(articles, it.articleId);
+    if(!a) return;
+    var left = it.qty+'x '+a.name;
+    if(hasPrice){
+      var sub = (a.price||0)*it.qty;
+      total += sub;
+      var right = fmtEuro(sub);
+      var pad = Math.max(1, 32-left.length-right.length);
+      line(left+new Array(pad+1).join(' ')+right);
+    } else {
+      line(left);
+    }
+  });
+  line(LINE);
+  if(hasPrice){
+    push(ESC,0x45,1);
+    line('Totale: '+fmtEuro(total));
+    push(ESC,0x45,0);
+  }
+  push(0x0A,0x0A,0x0A,0x0A);
+  push(GS,0x56,0x01); // taglio parziale carta (ignorato dalle stampanti senza taglierina)
+  return new Uint8Array(out);
+}
+
 /* ================= RENDER SHELL ================= */
 var BRANDMARK_SVG = '<div class="brandmark"><svg viewBox="0 0 100 100"><path fill="#fff" fill-rule="evenodd" d="M30,28 L70,28 L60,74 L40,74 Z M43,27 C42,38 44,52 50,64 C56,52 58,38 57,27 Z"/><ellipse cx="50" cy="18" rx="8" ry="10" fill="#fff"/><ellipse cx="40" cy="23" rx="6.5" ry="8" fill="#fff"/><ellipse cx="60" cy="23" rx="6.5" ry="8" fill="#fff"/></svg></div>';
 
@@ -1046,6 +1218,9 @@ function render(){
     case 'productForm': html = viewProductForm(); break;
     case 'ingredients': html = viewIngredientsList(); break;
     case 'ingredientForm': html = viewIngredientForm(); break;
+    case 'orders': html = viewOrderBuilder(); break;
+    case 'orderArticles': html = viewOrderArticlesList(); break;
+    case 'orderArticleForm': html = viewOrderArticleForm(); break;
     case 'settings': html = viewSettings(); break;
     default: html = viewEventsList();
   }
@@ -1055,6 +1230,7 @@ function render(){
     var active = (tab==='events' && ['events','eventForm','eventDetail','combinedPlan'].includes(state.view)) ||
                  (tab==='products' && ['products','productForm'].includes(state.view)) ||
                  (tab==='ingredients' && ['ingredients','ingredientForm'].includes(state.view)) ||
+                 (tab==='orders' && ['orders','orderArticles','orderArticleForm'].includes(state.view)) ||
                  (tab==='settings' && state.view==='settings');
     b.classList.toggle('active', !!active);
   });
@@ -1658,6 +1834,127 @@ function viewFoodCostSection(){
   return h;
 }
 
+/* ================= COMANDE (ORDINI DA STAMPARE) ================= */
+function viewOrderArticleChips(){
+  var arts = (db.orderArticles||[]).slice().sort(byName);
+  if(!arts.length) return '';
+  var h = '<div class="section-title no-print">Articoli <span class="faint" style="text-transform:none;font-weight:600">(tocca per aggiungere)</span></div>';
+  h += '<div class="article-grid no-print">';
+  arts.forEach(function(a){
+    h += '<button type="button" class="article-chip tap" onclick="App.addOrderItem(\''+a.id+'\')">'+
+      '<div class="name">'+esc(a.name)+'</div>'+
+      (a.price>0 ? '<div class="price">'+fmtEuro(a.price)+'</div>' : '')+
+      '</button>';
+  });
+  h += '</div>';
+  return h;
+}
+
+function viewOrderBuilder(){
+  var h = header('Comande', { actionIcon:'⚙️', actionFn:'App.goOrderArticles()' });
+  var order = state.currentOrder;
+  var arts = db.orderArticles||[];
+
+  if(arts.length===0){
+    h += '<div class="empty"><span class="emoji">🧾</span>'+
+      '<p>Nessun articolo inserito.<br>Aggiungi i piatti o prodotti che vuoi poter selezionare per comporre le comande.</p>'+
+      '<button class="btn primary" onclick="App.newOrderArticle()">+ Aggiungi articolo</button></div>';
+    return h;
+  }
+
+  h += viewOrderArticleChips();
+
+  h += '<div class="section-title no-print">Comanda in corso</div>';
+  h += '<div class="card no-print">';
+  if(order.items.length===0){
+    h += '<div class="muted" style="padding:8px 2px">Tocca un articolo qui sopra per aggiungerlo alla comanda.</div>';
+  } else {
+    order.items.forEach(function(it){
+      var a = byId(arts, it.articleId);
+      if(!a) return;
+      h += '<div class="cart-row">'+
+        '<div class="grow"><div class="item-name">'+esc(a.name)+'</div>'+(a.price>0?'<div class="item-sub">'+fmtEuro(a.price)+' cad.</div>':'')+'</div>'+
+        '<div class="qty-stepper">'+
+          '<button type="button" onclick="App.decOrderItem(\''+a.id+'\')">−</button>'+
+          '<span>'+it.qty+'</span>'+
+          '<button type="button" onclick="App.addOrderItem(\''+a.id+'\')">+</button>'+
+        '</div>'+
+        '<button type="button" class="rm" onclick="App.removeOrderItem(\''+a.id+'\')">✕</button>'+
+        '</div>';
+    });
+  }
+  h += '</div>';
+
+  h += '<div class="field no-print"><label>Nome cliente</label><input type="text" id="f-customer" value="'+esc(order.customerName)+'" placeholder="Es. Marco" oninput="App.setCustomerName(this.value)"></div>';
+
+  h += '<div class="row between no-print" style="margin:4px 2px 10px 2px"><span class="faint">🖨️ '+
+    (btChar ? 'Stampante collegata'+(btDevice&&btDevice.name?' · '+esc(btDevice.name):'') : 'Nessuna stampante collegata')+
+    '</span>'+
+    (btChar ? '<a onclick="App.forgetPrinter()" style="font-size:12px;color:var(--ink-soft);text-decoration:underline;cursor:pointer">scollega</a>' : '')+
+    '</div>';
+
+  h += '<div class="btn-row no-print">';
+  h += '<button class="btn ghost" onclick="App.clearOrder()">🗑️ Svuota</button>';
+  h += '<button class="btn primary" onclick="App.printOrderBluetooth()">🖨️ Stampa</button>';
+  h += '</div>';
+  h += '<div class="btn-row no-print"><button class="btn ghost small" style="width:100%" onclick="App.printOrderSystem()">Stampa di sistema (se il Bluetooth non funziona)</button></div>';
+  h += '<div class="faint no-print" style="padding:0 2px 10px 2px">"Stampa" collega direttamente una stampante termica Bluetooth Low Energy (Chrome/Edge). Se la tua stampante usa Bluetooth "classico" (SPP) il browser non riesce a collegarsi: usa "Stampa di sistema" con una stampante già configurata sul dispositivo.</div>';
+
+  if(order.items.length){
+    var arts2 = arts;
+    var hasPrice = order.items.some(function(it){ var a=byId(arts2,it.articleId); return a && a.price>0; });
+    var total = 0;
+    h += '<div class="print-header print-only"><div class="brand">🧾 Comanda</div>'+
+      '<h2>Cliente: '+esc(order.customerName||'—')+'</h2>'+
+      '<div class="meta">'+new Date().toLocaleString('it-IT')+'</div></div>';
+    h += '<div class="card print-only">';
+    order.items.forEach(function(it){
+      var a = byId(arts2, it.articleId);
+      if(!a) return;
+      var sub = (a.price||0)*it.qty; total += sub;
+      h += '<div class="check-item"><div class="grow"><div class="item-name">'+it.qty+'x '+esc(a.name)+'</div></div>'+
+        (hasPrice ? '<div class="strong">'+fmtEuro(sub)+'</div>' : '')+'</div>';
+    });
+    if(hasPrice){
+      h += '<div class="row between" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><span class="muted">Totale</span><span class="strong">'+fmtEuro(total)+'</span></div>';
+    }
+    h += '</div>';
+  }
+
+  return h;
+}
+
+function viewOrderArticlesList(){
+  var h = header('Articoli comanda', { back:'App.goTab(\'orders\')', actionIcon:'+', actionPrimary:true, actionFn:'App.newOrderArticle()' });
+  var arts = (db.orderArticles||[]).slice().sort(byName);
+  if(arts.length===0){
+    h += '<div class="empty"><span class="emoji">🧾</span>'+
+      '<p>Nessun articolo.<br>Aggiungi i piatti o prodotti che vuoi selezionare velocemente per comporre le comande.</p>'+
+      '<button class="btn primary" onclick="App.newOrderArticle()">+ Nuovo articolo</button></div>';
+    return h;
+  }
+  arts.forEach(function(a){
+    h += '<div class="card tap" onclick="App.openOrderArticle(\''+a.id+'\')">'+
+      '<div class="row between"><span class="strong">'+esc(a.name)+'</span>'+(a.price>0?'<span class="badge accent">'+fmtEuro(a.price)+'</span>':'')+'</div>'+
+      '</div>';
+  });
+  return h;
+}
+
+function viewOrderArticleForm(){
+  var isEdit = !!state.params.id;
+  var d = state.draftOrderArticle;
+  var h = header(isEdit?'Modifica articolo':'Nuovo articolo', { back:'App.cancelOrderArticleForm()' });
+  h += '<div class="field"><label>Nome articolo</label><input type="text" id="f-name" value="'+esc(d.name)+'" placeholder="Es. Panino Burger" oninput="App.setOrderArticleField(\'name\',this.value)"></div>';
+  h += '<div class="field"><label>Prezzo (opzionale)</label><input type="number" min="0" step="0.10" value="'+(d.price||'')+'" placeholder="0.00" oninput="App.setOrderArticleField(\'price\',parseFloat(this.value)||0)"></div>';
+  h += '<div class="field hint" style="margin-top:-8px">Se lasci il prezzo a zero, sulla comanda non verranno stampati prezzi né totale.</div>';
+  h += '<div class="btn-row">';
+  if(isEdit) h += '<button class="btn danger" onclick="App.deleteOrderArticle(\''+d.id+'\')">Elimina</button>';
+  h += '<button class="btn primary" onclick="App.saveOrderArticle(\''+d.id+'\')">Salva articolo</button>';
+  h += '</div>';
+  return h;
+}
+
 /* ================= SETTINGS ================= */
 function viewSettings(){
   var h = header('Impostazioni');
@@ -1952,6 +2249,72 @@ window.App = {
     db.ingredients = db.ingredients.filter(function(i){return i.id!==id;});
     db.products.forEach(function(p){ p.recipe = (p.recipe||[]).filter(function(r){ return !((r.refType||'ingredient')==='ingredient' && (r.refId!=null?r.refId:r.ingredientId)===id); }); });
     saveDB(); state.draftIngredient=null; nav('ingredients');
+  },
+
+  /* comande */
+  addOrderItem: function(articleId){
+    var order = state.currentOrder;
+    var row = order.items.find(function(it){ return it.articleId===articleId; });
+    if(row) row.qty++; else order.items.push({articleId:articleId, qty:1});
+    render();
+  },
+  decOrderItem: function(articleId){
+    var order = state.currentOrder;
+    var row = order.items.find(function(it){ return it.articleId===articleId; });
+    if(!row) return;
+    row.qty--;
+    if(row.qty<=0) order.items = order.items.filter(function(it){ return it.articleId!==articleId; });
+    render();
+  },
+  removeOrderItem: function(articleId){
+    state.currentOrder.items = state.currentOrder.items.filter(function(it){ return it.articleId!==articleId; });
+    render();
+  },
+  setCustomerName: function(val){ state.currentOrder.customerName = val; },
+  clearOrder: function(){ state.currentOrder = {items:[], customerName:''}; render(); },
+  goOrderArticles: function(){ nav('orderArticles', {}); },
+  newOrderArticle: function(){ state.draftOrderArticle = {id:uid(), name:'', price:0}; nav('orderArticleForm', {}); },
+  openOrderArticle: function(id){ state.draftOrderArticle = Object.assign({}, byId(db.orderArticles, id)); nav('orderArticleForm', {id:id}); },
+  cancelOrderArticleForm: function(){ state.draftOrderArticle=null; nav('orderArticles'); },
+  setOrderArticleField: function(field, val){ state.draftOrderArticle[field]=val; },
+  saveOrderArticle: function(id){
+    var d = state.draftOrderArticle;
+    if(!d.name || !d.name.trim()){ alert('Inserisci un nome per l\'articolo.'); return; }
+    var a = byId(db.orderArticles, id);
+    if(!a){ a={id:id}; db.orderArticles.push(a); }
+    a.name = d.name.trim(); a.price = d.price||0;
+    saveDB(); state.draftOrderArticle=null;
+    nav('orderArticles');
+  },
+  deleteOrderArticle: function(id){
+    if(!confirm('Eliminare questo articolo?')) return;
+    db.orderArticles = db.orderArticles.filter(function(a){ return a.id!==id; });
+    state.currentOrder.items = state.currentOrder.items.filter(function(it){ return it.articleId!==id; });
+    saveDB(); state.draftOrderArticle=null; nav('orderArticles');
+  },
+  forgetPrinter: function(){ forgetPrinter(); render(); },
+  printOrderBluetooth: function(){
+    var order = state.currentOrder;
+    if(!order.items.length){ toast('Aggiungi almeno un articolo alla comanda'); return; }
+    if(!order.customerName || !order.customerName.trim()){ alert('Inserisci il nome del cliente prima di stampare.'); return; }
+    toast('Connessione alla stampante…');
+    connectPrinter().then(function(ch){
+      var bytes = buildOrderTicketBytes(order, db.orderArticles);
+      return writeInChunks(ch, bytes);
+    }).then(function(){
+      toast('Comanda inviata alla stampante ✓');
+      App.clearOrder();
+    }).catch(function(err){
+      console.error(err);
+      var msg = err && err.message ? err.message : String(err);
+      alert('Stampa Bluetooth non riuscita: '+msg+'\n\nSe la tua stampante usa Bluetooth "classico" (SPP) e non Bluetooth Low Energy, il browser non può collegarcisi direttamente: prova "Stampa di sistema" qui sotto, con la stampante già configurata sul dispositivo.');
+    });
+  },
+  printOrderSystem: function(){
+    var order = state.currentOrder;
+    if(!order.items.length){ toast('Aggiungi almeno un articolo alla comanda'); return; }
+    render(); // sincronizza lo scontrino stampabile con l'ultimo nome cliente digitato
+    window.print();
   },
 
   /* sync */
@@ -2254,6 +2617,7 @@ nav = function(view, params){
   if(view!=='ingredientForm') state.draftIngredient=null;
   if(view!=='productForm') state.draftProduct=null;
   if(view!=='eventForm') state.draftEvent=null;
+  if(view!=='orderArticleForm') state.draftOrderArticle=null;
   _origNav(view, params);
 };
 
