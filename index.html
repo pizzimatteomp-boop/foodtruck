@@ -298,7 +298,7 @@ function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){ mem[k]=v; } }
 
 function uid(){ return 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2,9); }
 
-function defaultDB(){ return { ingredients: [], products: [], events: [], purchases: [], priceArticles: [], orderArticles: [] }; }
+function defaultDB(){ return { ingredients: [], products: [], events: [], purchases: [], priceArticles: [], orderArticles: [], salesHistory: [] }; }
 
 function loadDB(){
   var raw = lsGet(KEY);
@@ -311,6 +311,7 @@ function loadDB(){
     if(!d.purchases) d.purchases=[];
     if(!d.priceArticles) d.priceArticles=[];
     if(!d.orderArticles) d.orderArticles=[];
+    if(!d.salesHistory) d.salesHistory=[];
     return d;
   }catch(e){ return defaultDB(); }
 }
@@ -1157,9 +1158,6 @@ function buildOrderTicketBytes(order, articles){
 
   push(ESC,0x40); // reset stampante
   push(ESC,0x61,1); // centrato
-  push(GS,0x21,0x11); // doppia altezza+larghezza
-  line('COMANDA');
-  push(GS,0x21,0x00); // dimensione normale
   var now = new Date();
   line(now.toLocaleDateString('it-IT')+' '+now.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}));
   push(ESC,0x61,0); // allineato a sinistra
@@ -1182,16 +1180,29 @@ function buildOrderTicketBytes(order, articles){
   return new Uint8Array(out);
 }
 
+// Registra una comanda stampata con successo nello storico vendite, per le statistiche.
+// Nome e prezzo dell'articolo vengono "fotografati" al momento della vendita: se in futuro
+// l'articolo viene rinominato o eliminato, lo storico resta corretto così com'era allora.
+function recordSale(order){
+  var items = order.items.map(function(it){
+    var a = byId(db.orderArticles, it.articleId);
+    return { articleId: it.articleId, name: a ? a.name : '(articolo eliminato)', price: a ? (a.price||0) : 0, qty: it.qty };
+  });
+  db.salesHistory.push({ id:uid(), date:new Date().toISOString(), customerName:order.customerName||'', items:items });
+  saveDB();
+}
+
 /* ================= RENDER SHELL ================= */
 var BRANDMARK_SVG = '<div class="brandmark"><svg viewBox="0 0 100 100"><path fill="#fff" fill-rule="evenodd" d="M30,28 L70,28 L60,74 L40,74 Z M43,27 C42,38 44,52 50,64 C56,52 58,38 57,27 Z"/><ellipse cx="50" cy="18" rx="8" ry="10" fill="#fff"/><ellipse cx="40" cy="23" rx="6.5" ry="8" fill="#fff"/><ellipse cx="60" cy="23" rx="6.5" ry="8" fill="#fff"/></svg></div>';
 
 function header(title, opts){
   opts = opts||{};
   var back = opts.back ? '<button class="iconbtn" onclick="'+opts.back+'">‹</button>' : BRANDMARK_SVG;
-  var action = opts.actionIcon ? '<button class="iconbtn '+(opts.actionPrimary?'primary':'')+'" onclick="'+opts.actionFn+'">'+opts.actionIcon+'</button>' : '<div style="width:38px"></div>';
+  var action2 = opts.actionIcon2 ? '<button class="iconbtn" onclick="'+opts.actionFn2+'">'+opts.actionIcon2+'</button>' : '';
+  var action = opts.actionIcon ? '<button class="iconbtn '+(opts.actionPrimary?'primary':'')+'" onclick="'+opts.actionFn+'">'+opts.actionIcon+'</button>' : (action2 ? '' : '<div style="width:38px"></div>');
   return '<div class="header no-print"><div class="header-inner">'+
     back +
-    '<h1>'+esc(title)+'</h1>' + action +
+    '<h1>'+esc(title)+'</h1>' + action2 + action +
     '</div></div>';
 }
 
@@ -1209,6 +1220,7 @@ function render(){
     case 'orders': html = viewOrderBuilder(); break;
     case 'orderArticles': html = viewOrderArticlesList(); break;
     case 'orderArticleForm': html = viewOrderArticleForm(); break;
+    case 'orderStats': html = viewOrderStats(); break;
     case 'settings': html = viewSettings(); break;
     default: html = viewEventsList();
   }
@@ -1218,7 +1230,7 @@ function render(){
     var active = (tab==='events' && ['events','eventForm','eventDetail','combinedPlan'].includes(state.view)) ||
                  (tab==='products' && ['products','productForm'].includes(state.view)) ||
                  (tab==='ingredients' && ['ingredients','ingredientForm'].includes(state.view)) ||
-                 (tab==='orders' && ['orders','orderArticles','orderArticleForm'].includes(state.view)) ||
+                 (tab==='orders' && ['orders','orderArticles','orderArticleForm','orderStats'].includes(state.view)) ||
                  (tab==='settings' && state.view==='settings');
     b.classList.toggle('active', !!active);
   });
@@ -1839,7 +1851,7 @@ function viewOrderArticleChips(){
 }
 
 function viewOrderBuilder(){
-  var h = header('Comande', { actionIcon:'⚙️', actionFn:'App.goOrderArticles()' });
+  var h = header('Comande', { actionIcon:'⚙️', actionFn:'App.goOrderArticles()', actionIcon2:'📊', actionFn2:'App.goOrderStats()' });
   var order = state.currentOrder;
   var arts = db.orderArticles||[];
 
@@ -1890,8 +1902,7 @@ function viewOrderBuilder(){
 
   if(order.items.length){
     var arts2 = arts;
-    h += '<div class="print-header print-only ticket-print"><div class="brand">🧾 Comanda</div>'+
-      '<h2>Cliente: '+esc(order.customerName||'—')+'</h2>'+
+    h += '<div class="print-header print-only ticket-print"><h2>Cliente: '+esc(order.customerName||'—')+'</h2>'+
       '<div class="meta">'+new Date().toLocaleString('it-IT')+'</div></div>';
     h += '<div class="card print-only">';
     order.items.forEach(function(it){
@@ -1928,11 +1939,59 @@ function viewOrderArticleForm(){
   var h = header(isEdit?'Modifica articolo':'Nuovo articolo', { back:'App.cancelOrderArticleForm()' });
   h += '<div class="field"><label>Nome articolo</label><input type="text" id="f-name" value="'+esc(d.name)+'" placeholder="Es. Panino Burger" oninput="App.setOrderArticleField(\'name\',this.value)"></div>';
   h += '<div class="field"><label>Prezzo (opzionale)</label><input type="number" min="0" step="0.10" value="'+(d.price||'')+'" placeholder="0.00" oninput="App.setOrderArticleField(\'price\',parseFloat(this.value)||0)"></div>';
-  h += '<div class="field hint" style="margin-top:-8px">Se lasci il prezzo a zero, sulla comanda non verranno stampati prezzi né totale.</div>';
+  h += '<div class="field hint" style="margin-top:-8px">Il prezzo non compare mai sulla comanda stampata: serve solo per calcolare l\'incasso nelle statistiche.</div>';
   h += '<div class="btn-row">';
   if(isEdit) h += '<button class="btn danger" onclick="App.deleteOrderArticle(\''+d.id+'\')">Elimina</button>';
   h += '<button class="btn primary" onclick="App.saveOrderArticle(\''+d.id+'\')">Salva articolo</button>';
   h += '</div>';
+  return h;
+}
+
+/* ================= STATISTICHE VENDITE ================= */
+function viewOrderStats(){
+  var h = header('Statistiche vendite', { back:'App.goTab(\'orders\')' });
+  var sales = db.salesHistory||[];
+  if(sales.length===0){
+    h += '<div class="empty"><span class="emoji">📊</span><p>Nessuna vendita registrata ancora.<br>Ogni comanda stampata via Bluetooth viene registrata automaticamente qui.</p></div>';
+    return h;
+  }
+
+  var totalRevenue=0, totalItems=0;
+  var perArticle = {}, perDay = {};
+  sales.forEach(function(s){
+    var day = (s.date||'').slice(0,10);
+    perDay[day] = perDay[day] || {orders:0, qty:0, revenue:0};
+    perDay[day].orders++;
+    (s.items||[]).forEach(function(it){
+      var rev = (it.price||0)*it.qty;
+      totalItems += it.qty; totalRevenue += rev;
+      perDay[day].qty += it.qty; perDay[day].revenue += rev;
+      var key = it.articleId || it.name;
+      perArticle[key] = perArticle[key] || {name:it.name, qty:0, revenue:0};
+      perArticle[key].qty += it.qty; perArticle[key].revenue += rev;
+    });
+  });
+  var hasRevenue = totalRevenue>0;
+
+  h += '<div class="card"><div class="row between"><span class="muted">Comande stampate</span><span class="badge accent">'+sales.length+'</span></div>'+
+    '<div class="row between" style="margin-top:6px"><span class="muted">Articoli venduti</span><span class="badge">'+totalItems+'</span></div>'+
+    (hasRevenue ? '<div class="row between" style="margin-top:6px"><span class="muted">Incasso stimato</span><span class="badge pos">'+fmtEuro(totalRevenue)+'</span></div>' : '')+
+    '</div>';
+
+  h += '<div class="section-title">Per articolo</div><div class="card"><table class="plan"><thead><tr><th>Articolo</th><th class="num">Qtà</th>'+(hasRevenue?'<th class="num">Incasso</th>':'')+'</tr></thead><tbody>';
+  Object.keys(perArticle).map(function(k){ return perArticle[k]; }).sort(function(a,b){ return b.qty-a.qty; }).forEach(function(x){
+    h += '<tr><td>'+esc(x.name)+'</td><td class="num">'+x.qty+'</td>'+(hasRevenue?'<td class="num">'+fmtEuro(x.revenue)+'</td>':'')+'</tr>';
+  });
+  h += '</tbody></table></div>';
+
+  h += '<div class="section-title">Per giorno</div><div class="card"><table class="plan"><thead><tr><th>Data</th><th class="num">Comande</th><th class="num">Qtà</th>'+(hasRevenue?'<th class="num">Incasso</th>':'')+'</tr></thead><tbody>';
+  Object.keys(perDay).sort(function(a,b){ return b.localeCompare(a); }).forEach(function(day){
+    var d2 = perDay[day];
+    h += '<tr><td>'+esc(fmtDate(day))+'</td><td class="num">'+d2.orders+'</td><td class="num">'+d2.qty+'</td>'+(hasRevenue?'<td class="num">'+fmtEuro(d2.revenue)+'</td>':'')+'</tr>';
+  });
+  h += '</tbody></table></div>';
+
+  h += '<div class="btn-row"><button class="btn danger" onclick="App.clearSalesHistory()">🗑️ Azzera statistiche</button></div>';
   return h;
 }
 
@@ -2254,6 +2313,11 @@ window.App = {
   setCustomerName: function(val){ state.currentOrder.customerName = val; },
   clearOrder: function(){ state.currentOrder = {items:[], customerName:''}; render(); },
   goOrderArticles: function(){ nav('orderArticles', {}); },
+  goOrderStats: function(){ nav('orderStats', {}); },
+  clearSalesHistory: function(){
+    if(!confirm('Azzerare tutto lo storico delle vendite? Non si può annullare.')) return;
+    db.salesHistory = []; saveDB(); render();
+  },
   newOrderArticle: function(){ state.draftOrderArticle = {id:uid(), name:'', price:0}; nav('orderArticleForm', {}); },
   openOrderArticle: function(id){ state.draftOrderArticle = Object.assign({}, byId(db.orderArticles, id)); nav('orderArticleForm', {id:id}); },
   cancelOrderArticleForm: function(){ state.draftOrderArticle=null; nav('orderArticles'); },
@@ -2281,9 +2345,14 @@ window.App = {
     toast('Connessione alla stampante…');
     connectPrinter().then(function(ch){
       var bytes = buildOrderTicketBytes(order, db.orderArticles);
-      return writeInChunks(ch, bytes);
+      // 2 copie identiche: una per la cucina, una per il cliente. Una piccola pausa tra
+      // le due dà tempo alla taglierina di finire prima di inviare il secondo lavoro.
+      return writeInChunks(ch, bytes)
+        .then(function(){ return new Promise(function(res){ setTimeout(res, 400); }); })
+        .then(function(){ return writeInChunks(ch, bytes); });
     }).then(function(){
-      toast('Comanda inviata alla stampante ✓');
+      recordSale(order);
+      toast('2 copie della comanda stampate ✓');
       App.clearOrder();
     }).catch(function(err){
       console.error(err);
