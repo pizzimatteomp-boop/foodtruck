@@ -2345,10 +2345,10 @@ window.App = {
     toast('Connessione alla stampante…');
     connectPrinter().then(function(ch){
       var bytes = buildOrderTicketBytes(order, db.orderArticles);
-      // 2 copie identiche: una per la cucina, una per il cliente. Una piccola pausa tra
-      // le due dà tempo alla taglierina di finire prima di inviare il secondo lavoro.
+      // 2 copie identiche: una per la cucina, una per il cliente. Pausa di 4 secondi tra
+      // le due per fare in tempo a strappare il primo scontrino prima che parta il secondo.
       return writeInChunks(ch, bytes)
-        .then(function(){ return new Promise(function(res){ setTimeout(res, 400); }); })
+        .then(function(){ return new Promise(function(res){ setTimeout(res, 4000); }); })
         .then(function(){ return writeInChunks(ch, bytes); });
     }).then(function(){
       recordSale(order);
@@ -2670,6 +2670,23 @@ nav = function(view, params){
   if(view!=='orderArticleForm') state.draftOrderArticle=null;
   _origNav(view, params);
 };
+
+/* Schermo sempre acceso finché l'app è aperta (utile in cucina/al banco mentre si
+   aspetta di stampare): il Wake Lock viene rilasciato dal browser stesso quando la
+   scheda passa in background, va quindi richiesto di nuovo ogni volta che ridiventa
+   visibile. Se il browser non supporta l'API, l'app funziona comunque normalmente. */
+var wakeLock = null;
+function requestWakeLock(){
+  if(!('wakeLock' in navigator)) return;
+  navigator.wakeLock.request('screen').then(function(wl){
+    wakeLock = wl;
+    wakeLock.addEventListener('release', function(){ wakeLock=null; });
+  }).catch(function(){});
+}
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState==='visible') requestWakeLock();
+});
+requestWakeLock();
 
 render();
 if(cfg.sheetUrl) pullFromSheet(true);
