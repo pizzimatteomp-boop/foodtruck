@@ -260,6 +260,8 @@ table.plan td.num{text-align:right;font-variant-numeric:tabular-nums}
   }
   .check-item input[type=checkbox]:checked{background:#000!important}
   .item-name{font-family:var(--sans);color:#000;font-size:9.5px;font-weight:700}
+  .ticket-print h2{font-size:22px}
+  .ticket-item-name{font-size:15px!important}
   .item-sub{font-size:8.5px;color:#444}
   .check-item.done .item-name{color:#666}
   .badge{border:1px solid #666;background:none!important;color:#000!important;padding:1px 6px;font-size:8.5px}
@@ -1162,33 +1164,19 @@ function buildOrderTicketBytes(order, articles){
   line(now.toLocaleDateString('it-IT')+' '+now.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}));
   push(ESC,0x61,0); // allineato a sinistra
   line(LINE);
-  push(ESC,0x45,1); // grassetto on
+  push(ESC,0x45,1,GS,0x21,0x01); // grassetto on + doppia altezza (nome cliente ben leggibile)
   line('Cliente: '+(order.customerName||'—'));
-  push(ESC,0x45,0); // grassetto off
+  push(GS,0x21,0x00,ESC,0x45,0); // dimensione normale, grassetto off
   line(LINE);
 
-  var hasPrice = order.items.some(function(it){ var a=byId(articles,it.articleId); return a && a.price>0; });
-  var total = 0;
+  push(GS,0x21,0x01); // doppia altezza (articoli ben leggibili in cucina, niente prezzi in comanda)
   order.items.forEach(function(it){
     var a = byId(articles, it.articleId);
     if(!a) return;
-    var left = it.qty+'x '+a.name;
-    if(hasPrice){
-      var sub = (a.price||0)*it.qty;
-      total += sub;
-      var right = fmtEuro(sub);
-      var pad = Math.max(1, 32-left.length-right.length);
-      line(left+new Array(pad+1).join(' ')+right);
-    } else {
-      line(left);
-    }
+    line(it.qty+'x '+a.name);
   });
+  push(GS,0x21,0x00);
   line(LINE);
-  if(hasPrice){
-    push(ESC,0x45,1);
-    line('Totale: '+fmtEuro(total));
-    push(ESC,0x45,0);
-  }
   push(0x0A,0x0A,0x0A,0x0A);
   push(GS,0x56,0x01); // taglio parziale carta (ignorato dalle stampanti senza taglierina)
   return new Uint8Array(out);
@@ -1902,22 +1890,15 @@ function viewOrderBuilder(){
 
   if(order.items.length){
     var arts2 = arts;
-    var hasPrice = order.items.some(function(it){ var a=byId(arts2,it.articleId); return a && a.price>0; });
-    var total = 0;
-    h += '<div class="print-header print-only"><div class="brand">🧾 Comanda</div>'+
+    h += '<div class="print-header print-only ticket-print"><div class="brand">🧾 Comanda</div>'+
       '<h2>Cliente: '+esc(order.customerName||'—')+'</h2>'+
       '<div class="meta">'+new Date().toLocaleString('it-IT')+'</div></div>';
     h += '<div class="card print-only">';
     order.items.forEach(function(it){
       var a = byId(arts2, it.articleId);
       if(!a) return;
-      var sub = (a.price||0)*it.qty; total += sub;
-      h += '<div class="check-item"><div class="grow"><div class="item-name">'+it.qty+'x '+esc(a.name)+'</div></div>'+
-        (hasPrice ? '<div class="strong">'+fmtEuro(sub)+'</div>' : '')+'</div>';
+      h += '<div class="check-item"><div class="grow"><div class="item-name ticket-item-name">'+it.qty+'x '+esc(a.name)+'</div></div></div>';
     });
-    if(hasPrice){
-      h += '<div class="row between" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><span class="muted">Totale</span><span class="strong">'+fmtEuro(total)+'</span></div>';
-    }
     h += '</div>';
   }
 
