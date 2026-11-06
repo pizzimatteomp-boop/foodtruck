@@ -12,7 +12,7 @@ Repository delle app di **VegMan**, street food 100% vegetale di Matteo Pizzi (d
 |---|---|---|
 | `index.html` | **VegMan Planner**, app attuale in un solo file (dati nel browser + sincronizzazione col Google Sheet «foodtruck» via Apps Script). Ingredienti, ricette con semilavorati e food cost, eventi con liste di carico, import fatture XML, comande con stampa Bluetooth. | **In uso: non modificarla** finché la nuova app non è pronta e testata |
 | `app/` | **Super app VegMan**, la nuova app (fase 0 in corso) | In sviluppo |
-| `.github/workflows/app-test.yml` | Test automatici della cartella `app/` (tipi, test con copertura, build, vulnerabilità, regole sull'emulatore) e pubblicazione automatica da `main` su `vegman-prova` (https://vegman-prova.firebaseapp.com) | Attivo |
+| `.github/workflows/app-test.yml` | Test automatici della cartella `app/` (tipi, test con copertura, build, vulnerabilità, regole sull'emulatore, prova nel browser) e pubblicazione automatica da `main` su `vegman-prova` (https://vegman-prova.firebaseapp.com) | Attivo |
 
 ## Architettura decisa (approvata da Matteo il 6/11/2026)
 - **Un solo codice TypeScript a moduli**, con test automatici (Vitest).
@@ -76,7 +76,7 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
 ## Stato della fase 0
 1. [x] Progetti Firebase `vegman-prova` e `vegman-app` creati da Matteo
 2. [x] Struttura `app/`, modulo fiscale con 12 test, bozza regole Firestore, workflow GitHub
-3. [ ] Database: accesso Google, ruoli, regole definitive con test sull'emulatore Firestore — regole (27 test sull'emulatore), accesso Google attivato, schermata di accesso e pannello «Persone» del titolare con prova completa nel browser, Hosting attivo e pubblicazione automatica pronta; mancano la chiave di `github-pubblicazione` su GitHub (ora c'è per errore quella di firebase-adminsdk), il primo accesso e il profilo titolare di Matteo
+3. [x] Database: accesso Google, ruoli e regole definitive (27 test sull'emulatore), pannello «Persone» del titolare, prova completa nel browser, pubblicazione automatica su `vegman-prova` con l'account `github-pubblicazione`; primo accesso e profilo titolare di Matteo fatti il 6/11/2026
 4. [ ] Import dei dati da VegMan Planner + controllo dei totali di food cost
 5. [ ] Modulo fiscale di rete: accesso Fisconline, emissione, annullo, PDF, gestione errori, simulatore
 6. [ ] App Android di prova (Capacitor) installata sullo smartphone di Matteo
