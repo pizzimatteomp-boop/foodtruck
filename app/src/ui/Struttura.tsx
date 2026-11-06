@@ -25,7 +25,7 @@ export function Struttura({ servizi, ambiente, profilo, pagina, children }: {
         <nav class="menu" aria-label="Menu">
           {pagine.map((p) => (
             <a key={p.id} href={indirizzo(p)} aria-current={p.id === pagina.id ? 'page' : undefined}>
-              <span aria-hidden="true">{p.icona}</span> {p.titolo}
+              <span class="icona" aria-hidden="true">{p.icona}</span><span>{p.titolo}</span>
             </a>
           ))}
         </nav>

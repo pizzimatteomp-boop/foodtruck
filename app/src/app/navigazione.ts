@@ -5,14 +5,15 @@
 import { puo, type Ruolo } from '../firebase/ruoli';
 
 export interface Pagina {
-  id: 'home' | 'persone' | 'importa';
+  id: 'home' | 'ingredienti' | 'persone' | 'importa';
   titolo: string;
   icona: string;
   visibile: (ruolo: Ruolo) => boolean;
 }
 
 export const PAGINE: readonly Pagina[] = [
-  { id: 'home', titolo: 'Home', icona: '⌂', visibile: () => true },
+  { id: 'home', titolo: 'Home', icona: '🏠', visibile: () => true },
+  { id: 'ingredienti', titolo: 'Ingredienti', icona: '🥕', visibile: (r) => puo(r, 'acquisti') },
   { id: 'persone', titolo: 'Persone', icona: '👥', visibile: (r) => puo(r, 'utenti') },
   { id: 'importa', titolo: 'Importa', icona: '⬆', visibile: (r) => puo(r, 'acquisti') },
 ];
@@ -26,6 +27,12 @@ export function paginaDa(hash: string, ruolo: Ruolo): Pagina {
   const id = hash.replace(/^#\/?/, '').split(/[/?]/)[0] || 'home';
   const p = pagineVisibili(ruolo).find((x) => x.id === id);
   return p ?? PAGINE[0]!;
+}
+
+/** Secondo pezzo dell'indirizzo, es. #/ingredienti/ceci → «ceci»; null se manca. */
+export function parametroDa(hash: string): string | null {
+  const parti = hash.replace(/^#\/?/, '').split('?')[0]!.split('/');
+  return parti[1] ? decodeURIComponent(parti[1]) : null;
 }
 
 export function indirizzo(p: Pagina): string {

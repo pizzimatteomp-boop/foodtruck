@@ -142,3 +142,34 @@ details summary { cursor: pointer; color: var(--accento); }
 .avvisi { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 .ok { padding: 10px 12px; border-radius: 10px; background: var(--selezione); color: var(--su-selezione); font-weight: 600; }
 .nota { font-size: 0.85rem; color: var(--tenue); }
+
+/* Ingredienti */
+.riga-titolo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+a.pulsante { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; border-radius: 12px; padding: 0 14px; min-height: 40px; border: 2px solid var(--pulsante); white-space: nowrap; }
+input[type='search'] { margin-bottom: 4px; }
+h2 small { font-family: system-ui, sans-serif; font-size: 0.85rem; color: var(--tenue); text-transform: none; }
+.elenco { list-style: none; margin: 0; padding: 0; }
+.elenco li a {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 4px;
+  border-bottom: 1px solid var(--bordo); color: var(--testo); text-decoration: none; min-height: 44px;
+}
+.elenco li a:hover { background: color-mix(in srgb, var(--selezione) 40%, transparent); }
+.elenco .nome small { color: var(--tenue); }
+.elenco .valore { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.elenco .dettaglio, .dettaglio { grid-column: 1 / -1; color: var(--tenue); font-size: 0.85rem; }
+.stato { font-size: 0.8rem; font-weight: 600; }
+.stato.mancante { color: var(--errore); }
+.stato.vecchio { color: #000; background: var(--arancio); padding: 1px 6px; border-radius: 99px; margin-left: 4px; }
+.prezzo-grande { font-size: 1.3rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.due { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.conversione { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.conversione input { width: 110px; }
+.pericolo { color: var(--errore); border-color: var(--errore); }
+optgroup { font-style: normal; }
+
+/* Menu in basso sul telefono: icona sopra, scritta sotto, così ci stanno fino a 5 voci */
+@media (max-width: 899px) {
+  .menu { gap: 4px; padding-left: 4px; padding-right: 4px; }
+  .menu a { flex-direction: column; gap: 2px; padding: 6px 2px; font-size: 0.75rem; min-width: 0; }
+  .menu a .icona { font-size: 1.25rem; line-height: 1; }
+}

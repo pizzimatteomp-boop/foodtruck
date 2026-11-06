@@ -135,7 +135,7 @@ test('il titolare importa un backup di VegMan Planner e vede il food cost', asyn
   await importa.getByLabel('File di backup (.json)').setInputFiles('tests/browser/dati/backup-inventato.json');
   const conti = importa.getByRole('table', { name: 'Conteggi' });
   await expect(conti.getByRole('row', { name: /Ingredienti/ })).toContainText('3');
-  await expect(conti.getByRole('row', { name: /Righe di fattura/ })).toContainText('3');
+  await expect(conti.getByRole('row', { name: /Righe di fattura/ })).toContainText('4');
   // Burger: panino 6/15 = 0,40 € + 40 g di Mayo (800 g olio a 3 €/L = 2,40 € su 1000 g → 0,096 €), sale senza prezzo
   const fc = importa.getByRole('table', { name: 'Food cost' });
   await expect(fc.getByRole('row', { name: /Burger di prova/ })).toContainText('0,50 €');
@@ -154,4 +154,37 @@ test('il titolare importa un backup di VegMan Planner e vede il food cost', asyn
   await importa.getByLabel('Testo del backup').fill('{"ciao":1}');
   await importa.getByRole('button', { name: 'Leggi il testo' }).click();
   await expect(importa.getByRole('alert')).toContainText('non sembra un backup');
+});
+
+test('ingredienti: collegare un articolo dà il prezzo; nuovo packaging', async ({ page }) => {
+  await accedi(page, MATTEO);
+  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Ingredienti' }).click();
+  const elenco = page.getByRole('region', { name: 'Ingredienti' });
+  await expect(elenco.getByRole('link', { name: /Panino/ })).toContainText('0,40 €/pz');
+  await expect(elenco.getByRole('link', { name: /Olio di semi/ })).toContainText('3,00 €/kg');
+  await expect(elenco.getByRole('link', { name: /Sale/ })).toContainText('senza prezzo');
+
+  await elenco.getByRole('link', { name: /Sale/ }).click();
+  const scheda = page.getByRole('region', { name: 'Scheda ingrediente' });
+  await expect(scheda.getByRole('heading', { name: 'Sale' })).toBeVisible();
+  await expect(scheda).toContainText('Mayo di prova');
+  await scheda.getByLabel('Articolo da collegare').selectOption({ label: 'SALE FINO 1 KG' });
+  await expect(scheda.getByLabel('Conversione', { exact: true })).toHaveValue('1000');
+  await scheda.getByRole('button', { name: 'Collega' }).click();
+  await expect(scheda.getByRole('status')).toHaveText('«SALE FINO 1 KG» collegato.');
+  await expect(scheda.locator('.prezzo-grande')).toHaveText('0,80 €/kg');
+  await scheda.screenshot({ path: 'test-results/scheda-ingrediente.png' });
+
+  // Nuovo ingrediente di packaging
+  await page.goto('/#/ingredienti/nuovo');
+  const nuova = page.getByRole('region', { name: 'Scheda ingrediente' });
+  await nuova.getByLabel('Nome').fill('Tovagliolo');
+  await nuova.getByLabel('Categoria').selectOption('packaging');
+  await nuova.getByLabel('Unità').fill('pz');
+  await nuova.getByRole('button', { name: 'Crea ingrediente' }).click();
+  await expect(nuova.getByRole('heading', { name: 'Tovagliolo' })).toBeVisible();
+  await nuova.getByRole('link', { name: '← Ingredienti' }).click();
+  await expect(page.getByRole('region', { name: 'Ingredienti' }).getByRole('heading', { name: /Packaging/ })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Ingredienti' }).getByRole('link', { name: /Tovagliolo/ })).toContainText('senza prezzo');
+  await page.getByRole('region', { name: 'Ingredienti' }).screenshot({ path: 'test-results/ingredienti.png' });
 });

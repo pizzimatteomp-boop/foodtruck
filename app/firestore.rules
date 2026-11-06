@@ -49,12 +49,28 @@ service cloud.firestore {
 
     // ---------- Ingredienti e prodotti (con le ricette) ----------
     // Il team li legge per preparare: non contengono prezzi d'acquisto né costi.
-    match /ingredienti/{id} { allow read: if team(); allow write: if titolare(); }
+    match /ingredienti/{id} {
+      allow read: if team();
+      allow create, update: if titolare()
+        && nuovo().keys().hasOnly(['nome', 'categoria', 'unita', 'gruppo', 'confezione'])
+        && testo(nuovo().nome) && nuovo().nome.size() <= 80
+        && nuovo().categoria in ['alimentare', 'packaging']
+        && testo(nuovo().unita)
+        && (nuovo().confezione == null || (nuovo().confezione is number && nuovo().confezione > 0));
+      allow delete: if titolare();
+    }
     match /prodotti/{id}    { allow read: if team(); allow write: if titolare(); }
 
     // ---------- Prezzi: articoli dei fornitori e acquisti (righe di fattura) ----------
     // Solo il titolare: da qui si calcolano prezzi e food cost.
-    match /articoli/{id}    { allow read, write: if titolare(); }
+    match /articoli/{id} {
+      allow read, delete: if titolare();
+      allow create, update: if titolare()
+        && nuovo().keys().hasOnly(['nome', 'unita', 'categoria', 'ingrediente', 'fattore'])
+        && (nuovo().categoria == null || nuovo().categoria in ['alimentare', 'packaging', 'non_alimentare'])
+        && (nuovo().ingrediente == null || nuovo().ingrediente is string)
+        && nuovo().fattore is number && nuovo().fattore > 0;
+    }
     match /acquisti/{id}    { allow read, write: if titolare(); }
 
     // Registro degli import (Planner, fatture): si aggiunge e basta.

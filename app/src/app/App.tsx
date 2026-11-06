@@ -6,10 +6,11 @@ import type { Profilo } from '../firebase/profilo';
 import { Accesso } from '../ui/Accesso';
 import { Home } from '../ui/Home';
 import { Importa } from '../ui/Importa';
+import { Ingredienti } from '../ui/Ingredienti';
 import { Persone } from '../ui/Persone';
 import { Struttura } from '../ui/Struttura';
 import type { StatoSchermata } from '../ui/schermata';
-import { paginaDa } from './navigazione';
+import { paginaDa, parametroDa } from './navigazione';
 
 type Stato = Exclude<StatoSchermata, { stato: 'dentro' }> | { stato: 'dentro'; uid: string; profilo: Profilo; email: string };
 
@@ -40,6 +41,7 @@ export function App({ servizi, ambiente }: { servizi: Servizi; ambiente: Ambient
     <Struttura servizi={servizi} ambiente={ambiente} profilo={stato.profilo} pagina={pagina}>
       {pagina.id === 'persone' ? <Persone db={servizi.db} titolareUid={stato.uid} />
         : pagina.id === 'importa' ? <Importa db={servizi.db} uid={stato.uid} />
+        : pagina.id === 'ingredienti' ? <Ingredienti db={servizi.db} parametro={parametroDa(hash)} />
         : <Home nome={stato.profilo.nome || stato.email} ruolo={stato.profilo.ruolo} />}
     </Struttura>
   );

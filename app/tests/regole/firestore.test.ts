@@ -14,6 +14,8 @@ import { leggiProfilo } from '../../src/firebase/profilo';
 import { elencaPersone, preparaPersona, salvaPersona } from '../../src/persone/persone';
 import { leggiPlanner } from '../../src/importazione/planner';
 import { salvaImportPlanner } from '../../src/importazione/salva';
+import { collegaArticolo, salvaIngrediente, unisciIngredienti } from '../../src/ingredienti/operazioni';
+import type { Articolo, Prodotto } from '../../src/foodcost/modello';
 
 let env: RulesTestEnvironment;
 
@@ -52,8 +54,8 @@ beforeEach(async () => {
     await setDoc(doc(d, 'eventi', 'ev1'), { nome: 'Festa di Osimo' });
     await setDoc(doc(d, 'eventi', 'ev1', 'checklist', 'v1'), { voce: 'Friggitrice', fatto: false });
     await setDoc(doc(d, 'prodotti', 'r1'), { nome: 'Kebab' });
-    await setDoc(doc(d, 'ingredienti', 'i1'), { nome: 'Ceci' });
-    await setDoc(doc(d, 'articoli', 'art1'), { nome: 'CECI 5 KG' });
+    await setDoc(doc(d, 'ingredienti', 'i1'), { nome: 'Ceci', categoria: 'alimentare', unita: 'g', gruppo: '', confezione: null });
+    await setDoc(doc(d, 'articoli', 'art1'), { nome: 'CECI 5 KG', unita: 'PZ', categoria: null, ingrediente: null, fattore: 1 });
     await setDoc(doc(d, 'acquisti', 'a1'), { fornitore: 'X', totale: 100 });
     await setDoc(doc(d, 'scontrini', 's1'), { tipo: 'V', totale: 1.5 });
     await setDoc(doc(d, 'movimenti', 'm1'), { tipo: 'scarto' });
@@ -277,5 +279,47 @@ describe('import da VegMan Planner nel database', () => {
 
   it('la cassa non può importare', async () => {
     await assertFails(salvaImportPlanner(db('anna'), leggiPlanner(backup), 'anna'));
+  });
+});
+
+describe('ingredienti e articoli: solo dati in forma corretta', () => {
+  const ing = { nome: 'Tovagliolo', categoria: 'packaging', unita: 'pz', gruppo: '', confezione: 500 };
+  const art = { nome: 'CECI 5 KG', unita: 'PZ', categoria: 'alimentare', ingrediente: 'i1', fattore: 5000 };
+
+  it('il titolare crea e modifica; categoria, unità e confezione controllate', async () => {
+    await assertSucceeds(setDoc(doc(db('matteo'), 'ingredienti', 'tov'), ing));
+    await assertFails(setDoc(doc(db('matteo'), 'ingredienti', 'x'), { ...ing, categoria: 'non_alimentare' }));
+    await assertFails(setDoc(doc(db('matteo'), 'ingredienti', 'x'), { ...ing, nome: '' }));
+    await assertFails(setDoc(doc(db('matteo'), 'ingredienti', 'x'), { ...ing, confezione: 0 }));
+    await assertFails(setDoc(doc(db('matteo'), 'ingredienti', 'x'), { ...ing, prezzo: 3 }));
+    await assertSucceeds(deleteDoc(doc(db('matteo'), 'ingredienti', 'tov')));
+  });
+
+  it('collegamento articolo → ingrediente con conversione positiva', async () => {
+    await assertSucceeds(setDoc(doc(db('matteo'), 'articoli', 'art1'), art));
+    await assertSucceeds(setDoc(doc(db('matteo'), 'articoli', 'art1'), { ...art, ingrediente: null, categoria: 'non_alimentare' }));
+    await assertFails(setDoc(doc(db('matteo'), 'articoli', 'art1'), { ...art, fattore: 0 }));
+    await assertFails(setDoc(doc(db('matteo'), 'articoli', 'art1'), { ...art, categoria: 'altro' }));
+    await assertFails(setDoc(doc(db('anna'), 'articoli', 'art1'), art));
+  });
+});
+
+describe('operazioni sugli ingredienti nel database', () => {
+  it('crea, collega un articolo, unisce un doppione aggiornando le ricette', async () => {
+    const m = db('matteo');
+    const ceci = await salvaIngrediente(m, null, { nome: 'Ceci', categoria: 'alimentare', unita: 'g', gruppo: '', confezione: null });
+    const doppio = await salvaIngrediente(m, 'ceci-doppio', { nome: 'Ceci secchi', categoria: 'alimentare', unita: 'g', gruppo: '', confezione: null });
+    const art: Articolo = { id: 'art-ceci', nome: 'CECI 5 KG', unita: 'PZ', categoria: null, ingrediente: null, fattore: 1 };
+    await collegaArticolo(m, art, doppio, 5000, 'alimentare');
+    const collegato = (await getDoc(doc(m, 'articoli', 'art-ceci'))).data() as Omit<Articolo, 'id'>;
+    expect(collegato).toMatchObject({ ingrediente: 'ceci-doppio', fattore: 5000, categoria: 'alimentare' });
+    const hummus: Prodotto = { id: 'hummus', nome: 'Hummus', tipo: 'vendibile', gruppo: '', prezzo: 5, resa: { quantita: 1, unita: 'pz' }, quotaVendite: 0,
+      ricetta: [{ tipo: 'ingrediente', id: 'ceci-doppio', quantita: 100 }] };
+    const { id: _h, ...datiHummus } = hummus;
+    await setDoc(doc(m, 'prodotti', 'hummus'), datiHummus);
+    await unisciIngredienti(m, 'ceci-doppio', ceci, [hummus], [{ ...art, ...collegato, id: 'art-ceci' }]);
+    expect((await getDoc(doc(m, 'ingredienti', 'ceci-doppio'))).exists()).toBe(false);
+    expect((await getDoc(doc(m, 'articoli', 'art-ceci'))).data()).toMatchObject({ ingrediente: ceci });
+    expect((await getDoc(doc(m, 'prodotti', 'hummus'))).data()!.ricetta).toEqual([{ tipo: 'ingrediente', id: ceci, quantita: 100 }]);
   });
 });

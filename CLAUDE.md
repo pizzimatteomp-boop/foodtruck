@@ -97,7 +97,7 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
    - 4a. [x] Base pulita: Preact, app installabile e apribile senza rete (service worker scritto a mano), menu tra le pagine per ruolo; prove nel browser sul pacchetto vero
    - 4b. In sotto-passi:
      - 4b-1. [x] Motore del food cost (`app/src/foodcost/`) e import da Planner (`app/src/importazione/`, pagina «Importa»): verificato identico a Planner su 200 archivi inventati e sui 13 prodotti veri (6/11/2026). Unica differenza voluta: righe di fattura a quantità 0 non danno prezzo 0 €
-     - 4b-2. Pagina Ingredienti (fonti, €/kg, confezioni, categorie alimentare/packaging)
+     - 4b-2. [x] Pagina Ingredienti (`app/src/ui/Ingredienti.tsx`, `SchedaIngrediente.tsx`, `app/src/ingredienti/`): elenco alimentare/packaging con €/kg, €/L o €/pz e stato del prezzo; scheda con fonti e prezzo per fonte, collegamento articoli con conversione proposta dal nome (es. «CECI 5 KG» → 5000 g), unione dei doppioni (sposta fonti e ricette), nuovo ingrediente
      - 4b-3. Fatture XML/ZIP, tre categorie, collegamento articoli, acquisti manuali
      - 4b-4. Ricette e prodotti con food cost mentre si scrive
      - 4b-5. Storico mensile, grafici, avvisi
