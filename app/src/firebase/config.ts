@@ -15,8 +15,14 @@ export interface FirebaseConfig {
 }
 
 export const CONFIG: Record<Ambiente, FirebaseConfig | null> = {
-  // Progetto di prova (vegman-prova): da compilare quando Matteo lo crea.
-  prova: null,
+  prova: {
+    apiKey: 'AIzaSyA86CwbIoDLcHo-pf9JwS8EFIAt5iP_4aU',
+    authDomain: 'vegman-prova.firebaseapp.com',
+    projectId: 'vegman-prova',
+    storageBucket: 'vegman-prova.firebasestorage.app',
+    messagingSenderId: '142177740062',
+    appId: '1:142177740062:web:ee6ff83edf656af9e1d50f',
+  },
   produzione: {
     apiKey: 'AIzaSyC9IMrdOJS5d0rIewyreajA4eQgPO7vXNM',
     authDomain: 'vegman-app.firebaseapp.com',
