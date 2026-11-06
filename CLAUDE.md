@@ -12,14 +12,14 @@ Repository delle app di **VegMan**, street food 100% vegetale di Matteo Pizzi (d
 |---|---|---|
 | `index.html` | **VegMan Planner**, app attuale in un solo file (dati nel browser + sincronizzazione col Google Sheet «foodtruck» via Apps Script). Ingredienti, ricette con semilavorati e food cost, eventi con liste di carico, import fatture XML, comande con stampa Bluetooth. | **In uso: non modificarla** finché la nuova app non è pronta e testata |
 | `app/` | **Super app VegMan**, la nuova app (fase 0 in corso) | In sviluppo |
-| `.github/workflows/app-test.yml` | Test automatici della cartella `app/` | |
+| `.github/workflows/app-test.yml` | Test automatici della cartella `app/`: tipi, test con copertura, vulnerabilità, regole sull'emulatore | Attivo |
 
 ## Architettura decisa (approvata da Matteo il 6/11/2026)
 - **Un solo codice TypeScript a moduli**, con test automatici (Vitest).
 - Gira come **app web (PWA)** su ogni dispositivo (iPad, iPhone, PC) e, impacchettata con **Capacitor**, come **app Android di cassa**. Per la fase 0 la cassa di prova è lo smartphone Android di Matteo; più avanti un tablet Android.
 - **Firebase, piano gratuito Spark** (niente carta, niente piano Blaze, niente Cloud Functions): Firestore con cache offline, accesso con Google, regole di sicurezza per ruolo. Due progetti: `vegman-prova` (test) e `vegman-app` (dati veri), database in `europe-west8` (Milano). Configurazioni in `app/src/firebase/config.ts` (non sono segreti).
 - **Cassa fiscale sul dispositivo, senza server**: l'app Android parla direttamente con la procedura gratuita «documento commerciale online» (DCO) dell'Agenzia delle Entrate, come fa l'app Billy ma senza far passare le credenziali da server terzi. Da browser non si può (CORS): solo dall'app Android (HTTP nativo di Capacitor).
-- **Ruoli**: titolare (tutto), cassa (comande e scontrini), team (eventi e checklist in lettura). Bozza in `app/firestore.rules`.
+- **Ruoli**: titolare (tutto), cassa (comande, scontrini, movimenti senza incasso, quadratura), team (eventi e checklist in lettura). Regole in `app/firestore.rules`, provate in `app/tests/regole/`; profilo in `/utenti/{uid}` con `ruolo` e `attivo`, assegnati solo dal titolare.
 - Fasi successive: economia eventi e checklist di carico → fatture, prezzi e food cost → comande e cassa → magazzino, lotti ed etichette.
 
 ## Vendite e movimenti di prodotto (deciso il 6/11/2026)
@@ -76,7 +76,7 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
 ## Stato della fase 0
 1. [x] Progetti Firebase `vegman-prova` e `vegman-app` creati da Matteo
 2. [x] Struttura `app/`, modulo fiscale con 12 test, bozza regole Firestore, workflow GitHub
-3. [ ] Database: accesso Google, ruoli, regole definitive con test sull'emulatore Firestore
+3. [ ] Database: accesso Google, ruoli, regole definitive con test sull'emulatore Firestore — regole e 25 test fatti, moduli di accesso e ruoli scritti; mancano schermata di accesso, pubblicazione delle regole su `vegman-prova` e profilo titolare di Matteo
 4. [ ] Import dei dati da VegMan Planner + controllo dei totali di food cost
 5. [ ] Modulo fiscale di rete: accesso Fisconline, emissione, annullo, PDF, gestione errori, simulatore
 6. [ ] App Android di prova (Capacitor) installata sullo smartphone di Matteo

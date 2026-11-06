@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "vegman-prova",
+    "prova": "vegman-prova",
+    "produzione": "vegman-app"
+  }
+}

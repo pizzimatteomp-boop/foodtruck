@@ -1,26 +1,122 @@
 rules_version = '2';
-// Regole di accesso al database VegMan. Prima bozza (fase 0): ruoli titolare, cassa, team.
-// Il ruolo di ogni persona sta in /utenti/{uid}.ruolo e lo assegna solo il titolare.
+// Regole di accesso al database VegMan (fase 0, versione definitiva per i ruoli).
+//
+// Ruoli (in /utenti/{uid}.ruolo, assegnati solo dal titolare):
+//   titolare  → tutto
+//   cassa     → comande, scontrini, movimenti senza incasso, quadrature di cassa
+//   team      → lettura di eventi, checklist, ricette e prodotti
+// Un utente con attivo == false non può fare nulla.
+//
+// Principi (vedi CLAUDE.md):
+//   - gli scontrini registrati non si modificano né si cancellano, nemmeno dal titolare;
+//   - i movimenti senza incasso (omaggio, pasto staff, prova, scarto) non hanno campi di importo pagato;
+//   - ogni registrazione porta chi l'ha fatta e l'ora del server, non quella del dispositivo.
 service cloud.firestore {
   match /databases/{database}/documents {
-    function autenticato() { return request.auth != null; }
-    function ruolo() { return get(/databases/$(database)/documents/utenti/$(request.auth.uid)).data.ruolo; }
-    function titolare() { return autenticato() && ruolo() == 'titolare'; }
-    function cassa() { return autenticato() && ruolo() in ['titolare', 'cassa']; }
-    function team() { return autenticato() && ruolo() in ['titolare', 'cassa', 'team']; }
 
-    match /utenti/{uid} {
-      allow read: if autenticato() && (request.auth.uid == uid || titolare());
-      allow write: if titolare();
+    // ---------- Chi sei ----------
+    function autenticato() { return request.auth != null; }
+    function profilo() { return get(/databases/$(database)/documents/utenti/$(request.auth.uid)).data; }
+    function attivo() {
+      return autenticato()
+        && exists(/databases/$(database)/documents/utenti/$(request.auth.uid))
+        && profilo().attivo == true;
     }
+    function ruolo() { return profilo().ruolo; }
+    function titolare() { return attivo() && ruolo() == 'titolare'; }
+    function cassa()    { return attivo() && ruolo() in ['titolare', 'cassa']; }
+    function team()     { return attivo() && ruolo() in ['titolare', 'cassa', 'team']; }
+
+    // ---------- Controlli sui dati ----------
+    function nuovo() { return request.resource.data; }
+    // Chi crea il documento è chi è collegato, all'ora del server.
+    function firmato() {
+      return nuovo().creatoDa == request.auth.uid && nuovo().creatoIl == request.time;
+    }
+    function testo(v) { return v is string && v.size() > 0 && v.size() <= 500; }
+
+    // ---------- Persone e ruoli ----------
+    match /utenti/{uid} {
+      allow read: if titolare() || (attivo() && request.auth.uid == uid);
+      allow create, update: if titolare()
+        && nuovo().keys().hasOnly(['ruolo', 'attivo', 'nome', 'email'])
+        && nuovo().ruolo in ['titolare', 'cassa', 'team']
+        && nuovo().attivo is bool
+        // il titolare non può togliersi da solo il ruolo o disattivarsi (resterebbe chiuso fuori)
+        && (uid != request.auth.uid || (nuovo().ruolo == 'titolare' && nuovo().attivo == true));
+      allow delete: if titolare() && uid != request.auth.uid;
+    }
+
+    // ---------- Anagrafiche ----------
     match /ingredienti/{id} { allow read: if team(); allow write: if titolare(); }
     match /ricette/{id}     { allow read: if team(); allow write: if titolare(); }
+    match /prodotti/{id}    { allow read: if team(); allow write: if titolare(); }
+    // Fatture e prezzi d'acquisto: solo il titolare.
     match /acquisti/{id}    { allow read, write: if titolare(); }
-    match /eventi/{id}      { allow read: if team(); allow write: if titolare(); }
-    match /comande/{id}     { allow read, create, update: if cassa(); allow delete: if titolare(); }
-    // Gli scontrini si creano e basta: niente modifiche né cancellazioni, nemmeno dal titolare.
-    match /scontrini/{id}   { allow read: if cassa(); allow create: if cassa(); allow update, delete: if false; }
-    // Registro delle operazioni: solo aggiunte.
-    match /registro/{id}    { allow read: if titolare(); allow create: if team(); allow update, delete: if false; }
+
+    // ---------- Eventi e checklist ----------
+    match /eventi/{id} {
+      allow read: if team();
+      allow write: if titolare();
+      match /checklist/{voce} { allow read: if team(); allow write: if titolare(); }
+    }
+
+    // ---------- Comande ----------
+    match /comande/{id} {
+      allow read, create, update: if cassa();
+      allow delete: if titolare();
+    }
+
+    // ---------- Scontrini (documento commerciale online) ----------
+    // Si registrano solo dopo l'esito positivo dell'Agenzia. Annullo e reso sono nuovi scontrini
+    // che citano l'originale: l'originale non si tocca.
+    match /scontrini/{id} {
+      allow read: if cassa();
+      allow create: if cassa() && firmato()
+        && nuovo().tipo in ['V', 'A', 'R']
+        && testo(nuovo().idtrx)
+        && testo(nuovo().progressivo)
+        && testo(nuovo().evento)
+        && nuovo().totale is number && nuovo().totale >= 0
+        && (nuovo().tipo == 'V' || testo(nuovo().progressivoOriginale));
+      allow update, delete: if false;
+    }
+
+    // ---------- Movimenti senza incasso ----------
+    // Omaggio, pasto staff, prova/assaggio, scarto. Nessun campo importo: se c'è un pagamento
+    // è una vendita e va con lo scontrino. L'omaggio può citare lo scontrino con la riga a 0 €.
+    match /movimenti/{id} {
+      allow read: if titolare();
+      allow create: if cassa() && firmato()
+        && nuovo().keys().hasOnly(['tipo', 'prodotto', 'quantita', 'motivo', 'evento',
+                                   'creatoDa', 'creatoIl', 'scontrino'])
+        && nuovo().tipo in ['omaggio', 'pasto_staff', 'prova', 'scarto']
+        && testo(nuovo().prodotto)
+        && nuovo().quantita is number && nuovo().quantita > 0
+        && testo(nuovo().motivo)
+        && testo(nuovo().evento)
+        && (!('scontrino' in nuovo()) || (nuovo().tipo == 'omaggio' && testo(nuovo().scontrino)));
+      allow update, delete: if false;
+    }
+
+    // ---------- Quadratura di cassa a fine evento ----------
+    // Una conta registrata non si cambia: una correzione è una nuova conta.
+    match /quadrature/{id} {
+      allow read: if titolare();
+      allow create: if cassa() && firmato()
+        && testo(nuovo().evento)
+        && nuovo().contanti is number && nuovo().contanti >= 0
+        && nuovo().pos is number && nuovo().pos >= 0;
+      allow update, delete: if false;
+    }
+
+    // ---------- Registro delle operazioni: solo aggiunte ----------
+    match /registro/{id} {
+      allow read: if titolare();
+      allow create: if team() && firmato() && testo(nuovo().azione);
+      allow update, delete: if false;
+    }
+
+    // Tutto il resto è chiuso.
   }
 }
