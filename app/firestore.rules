@@ -1,0 +1,26 @@
+rules_version = '2';
+// Regole di accesso al database VegMan. Prima bozza (fase 0): ruoli titolare, cassa, team.
+// Il ruolo di ogni persona sta in /utenti/{uid}.ruolo e lo assegna solo il titolare.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function autenticato() { return request.auth != null; }
+    function ruolo() { return get(/databases/$(database)/documents/utenti/$(request.auth.uid)).data.ruolo; }
+    function titolare() { return autenticato() && ruolo() == 'titolare'; }
+    function cassa() { return autenticato() && ruolo() in ['titolare', 'cassa']; }
+    function team() { return autenticato() && ruolo() in ['titolare', 'cassa', 'team']; }
+
+    match /utenti/{uid} {
+      allow read: if autenticato() && (request.auth.uid == uid || titolare());
+      allow write: if titolare();
+    }
+    match /ingredienti/{id} { allow read: if team(); allow write: if titolare(); }
+    match /ricette/{id}     { allow read: if team(); allow write: if titolare(); }
+    match /acquisti/{id}    { allow read, write: if titolare(); }
+    match /eventi/{id}      { allow read: if team(); allow write: if titolare(); }
+    match /comande/{id}     { allow read, create, update: if cassa(); allow delete: if titolare(); }
+    // Gli scontrini si creano e basta: niente modifiche né cancellazioni, nemmeno dal titolare.
+    match /scontrini/{id}   { allow read: if cassa(); allow create: if cassa(); allow update, delete: if false; }
+    // Registro delle operazioni: solo aggiunte.
+    match /registro/{id}    { allow read: if titolare(); allow create: if team(); allow update, delete: if false; }
+  }
+}
