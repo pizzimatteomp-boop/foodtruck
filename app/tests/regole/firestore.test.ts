@@ -11,6 +11,7 @@ import {
   addDoc, collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc, updateDoc, type Firestore,
 } from 'firebase/firestore';
 import { leggiProfilo } from '../../src/firebase/profilo';
+import { elencaPersone, preparaPersona, salvaPersona } from '../../src/persone/persone';
 
 let env: RulesTestEnvironment;
 
@@ -20,7 +21,7 @@ const PERSONE = {
   luca: { ruolo: 'team', attivo: true, nome: 'Luca' },
   ex: { ruolo: 'cassa', attivo: false, nome: 'Ex' },
 } as const;
-type Chi = keyof typeof PERSONE | 'nuovo';
+type Chi = keyof typeof PERSONE | 'nuovo' | (string & {});
 
 const db = (chi: Chi): Firestore => env.authenticatedContext(chi).firestore() as unknown as Firestore;
 const anonimo = (): Firestore => env.unauthenticatedContext().firestore() as unknown as Firestore;
@@ -215,5 +216,22 @@ describe('quadratura di cassa e registro', () => {
     await assertFails(getDoc(doc(db('luca'), 'registro', ref.id)));
     await assertSucceeds(getDoc(doc(db('matteo'), 'registro', ref.id)));
     await assertFails(deleteDoc(doc(db('matteo'), 'registro', ref.id)));
+  });
+});
+
+describe('gestione persone dall\'app (modulo persone.ts)', () => {
+  const UID_NUOVO = 'NuovoUtente0123456789abcdef';
+
+  it('il titolare vede tutti in ordine e abilita una persona nuova', async () => {
+    const prima = await elencaPersone(db('matteo'));
+    expect(prima.map((p) => p.nome)).toEqual(['Matteo', 'Anna', 'Luca', 'Ex']);
+    const { uid, dati } = preparaPersona({ codice: UID_NUOVO, nome: 'Giulia', ruolo: 'cassa' }, 'matteo');
+    await salvaPersona(db('matteo'), uid, dati);
+    expect(await leggiProfilo(db(UID_NUOVO as Chi), UID_NUOVO)).toMatchObject({ ruolo: 'cassa', attivo: true, nome: 'Giulia' });
+  });
+
+  it('la cassa non può elencare né abilitare persone', async () => {
+    await assertFails(elencaPersone(db('anna')));
+    await assertFails(salvaPersona(db('anna'), UID_NUOVO, { ruolo: 'team', attivo: true, nome: 'X', email: '' }));
   });
 });

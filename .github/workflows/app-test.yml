@@ -96,11 +96,51 @@ jobs:
       - name: Test delle regole per ruolo
         run: npm run test:regole
 
+  browser:
+    name: Prova nel browser (accesso, ruoli, persone)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: app/.nvmrc
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Emulatori in cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: emulatori-${{ hashFiles('app/package-lock.json') }}
+
+      - name: Installa le dipendenze
+        run: npm ci --no-audit --no-fund
+
+      - name: Installa il browser di prova
+        run: npx playwright install --with-deps chromium
+
+      - name: Prova completa con gli emulatori
+        run: npm run test:browser
+        env:
+          CI: true
+
   # Pubblicazione su vegman-prova (https://vegman-prova.firebaseapp.com): schermate e regole del database.
   # Solo da main e solo se tutti i controlli sono passati. vegman-app (dati veri) NON viene toccato.
   pubblica-prova:
     name: Pubblica su vegman-prova
-    needs: [test, regole]
+    needs: [test, regole, browser]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10

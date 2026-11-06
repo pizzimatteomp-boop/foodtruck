@@ -76,7 +76,7 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
 ## Stato della fase 0
 1. [x] Progetti Firebase `vegman-prova` e `vegman-app` creati da Matteo
 2. [x] Struttura `app/`, modulo fiscale con 12 test, bozza regole Firestore, workflow GitHub
-3. [ ] Database: accesso Google, ruoli, regole definitive con test sull'emulatore Firestore — regole (25 test), accesso Google attivato e regole pubblicate su `vegman-prova`, schermata di accesso e pubblicazione automatica pronte; mancano la chiave di pubblicazione su GitHub, il primo accesso e il profilo titolare di Matteo
+3. [ ] Database: accesso Google, ruoli, regole definitive con test sull'emulatore Firestore — regole (27 test sull'emulatore), accesso Google attivato, schermata di accesso e pannello «Persone» del titolare con prova completa nel browser, Hosting attivo e pubblicazione automatica pronta; mancano la chiave di `github-pubblicazione` su GitHub (ora c'è per errore quella di firebase-adminsdk), il primo accesso e il profilo titolare di Matteo
 4. [ ] Import dei dati da VegMan Planner + controllo dei totali di food cost
 5. [ ] Modulo fiscale di rete: accesso Fisconline, emissione, annullo, PDF, gestione errori, simulatore
 6. [ ] App Android di prova (Capacitor) installata sullo smartphone di Matteo

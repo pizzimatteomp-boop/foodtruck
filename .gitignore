@@ -8,3 +8,5 @@ coverage/
 .env
 .env.*
 .firebase/
+test-results/
+playwright-report/

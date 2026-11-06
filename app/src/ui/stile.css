@@ -56,3 +56,17 @@ button:disabled { opacity: 0.6; cursor: wait; }
 }
 .errore { color: var(--errore); }
 .ambiente { margin-top: 8px; font-size: 0.8rem; color: var(--tenue); text-align: center; }
+.pannello { margin-top: 12px; padding-top: 16px; border-top: 1px solid color-mix(in srgb, var(--tenue) 30%, transparent); display: flex; flex-direction: column; gap: 10px; }
+h2 { margin: 0; font-size: 1.2rem; color: var(--verde-scuro); }
+h3 { margin: 8px 0 0; font-size: 1rem; }
+.persone { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.persone li { padding: 10px 12px; border-radius: 10px; background: var(--sfondo); display: flex; flex-direction: column; gap: 4px; }
+.persone li.disattivo { opacity: 0.6; }
+.persone small { color: var(--tenue); }
+.tu { color: var(--tenue); font-weight: normal; }
+.comandi { display: flex; gap: 8px; flex-wrap: wrap; }
+.comandi select { flex: 1; min-width: 120px; }
+.nuova { display: flex; flex-direction: column; gap: 8px; }
+input, select { font: inherit; min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--tenue) 50%, transparent); background: var(--scheda); color: var(--testo); width: 100%; }
+.piccolo { min-height: 44px; }
+.esito:empty { display: none; }
