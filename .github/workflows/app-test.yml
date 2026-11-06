@@ -129,7 +129,7 @@ jobs:
         env:
           VITE_AMBIENTE: prova
 
-      - name: Pubblica schermate e regole
+      - name: Prepara la chiave
         env:
           CHIAVE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_VEGMAN_PROVA }}
         run: |
@@ -137,8 +137,21 @@ jobs:
             echo "::warning::Manca la chiave FIREBASE_SERVICE_ACCOUNT_VEGMAN_PROVA: pubblicazione saltata."
             exit 0
           fi
-          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/chiave.json"
-          printf '%s' "$CHIAVE" > "$GOOGLE_APPLICATION_CREDENTIALS"
-          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
-          npx firebase deploy --only hosting,firestore:rules --project vegman-prova --non-interactive
-          echo "Pubblicata su https://vegman-prova.firebaseapp.com" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s' "$CHIAVE" > "$RUNNER_TEMP/chiave.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/chiave.json" >> "$GITHUB_ENV"
+
+      - name: Pubblica le schermate
+        if: env.GOOGLE_APPLICATION_CREDENTIALS != ''
+        run: |
+          npx firebase deploy --only hosting --project vegman-prova --non-interactive
+          echo "Schermate pubblicate su https://vegman-prova.firebaseapp.com" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Pubblica le regole del database
+        if: env.GOOGLE_APPLICATION_CREDENTIALS != ''
+        run: |
+          npx firebase deploy --only firestore:rules --project vegman-prova --non-interactive
+          echo "Regole del database pubblicate su vegman-prova" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cancella la chiave dal computer di GitHub
+        if: always()
+        run: rm -f "$RUNNER_TEMP/chiave.json"
