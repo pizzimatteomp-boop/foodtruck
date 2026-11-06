@@ -22,6 +22,22 @@ Repository delle app di **VegMan**, street food 100% vegetale di Matteo Pizzi (d
 - **Ruoli**: titolare (tutto), cassa (comande e scontrini), team (eventi e checklist in lettura). Bozza in `app/firestore.rules`.
 - Fasi successive: economia eventi e checklist di carico → fatture, prezzi e food cost → comande e cassa → magazzino, lotti ed etichette.
 
+## Vendite e movimenti di prodotto (deciso il 6/11/2026)
+- **In Italia ogni vendita pagata ha il suo scontrino DCO**, emesso in automatico dalla comanda. Nessuna funzione per vendere senza scontrino e nessun archivio nascosto di vendite.
+- Movimenti **senza incasso**, tutti tracciati con motivo, persona, evento e ora, e scaricati dal magazzino:
+  | Tipo | Quando | Scontrino |
+  |---|---|---|
+  | Omaggio | prodotto regalato (amico, fornitore, artista) | DCO con riga omaggio a 0 € |
+  | Pasto staff | consumo del team durante l'evento | nessuno: movimento interno |
+  | Prova / assaggio | test di ricetta, assaggi | nessuno: movimento interno |
+  | Scarto | prodotto rovinato, caduto, scaduto | nessuno: movimento interno |
+  | Errore di cassa | vendita sbagliata | annullo o reso dello scontrino |
+  | Pagato dall'organizzatore | pasti per staff, artisti, volontari del festival | fattura all'organizzatore o scontrino «non riscosso» |
+- Questi movimenti **non possono avere un incasso**: se c'è un pagamento, è una vendita e va con lo scontrino. Nessun campo importo pagato sui movimenti interni.
+- **Quadratura di cassa** a fine evento: contanti e POS contati contro scontrini emessi; le differenze vengono segnalate al titolare.
+- Eventi fuori dall'Italia (es. SMIAF, San Marino): ogni evento ha un Paese; con Paese diverso da IT, e solo se attivato dal titolare, l'app fa una ricevuta non fiscale italiana secondo le regole del luogo (da verificare con commercialista e organizzatore).
+- Report per ruolo: il team vede checklist, comande ed eventi; il titolare vede tutto (vendite, omaggi, consumi interni, scarti, margini). Business plan e conti sempre con vendite interamente fiscalizzate.
+
 ## Regole di sicurezza (non negoziabili)
 - **Credenziali Fisconline**: Matteo le inserisce solo nell'app sul telefono; vanno cifrate nel Keystore Android. Mai nel codice, nel database, nei log, in chat o nei test. Non chiederle mai.
 - **Nessuno scontrino vero** (vendita, annullo, reso) senza il via libera esplicito di Matteo in quel momento. Per i test di tutti i giorni usare un simulatore del servizio dell'Agenzia.
