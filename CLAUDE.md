@@ -32,6 +32,12 @@ Documento completo: «Super app VegMan · Fatture, ingredienti e food cost» (Cl
 - **Scelte tecniche**: schermate con Preact; app installabile e apribile senza rete; fatture (XML e .p7m) lette sul dispositivo; dati veri mai nel repository (è pubblico), nei test solo dati inventati.
 - **VegMan Planner**: l'attività è ferma, il passaggio è semplice: un import una tantum delle cose utili (ingredienti, prodotti, ricette, fatture, articoli); le 89 comande storiche non si importano.
 
+## Marchio (Brand Guidelines Manodopera 2024)
+- Colori: bianco `#FFFFFF`, nero `#000000`, arancio `#F08A39`, menta `#B9DED3`, lampone `#B7426F`, glaucous `#6B77B7`; crema della «V» `#F3E9D0`. Per il testo piccolo si usano tonalità più scure del glaucous (`#5560A3`, `#4E5899`) per un contrasto ≥ 4,5:1. Combinazioni del manuale: nero su arancio, glaucous su menta, bianco su glaucous, nero su menta.
+- Font dei titoli: Luckiest Guy (Apache 2.0), sempre in maiuscolo; in `app/public/font/` (sottoinsieme WOFF2, 16 KB).
+- Logo nell'app: monogramma «V» (`app/src/ui/LogoV.tsx`); icone dell'app = V crema su glaucous. Altre versioni (circolare con la carota mascotte, scritta VEGMAN, lettering World Savior) solo nel manuale.
+- Il manuale PDF è riservato: non va nel repository (che è pubblico).
+
 ## Vendite e movimenti di prodotto (deciso il 6/11/2026)
 - **In Italia ogni vendita pagata ha il suo scontrino DCO**, emesso in automatico dalla comanda. Nessuna funzione per vendere senza scontrino e nessun archivio nascosto di vendite.
 - Movimenti **senza incasso**, tutti tracciati con motivo, persona, evento e ora, e scaricati dal magazzino:

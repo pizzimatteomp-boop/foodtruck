@@ -2,7 +2,7 @@
  * Service worker di VegMan: rende l'app apribile senza rete.
  * - Pagina: prima la rete (per avere sempre l'ultima versione), senza rete la copia salvata.
  * - File dell'app in /assets/: hanno il nome che cambia a ogni versione, quindi si salvano una volta e basta.
- * - Icone e manifest: copia salvata subito, aggiornata in sottofondo.
+ * - Icone, font e manifest: copia salvata subito, aggiornata in sottofondo.
  * Non tocca nient'altro: accesso Google (/__/), database e altri siti passano sempre dalla rete.
  */
 // Cambiare il numero solo se cambia il modo di salvare: le copie vecchie vengono cancellate.
@@ -60,5 +60,5 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith('/__/')) return;
   if (r.mode === 'navigate') return e.respondWith(primaLaRete(r));
   if (url.pathname.startsWith('/assets/')) return e.respondWith(primaLaCopia(r));
-  if (url.pathname.startsWith('/icone/') || url.pathname === '/manifest.webmanifest') return e.respondWith(copiaPoiAggiorna(r));
+  if (url.pathname.startsWith('/icone/') || url.pathname.startsWith('/font/') || url.pathname === '/manifest.webmanifest') return e.respondWith(copiaPoiAggiorna(r));
 });

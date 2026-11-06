@@ -1,0 +1,3 @@
+Luckiest Guy — Copyright (c) 2010 Brian J. Bonislawsky DBA Astigmatic (AOETI).
+Licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
+Il file luckiest-guy.woff2 è un sottoinsieme (caratteri latini e italiani) del font originale.

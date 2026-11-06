@@ -1,19 +1,42 @@
+/*
+ * Colori del marchio VegMan (Brand Guidelines Manodopera 2024): bianco, nero, arancio #F08A39,
+ * menta #B9DED3, lampone #B7426F, glaucous #6B77B7, crema della «V» #F3E9D0.
+ * Dove il colore esatto non si legge abbastanza come testo piccolo (contrasto < 4,5:1) si usa
+ * una sua tonalità più scura: --glaucous-forte (bianco sopra: 5,9:1), --glaucous-testo (6:1 sul crema).
+ */
+@font-face {
+  font-family: 'Luckiest Guy';
+  src: url('/font/luckiest-guy.woff2') format('woff2');
+  font-display: swap;
+}
 :root {
-  --verde: #2f7d32;
-  --verde-scuro: #1f5a22;
-  --sfondo: #f4f7f2;
-  --scheda: #ffffff;
-  --testo: #1d2a1e;
-  --tenue: #5b6b5c;
-  --errore: #b3261e;
-  --su-verde: #ffffff;
-  --bordo: color-mix(in srgb, var(--tenue) 30%, transparent);
+  --glaucous: #6B77B7;
+  --glaucous-forte: #5560A3;
+  --glaucous-testo: #4E5899;
+  --arancio: #F08A39;
+  --menta: #B9DED3;
+  --lampone: #B7426F;
+  --crema: #F3E9D0;
+
+  --sfondo: #F8F2E4;
+  --scheda: #FFFFFF;
+  --testo: #1C1B22;
+  --tenue: #5E5A66;
+  --accento: var(--glaucous-testo);
+  --pulsante: var(--glaucous-forte);
+  --su-pulsante: #FFFFFF;
+  --errore: var(--lampone);
+  --selezione: var(--menta);
+  --su-selezione: #000000;
+  --bordo: color-mix(in srgb, var(--tenue) 25%, transparent);
+  --titoli: 'Luckiest Guy', system-ui, sans-serif;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --sfondo: #121712; --scheda: #1c231c; --testo: #e6efe6; --tenue: #a3b3a3;
-    --verde: #66bb6a; --verde-scuro: #81c784; --errore: #f2b8b5; --su-verde: #0d1f0e;
+    --sfondo: #16161C; --scheda: #1F1F27; --testo: #F3E9D0; --tenue: #B9B2A4;
+    --accento: #9AA3D8; --errore: #E58BAE; --selezione: #2E3350; --su-selezione: #F3E9D0;
+    --bordo: color-mix(in srgb, var(--tenue) 22%, transparent);
   }
 }
 
@@ -25,10 +48,10 @@ body {
   font: 17px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-text-size-adjust: 100%;
 }
-h1 { margin: 0 0 4px; font-size: 1.5rem; color: var(--verde-scuro); }
-h2 { margin: 8px 0 0; font-size: 1.1rem; }
+h1 { margin: 0 0 4px; font: 1.7rem/1.1 var(--titoli); letter-spacing: 0.03em; text-transform: uppercase; color: var(--accento); }
+h2 { margin: 8px 0 0; font: 1.25rem/1.15 var(--titoli); letter-spacing: 0.03em; text-transform: uppercase; color: var(--accento); }
 p { margin: 0; }
-a { color: var(--verde-scuro); }
+a { color: var(--accento); }
 
 /* Schermata di accesso, centrata */
 .centro { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
@@ -39,11 +62,13 @@ a { color: var(--verde-scuro); }
 .testata {
   grid-area: testata; display: flex; align-items: center; gap: 12px;
   padding: max(10px, env(safe-area-inset-top)) 16px 10px;
-  background: var(--scheda); border-bottom: 1px solid var(--bordo);
+  background: var(--glaucous); color: var(--crema);
   position: sticky; top: 0; z-index: 2;
 }
-.marchio { font-weight: 700; font-size: 1.15rem; text-decoration: none; color: var(--verde-scuro); margin-right: auto; }
-.badge-prova { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 99px; background: color-mix(in srgb, var(--verde) 15%, transparent); color: var(--verde-scuro); }
+.testata .secondario { background: var(--crema); color: var(--glaucous-testo); border-color: var(--crema); }
+.marchio { display: flex; align-items: center; gap: 8px; margin-right: auto; text-decoration: none; color: var(--crema); font: 1.5rem/1 var(--titoli); letter-spacing: 0.03em; padding-top: 3px; }
+.marchio svg { width: 22px; height: 34px; margin-top: -4px; }
+.badge-prova { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; padding: 3px 9px; border-radius: 99px; background: var(--arancio); color: #000; }
 .menu {
   grid-area: menu; display: flex; justify-content: space-around;
   background: var(--scheda); border-top: 1px solid var(--bordo);
@@ -55,7 +80,7 @@ a { color: var(--verde-scuro); }
   padding: 8px; border-radius: 10px; font-size: 0.9rem; min-height: 44px;
   display: flex; align-items: center; justify-content: center; gap: 6px;
 }
-.menu a[aria-current='page'] { color: var(--verde-scuro); font-weight: 600; background: color-mix(in srgb, var(--verde) 12%, transparent); }
+.menu a[aria-current='page'] { color: var(--su-selezione); font-weight: 600; background: var(--selezione); }
 .contenuto { grid-area: contenuto; padding: 16px; width: 100%; max-width: 720px; margin: 0 auto; }
 
 @media (min-width: 900px) {
@@ -70,10 +95,10 @@ a { color: var(--verde-scuro); }
   box-shadow: 0 2px 12px rgb(0 0 0 / 0.08);
   display: flex; flex-direction: column; gap: 12px;
 }
-button { font: inherit; min-height: 48px; border-radius: 12px; padding: 0 16px; cursor: pointer; border: 2px solid var(--verde); }
+button { font: inherit; min-height: 48px; border-radius: 12px; padding: 0 16px; cursor: pointer; border: 2px solid var(--pulsante); }
 button:disabled { opacity: 0.6; cursor: wait; }
-.primario { background: var(--verde); color: var(--su-verde); font-weight: 600; }
-.secondario { background: transparent; color: var(--verde-scuro); }
+.primario { background: var(--pulsante); color: var(--su-pulsante); font-weight: 600; }
+.secondario { background: transparent; color: var(--accento); border-color: currentColor; }
 .piccolo { min-height: 40px; padding: 0 12px; font-size: 0.95rem; }
 input, select {
   font: inherit; min-height: 44px; padding: 0 12px; width: 100%;
@@ -94,3 +119,9 @@ input, select {
 .comandi { display: flex; gap: 8px; flex-wrap: wrap; }
 .comandi select { flex: 1; min-width: 120px; width: auto; }
 .nuova { display: flex; flex-direction: column; gap: 8px; }
+
+/* Schermata di accesso con il marchio */
+.marchio-grande { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--accento); }
+.marchio-grande svg { width: 56px; height: 86px; }
+.marchio-grande strong { font: 2.4rem/1 var(--titoli); letter-spacing: 0.04em; color: var(--testo); }
+.marchio-grande span { font-size: 0.8rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--tenue); }

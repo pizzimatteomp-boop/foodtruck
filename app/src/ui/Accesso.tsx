@@ -2,6 +2,7 @@
 import { useState } from 'preact/hooks';
 import { accediConGoogle, esci, type Servizi } from '../firebase/accesso';
 import type { Ambiente } from '../firebase/config';
+import { LogoV } from './LogoV';
 import { messaggioErrore, vista, type StatoSchermata } from './schermata';
 
 export function Accesso({ stato, servizi, ambiente, onErrore }: {
@@ -33,6 +34,7 @@ export function Accesso({ stato, servizi, ambiente, onErrore }: {
   return (
     <div class="centro">
       <main class="scheda">
+        <div class="marchio-grande" aria-hidden="true"><LogoV /><strong>VEGMAN</strong><span>Streetfood superhero</span></div>
         <h1>{v.titolo}</h1>
         {v.righe.map((r) => <p key={r}>{r}</p>)}
         {v.codice && <code class="codice">{v.codice}</code>}
