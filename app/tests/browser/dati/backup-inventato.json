@@ -1,0 +1,22 @@
+{
+  "ingredients": [
+    { "id": "i-pan", "name": "Panino", "category": "Burger", "type": "consumable", "unit": "pz", "packageSize": 15, "priceArticleId": "a-pan", "priceFactor": 15 },
+    { "id": "i-olio", "name": "Olio di semi", "category": "Salse", "type": "consumable", "unit": "g", "priceArticleId": "a-olio", "priceFactor": 1000 },
+    { "id": "i-sale", "name": "Sale", "category": "Base", "type": "consumable", "unit": "g" }
+  ],
+  "products": [
+    { "id": "p-mayo", "name": "Mayo di prova", "kind": "component", "category": "Salse", "price": 0, "pct": 0, "yieldQty": 1000, "yieldUnit": "g",
+      "recipe": [{ "refType": "ingredient", "refId": "i-olio", "qty": 800 }, { "refType": "ingredient", "refId": "i-sale", "qty": 10 }] },
+    { "id": "p-burger", "name": "Burger di prova", "kind": "sellable", "category": "Burger", "price": 10, "pct": 50, "yieldQty": 1, "yieldUnit": "pz",
+      "recipe": [{ "refType": "ingredient", "refId": "i-pan", "qty": 1 }, { "refType": "product", "refId": "p-mayo", "qty": 40 }] },
+    { "id": "p-pane", "name": "Pane e olio", "kind": "sellable", "category": "Altro", "price": 4, "pct": 50, "yieldQty": 1, "yieldUnit": "pz",
+      "recipe": [{ "refType": "ingredient", "refId": "i-pan", "qty": 1 }, { "refType": "ingredient", "refId": "i-olio", "qty": 10 }] }
+  ],
+  "purchases": [
+    { "id": "r1", "invoiceId": "f1", "date": "2026-10-20", "supplier": "FORNITORE INVENTATO", "invoiceNumber": "1/A", "description": "PANINI X15", "qty": 2, "unit": "CO", "unitPrice": 6, "articleId": "a-pan" },
+    { "id": "r2", "invoiceId": "f1", "date": "2026-10-20", "supplier": "FORNITORE INVENTATO", "invoiceNumber": "1/A", "description": "OLIO LT 1", "qty": 5, "unit": "LT", "unitPrice": 3, "articleId": "a-olio" },
+    { "id": "r3", "invoiceId": "f2", "date": "2026-10-21", "supplier": "ALTRO", "invoiceNumber": "9", "description": "DETERSIVO", "qty": 1, "unit": "PZ", "unitPrice": 4 }
+  ],
+  "priceArticles": [{ "id": "a-pan", "name": "PANINI X15", "unit": "CO" }, { "id": "a-olio", "name": "OLIO LT 1", "unit": "LT" }],
+  "events": [], "salesHistory": [{ "id": "s1", "customerName": "Cliente inventato" }]
+}

@@ -10,6 +10,8 @@ Piano: «Super app VegMan · Piano fase 0» (Claude Docs).
 - `src/main.tsx`, `src/app/` — avvio, stato dell'accesso, pagine e menu per ruolo (`navigazione.ts`, indirizzi con #).
 - `src/ui/` — schermate in Preact: accesso, struttura con menu (in basso sul telefono, a lato sul computer), Home, Persone.
 - `public/` — icone, `manifest.webmanifest` (app installabile) e `sw.js` (service worker: app apribile senza rete).
+- `src/foodcost/` — modello dati (ingredienti, prodotti con ricette, articoli, acquisti) e calcolo di prezzi e food cost; `confronto-planner.test.ts` verifica che dia gli stessi numeri del codice di VegMan Planner.
+- `src/importazione/` — import una tantum dal backup di VegMan Planner (lettura, avvisi, salvataggio senza doppioni).
 - `src/persone/` — abilitare persone, cambiare ruolo, disattivare (controlli e accesso al database).
 - `firebase.json` — pubblicazione (Firebase Hosting, cache: pagina sempre aggiornata, file dell'app in cache per un anno) ed emulatore.
 - `firestore.rules` — regole di accesso al database per ruolo; provate in `tests/regole/` sull'emulatore Firestore.

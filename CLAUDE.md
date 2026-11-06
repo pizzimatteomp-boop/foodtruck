@@ -95,7 +95,12 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
 3. [x] Database: accesso Google, ruoli e regole definitive (27 test sull'emulatore), pannello «Persone» del titolare, prova completa nel browser, pubblicazione automatica su `vegman-prova` con l'account `github-pubblicazione`; primo accesso e profilo titolare di Matteo fatti il 6/11/2026
 4. [ ] Ingredienti, fatture e ricette (vedi sezione sopra), in due tappe:
    - 4a. [x] Base pulita: Preact, app installabile e apribile senza rete (service worker scritto a mano), menu tra le pagine per ruolo; prove nel browser sul pacchetto vero
-   - 4b. Import da VegMan Planner con verifica al centesimo del food cost, fatture XML/ZIP, tre categorie, collegamento articoli, pagina Ingredienti, editor ricette, storico mensile con grafici, avvisi
+   - 4b. In sotto-passi:
+     - 4b-1. [x] Motore del food cost (`app/src/foodcost/`) e import da Planner (`app/src/importazione/`, pagina «Importa»): verificato identico a Planner su 200 archivi inventati e sui 13 prodotti veri (6/11/2026). Unica differenza voluta: righe di fattura a quantità 0 non danno prezzo 0 €
+     - 4b-2. Pagina Ingredienti (fonti, €/kg, confezioni, categorie alimentare/packaging)
+     - 4b-3. Fatture XML/ZIP, tre categorie, collegamento articoli, acquisti manuali
+     - 4b-4. Ricette e prodotti con food cost mentre si scrive
+     - 4b-5. Storico mensile, grafici, avvisi
 5. [ ] Modulo fiscale di rete: accesso Fisconline, emissione, annullo, PDF, gestione errori, simulatore; con lo stesso accesso download mensile delle fatture ricevute e promemoria il 5 del mese
 6. [ ] App Android di prova (Capacitor) installata sullo smartphone di Matteo
 7. [ ] Matteo inserisce le credenziali sul telefono

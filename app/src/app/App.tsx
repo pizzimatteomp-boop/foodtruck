@@ -5,6 +5,7 @@ import type { Ambiente } from '../firebase/config';
 import type { Profilo } from '../firebase/profilo';
 import { Accesso } from '../ui/Accesso';
 import { Home } from '../ui/Home';
+import { Importa } from '../ui/Importa';
 import { Persone } from '../ui/Persone';
 import { Struttura } from '../ui/Struttura';
 import type { StatoSchermata } from '../ui/schermata';
@@ -37,8 +38,8 @@ export function App({ servizi, ambiente }: { servizi: Servizi; ambiente: Ambient
   const pagina = paginaDa(hash, stato.profilo.ruolo);
   return (
     <Struttura servizi={servizi} ambiente={ambiente} profilo={stato.profilo} pagina={pagina}>
-      {pagina.id === 'persone'
-        ? <Persone db={servizi.db} titolareUid={stato.uid} />
+      {pagina.id === 'persone' ? <Persone db={servizi.db} titolareUid={stato.uid} />
+        : pagina.id === 'importa' ? <Importa db={servizi.db} uid={stato.uid} />
         : <Home nome={stato.profilo.nome || stato.email} ruolo={stato.profilo.ruolo} />}
     </Struttura>
   );

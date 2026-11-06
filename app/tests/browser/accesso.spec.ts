@@ -127,3 +127,31 @@ test('scheda dell\'app installabile', async ({ request }) => {
   expect(m).toMatchObject({ name: 'VegMan', display: 'standalone', start_url: '/' });
   for (const i of m.icons) expect((await request.get(i.src)).ok()).toBe(true);
 });
+
+test('il titolare importa un backup di VegMan Planner e vede il food cost', async ({ page }) => {
+  await accedi(page, MATTEO);
+  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Importa' }).click();
+  const importa = page.getByRole('region', { name: 'Importa' });
+  await importa.getByLabel('File di backup (.json)').setInputFiles('tests/browser/dati/backup-inventato.json');
+  const conti = importa.getByRole('table', { name: 'Conteggi' });
+  await expect(conti.getByRole('row', { name: /Ingredienti/ })).toContainText('3');
+  await expect(conti.getByRole('row', { name: /Righe di fattura/ })).toContainText('3');
+  // Burger: panino 6/15 = 0,40 € + 40 g di Mayo (800 g olio a 3 €/L = 2,40 € su 1000 g → 0,096 €), sale senza prezzo
+  const fc = importa.getByRole('table', { name: 'Food cost' });
+  await expect(fc.getByRole('row', { name: /Burger di prova/ })).toContainText('0,50 €');
+  await expect(fc.getByRole('row', { name: /Burger di prova/ })).toContainText('incompleto');
+  // Pane e olio: 0,40 + 0,03 = 0,43 € su 4 € = 10,8%
+  await expect(fc.getByRole('row', { name: /Pane e olio/ })).toContainText('0,43 €');
+  await expect(fc.getByRole('row', { name: /Pane e olio/ })).toContainText('10,8%');
+  await expect(importa).toContainText('1 ingrediente su 3 non ha ancora un prezzo');
+  await expect(fc.getByRole('row', { name: /Burger di prova/ })).toContainText('manca 1 prezzo');
+  await importa.getByRole('button', { name: 'Importa in VegMan' }).click();
+  await expect(importa.getByRole('status')).toHaveText('Import completato.');
+  await importa.screenshot({ path: 'test-results/importa.png' });
+
+  // File sbagliato: messaggio chiaro
+  await importa.getByText('Oppure incolla il testo').click();
+  await importa.getByLabel('Testo del backup').fill('{"ciao":1}');
+  await importa.getByRole('button', { name: 'Leggi il testo' }).click();
+  await expect(importa.getByRole('alert')).toContainText('non sembra un backup');
+});

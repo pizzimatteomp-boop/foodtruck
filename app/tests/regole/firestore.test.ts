@@ -12,6 +12,8 @@ import {
 } from 'firebase/firestore';
 import { leggiProfilo } from '../../src/firebase/profilo';
 import { elencaPersone, preparaPersona, salvaPersona } from '../../src/persone/persone';
+import { leggiPlanner } from '../../src/importazione/planner';
+import { salvaImportPlanner } from '../../src/importazione/salva';
 
 let env: RulesTestEnvironment;
 
@@ -49,7 +51,9 @@ beforeEach(async () => {
     for (const [uid, p] of Object.entries(PERSONE)) await setDoc(doc(d, 'utenti', uid), p);
     await setDoc(doc(d, 'eventi', 'ev1'), { nome: 'Festa di Osimo' });
     await setDoc(doc(d, 'eventi', 'ev1', 'checklist', 'v1'), { voce: 'Friggitrice', fatto: false });
-    await setDoc(doc(d, 'ricette', 'r1'), { nome: 'Kebab' });
+    await setDoc(doc(d, 'prodotti', 'r1'), { nome: 'Kebab' });
+    await setDoc(doc(d, 'ingredienti', 'i1'), { nome: 'Ceci' });
+    await setDoc(doc(d, 'articoli', 'art1'), { nome: 'CECI 5 KG' });
     await setDoc(doc(d, 'acquisti', 'a1'), { fornitore: 'X', totale: 100 });
     await setDoc(doc(d, 'scontrini', 's1'), { tipo: 'V', totale: 1.5 });
     await setDoc(doc(d, 'movimenti', 'm1'), { tipo: 'scarto' });
@@ -112,16 +116,30 @@ describe('anagrafiche, acquisti, eventi', () => {
   it('il team legge eventi, checklist e ricette ma non li modifica', async () => {
     await assertSucceeds(getDoc(doc(db('luca'), 'eventi', 'ev1')));
     await assertSucceeds(getDoc(doc(db('luca'), 'eventi', 'ev1', 'checklist', 'v1')));
-    await assertSucceeds(getDoc(doc(db('luca'), 'ricette', 'r1')));
+    await assertSucceeds(getDoc(doc(db('luca'), 'prodotti', 'r1')));
+    await assertSucceeds(getDoc(doc(db('luca'), 'ingredienti', 'i1')));
     await assertFails(updateDoc(doc(db('luca'), 'eventi', 'ev1', 'checklist', 'v1'), { fatto: true }));
-    await assertFails(updateDoc(doc(db('anna'), 'ricette', 'r1'), { nome: 'Altro' }));
+    await assertFails(updateDoc(doc(db('anna'), 'prodotti', 'r1'), { nome: 'Altro' }));
+    await assertFails(setDoc(doc(db('luca'), 'ingredienti', 'i2'), { nome: 'X' }));
     await assertSucceeds(updateDoc(doc(db('matteo'), 'eventi', 'ev1'), { nome: 'Festa' }));
   });
 
-  it('fatture e prezzi d\'acquisto: solo il titolare', async () => {
-    await assertSucceeds(getDoc(doc(db('matteo'), 'acquisti', 'a1')));
-    await assertFails(getDoc(doc(db('anna'), 'acquisti', 'a1')));
-    await assertFails(getDoc(doc(db('luca'), 'acquisti', 'a1')));
+  it('fatture, articoli e prezzi d\'acquisto: solo il titolare', async () => {
+    for (const c of ['acquisti', 'articoli']) {
+      const id = c === 'acquisti' ? 'a1' : 'art1';
+      await assertSucceeds(getDoc(doc(db('matteo'), c, id)));
+      await assertFails(getDoc(doc(db('anna'), c, id)));
+      await assertFails(getDoc(doc(db('luca'), c, id)));
+      await assertFails(setDoc(doc(db('anna'), c, 'nuovo'), { x: 1 }));
+    }
+  });
+
+  it('registro degli import: lo scrive solo il titolare, firmato, e non si cambia', async () => {
+    const ref = await assertSucceeds(addDoc(collection(db('matteo'), 'importazioni'), { origine: 'planner', ...firma('matteo') }));
+    await assertFails(addDoc(collection(db('matteo'), 'importazioni'), { origine: 'altro', ...firma('matteo') }));
+    await assertFails(addDoc(collection(db('anna'), 'importazioni'), { origine: 'planner', ...firma('anna') }));
+    await assertFails(updateDoc(doc(db('matteo'), 'importazioni', ref.id), { origine: 'fatture' }));
+    await assertFails(getDoc(doc(db('luca'), 'importazioni', ref.id)));
   });
 });
 
@@ -233,5 +251,31 @@ describe('gestione persone dall\'app (modulo persone.ts)', () => {
   it('la cassa non può elencare né abilitare persone', async () => {
     await assertFails(elencaPersone(db('anna')));
     await assertFails(salvaPersona(db('anna'), UID_NUOVO, { ruolo: 'team', attivo: true, nome: 'X', email: '' }));
+  });
+});
+
+describe('import da VegMan Planner nel database', () => {
+  const backup = {
+    ingredients: [{ id: 'i-pan', name: 'Panino', unit: 'pz', priceArticleId: 'a-pan', priceFactor: 15 }],
+    products: [{ id: 'p-cas', name: 'Casciù', kind: 'sellable', price: 10, yieldQty: 1, recipe: [{ refType: 'ingredient', refId: 'i-pan', qty: 1 }] }],
+    purchases: [{ id: 'r1', date: '2026-05-14', supplier: 'METRO', description: 'PANINI', qty: 3, unit: 'CO', unitPrice: 13.8, articleId: 'a-pan' }],
+    priceArticles: [{ id: 'a-pan', name: 'PANINI', unit: 'CO' }],
+  };
+
+  it('il titolare importa; rifarlo non crea doppioni; il team vede ingredienti e prodotti ma non i prezzi', async () => {
+    const r = leggiPlanner(backup);
+    await salvaImportPlanner(db('matteo'), r, 'matteo');
+    await salvaImportPlanner(db('matteo'), r, 'matteo');
+    expect((await getDocs(collection(db('matteo'), 'acquisti'))).docs.filter((d) => d.id === 'r1')).toHaveLength(1);
+    expect((await getDoc(doc(db('matteo'), 'articoli', 'a-pan'))).data()).toMatchObject({ ingrediente: 'i-pan', fattore: 15 });
+    expect((await getDocs(collection(db('matteo'), 'importazioni'))).size).toBe(2);
+    await assertSucceeds(getDoc(doc(db('luca'), 'prodotti', 'p-cas')));
+    await assertSucceeds(getDoc(doc(db('luca'), 'ingredienti', 'i-pan')));
+    await assertFails(getDoc(doc(db('luca'), 'acquisti', 'r1')));
+    await assertFails(getDoc(doc(db('luca'), 'articoli', 'a-pan')));
+  });
+
+  it('la cassa non può importare', async () => {
+    await assertFails(salvaImportPlanner(db('anna'), leggiPlanner(backup), 'anna'));
   });
 });

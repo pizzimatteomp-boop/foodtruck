@@ -47,12 +47,22 @@ service cloud.firestore {
       allow delete: if titolare() && uid != request.auth.uid;
     }
 
-    // ---------- Anagrafiche ----------
+    // ---------- Ingredienti e prodotti (con le ricette) ----------
+    // Il team li legge per preparare: non contengono prezzi d'acquisto né costi.
     match /ingredienti/{id} { allow read: if team(); allow write: if titolare(); }
-    match /ricette/{id}     { allow read: if team(); allow write: if titolare(); }
     match /prodotti/{id}    { allow read: if team(); allow write: if titolare(); }
-    // Fatture e prezzi d'acquisto: solo il titolare.
+
+    // ---------- Prezzi: articoli dei fornitori e acquisti (righe di fattura) ----------
+    // Solo il titolare: da qui si calcolano prezzi e food cost.
+    match /articoli/{id}    { allow read, write: if titolare(); }
     match /acquisti/{id}    { allow read, write: if titolare(); }
+
+    // Registro degli import (Planner, fatture): si aggiunge e basta.
+    match /importazioni/{id} {
+      allow read: if titolare();
+      allow create: if titolare() && firmato() && nuovo().origine in ['planner', 'fatture'];
+      allow update, delete: if false;
+    }
 
     // ---------- Eventi e checklist ----------
     match /eventi/{id} {

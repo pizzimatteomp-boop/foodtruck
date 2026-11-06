@@ -125,3 +125,20 @@ input, select {
 .marchio-grande svg { width: 56px; height: 86px; }
 .marchio-grande strong { font: 2.4rem/1 var(--titoli); letter-spacing: 0.04em; color: var(--testo); }
 .marchio-grande span { font-size: 0.8rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--tenue); }
+
+/* Tabelle, campi file, avvisi */
+.campo { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+.campo input[type='file'] { padding: 10px; min-height: auto; font-weight: normal; }
+textarea { font: 0.9rem/1.4 ui-monospace, monospace; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--bordo); background: var(--scheda); color: var(--testo); margin: 8px 0; }
+details summary { cursor: pointer; color: var(--accento); }
+.scorri { overflow-x: auto; }
+.tabella { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.tabella th, .tabella td { padding: 8px 6px; border-bottom: 1px solid var(--bordo); text-align: left; vertical-align: top; }
+.tabella td { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tabella thead th { font-size: 0.8rem; color: var(--tenue); font-weight: 600; }
+.tabella thead th:not(:first-child) { text-align: right; }
+.tabella th[scope='row'] { font-weight: 500; }
+.incompleto { display: block; color: var(--errore); font-size: 0.8rem; }
+.avvisi { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.ok { padding: 10px 12px; border-radius: 10px; background: var(--selezione); color: var(--su-selezione); font-weight: 600; }
+.nota { font-size: 0.85rem; color: var(--tenue); }
