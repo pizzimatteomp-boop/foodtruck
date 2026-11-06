@@ -1,0 +1,9 @@
+# Dipendenze e file generati: si ricreano con npm ci / npm run build
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+# Mai nel repository
+.env
+.env.*

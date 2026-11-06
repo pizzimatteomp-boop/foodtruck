@@ -6,7 +6,7 @@
  * replicando i calcoli della pagina web dell'Agenzia (stesse regole di arrotondamento).
  *
  * Regole verificate con la prova reale del 6/11/2026 (vendita DCW2026/6535-7349 e
- * annullo DCW2026/6535-7686): vedi «Note tecniche documento commerciale online.md».
+ * annullo DCW2026/6535-7686): vedi CLAUDE.md, sezione «Documento commerciale online».
  *
  * Questo modulo è puro: non fa chiamate di rete, così è interamente testabile.
  */

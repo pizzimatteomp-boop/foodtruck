@@ -11,12 +11,15 @@ Piano: «Super app VegMan · Piano fase 0» (Claude Docs).
 
 ## Comandi
 ```
-npm install
-npm test        # test automatici
-npm run typecheck
+npm ci             # installa esattamente le librerie del package-lock
+npm run check      # controllo dei tipi + test con copertura minima (come su GitHub)
+npm test           # solo i test
+npm run test:watch # test che ripartono a ogni modifica
 ```
 
-I test girano anche su GitHub a ogni modifica della cartella `app/`.
+Su GitHub, a ogni modifica della cartella `app/`, partono in automatico: controllo dei tipi, test con copertura minima (modulo fiscale coperto al 100% delle righe) e controllo delle vulnerabilità note. Una volta al mese Dependabot propone l'aggiornamento delle librerie, solo per versioni uscite da almeno 14 giorni.
+
+Versione di Node: quella in `.nvmrc`.
 
 ## Sicurezza
 - Le credenziali Fisconline non entrano mai nel codice né nel database: restano cifrate sullo smartphone di cassa.

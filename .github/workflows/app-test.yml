@@ -22,26 +22,38 @@ concurrency:
 
 jobs:
   test:
-    name: Controllo tipi e test
+    name: Controllo tipi, test e sicurezza
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 22
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: app/.nvmrc
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - name: Installa le dipendenze
-        run: npm ci
+      - name: Installa le dipendenze (esattamente quelle del package-lock)
+        run: npm ci --no-audit --no-fund
 
       - name: Controllo dei tipi (TypeScript)
         run: npm run typecheck
 
-      - name: Test automatici (Vitest)
-        run: npm test
+      - name: Test automatici con copertura minima (Vitest)
+        run: npm run coverage
+
+      - name: Riepilogo copertura
+        if: always()
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            node -e "const t=require('./coverage/coverage-summary.json').total;console.log('| Misura | Copertura |\n|---|---|\n'+['lines','functions','branches','statements'].map(k=>'| '+k+' | '+t[k].pct+'% |').join('\n'))" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Vulnerabilità note nelle librerie dell'app
+        run: npm audit --omit=dev --audit-level=high
