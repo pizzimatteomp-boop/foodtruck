@@ -22,6 +22,16 @@ Repository delle app di **VegMan**, street food 100% vegetale di Matteo Pizzi (d
 - **Ruoli**: titolare (tutto), cassa (comande, scontrini, movimenti senza incasso, quadratura), team (eventi e checklist in lettura). Regole in `app/firestore.rules`, provate in `app/tests/regole/`; profilo in `/utenti/{uid}` con `ruolo` e `attivo`, assegnati solo dal titolare.
 - Fasi successive: economia eventi e checklist di carico → fatture, prezzi e food cost → comande e cassa → magazzino, lotti ed etichette.
 
+## Fatture, ingredienti e food cost (approvato da Matteo il 6/11/2026)
+Documento completo: «Super app VegMan · Fatture, ingredienti e food cost» (Claude Docs, https://claude.ai/artifact/Wifev4Vm7Ta2qULCPTrnYu).
+- **Giro mensile**: promemoria sul telefono Android il 5 del mese → l'app scarica le fatture ricevute dal cassetto fiscale (portale Fatture e Corrispettivi, stesso accesso Fisconline del DCO, solo dall'app Android) → riconosce gli articoli → aggiorna i prezzi → ricalcola il food cost. Riserva sempre disponibile: caricamento manuale di XML/ZIP. Le fatture non arrivano su altri programmi (né Aruba né commercialista).
+- **Righe di fattura in 3 categorie**: alimentare e **packaging** (entrambi nel food cost; il packaging entra nelle ricette a pezzi) e non alimentare (archiviato, fuori dal food cost). Articolo = fornitore + codice/descrizione; collegato una volta a un ingrediente con la quantità per confezione, poi si collega da solo. Tutto correggibile a mano (doppioni, errori); acquisti manuali per chi non fa fattura.
+- **Prezzo di un ingrediente** = media pesata degli acquisti degli **ultimi 60 giorni**, di tutte le fonti; senza acquisti recenti l'ultimo prezzo, segnato «vecchio»; senza prezzo il prodotto è «incompleto» con l'elenco di cosa manca. Semilavorati = costo ricetta / resa. Nessun arrotondamento intermedio.
+- **Storico**: ogni acquisto resta per sempre; a fine mese si salva la fotografia di prezzo per ingrediente e per fonte e del food cost di ogni prodotto. Grafici dell'andamento nel tempo per ingrediente e prodotto; avvisi su soglia di food cost (es. Kebab 30%) e su rincari mensili oltre una %.
+- **Pagine (solo titolare)**: Fatture, Ingredienti, Ricette e prodotti, Avvisi. Il team vede ricette e ingredienti senza prezzi né costi (garantito dalle regole del database).
+- **Scelte tecniche**: schermate con Preact; app installabile e apribile senza rete; fatture (XML e .p7m) lette sul dispositivo; dati veri mai nel repository (è pubblico), nei test solo dati inventati.
+- **VegMan Planner**: l'attività è ferma, il passaggio è semplice: un import una tantum delle cose utili (ingredienti, prodotti, ricette, fatture, articoli); le 89 comande storiche non si importano.
+
 ## Vendite e movimenti di prodotto (deciso il 6/11/2026)
 - **In Italia ogni vendita pagata ha il suo scontrino DCO**, emesso in automatico dalla comanda. Nessuna funzione per vendere senza scontrino e nessun archivio nascosto di vendite.
 - Movimenti **senza incasso**, tutti tracciati con motivo, persona, evento e ora, e scaricati dal magazzino:
@@ -77,8 +87,10 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
 1. [x] Progetti Firebase `vegman-prova` e `vegman-app` creati da Matteo
 2. [x] Struttura `app/`, modulo fiscale con 12 test, bozza regole Firestore, workflow GitHub
 3. [x] Database: accesso Google, ruoli e regole definitive (27 test sull'emulatore), pannello «Persone» del titolare, prova completa nel browser, pubblicazione automatica su `vegman-prova` con l'account `github-pubblicazione`; primo accesso e profilo titolare di Matteo fatti il 6/11/2026
-4. [ ] Import dei dati da VegMan Planner + controllo dei totali di food cost
-5. [ ] Modulo fiscale di rete: accesso Fisconline, emissione, annullo, PDF, gestione errori, simulatore
+4. [ ] Ingredienti, fatture e ricette (vedi sezione sopra), in due tappe:
+   - 4a. Base pulita: Preact, app installabile e offline, menu tra le pagine
+   - 4b. Import da VegMan Planner con verifica al centesimo del food cost, fatture XML/ZIP, tre categorie, collegamento articoli, pagina Ingredienti, editor ricette, storico mensile con grafici, avvisi
+5. [ ] Modulo fiscale di rete: accesso Fisconline, emissione, annullo, PDF, gestione errori, simulatore; con lo stesso accesso download mensile delle fatture ricevute e promemoria il 5 del mese
 6. [ ] App Android di prova (Capacitor) installata sullo smartphone di Matteo
 7. [ ] Matteo inserisce le credenziali sul telefono
 8. [ ] Vendita di prova + annullo dall'app, con via libera di Matteo
