@@ -5,6 +5,15 @@ export default defineConfig({
     // WebView Android recenti e Safari di iPhone/iPad: niente codice di compatibilità inutile.
     target: 'es2022',
     sourcemap: false,
+    // Firebase in un file a parte: cambia di rado e resta nella cache del telefono tra un aggiornamento e l'altro.
+    chunkSizeWarningLimit: 700,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [{ name: 'firebase', test: /node_modules[\\/](@firebase|firebase)[\\/]/ }],
+        },
+      },
+    },
   },
   test: {
     globals: true,
@@ -13,8 +22,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      // accesso.ts richiede un vero accesso Google: si prova nell'app, non qui.
-      exclude: ['src/**/*.test.ts', 'src/firebase/accesso.ts'],
+      // accesso.ts e main.ts richiedono un vero accesso Google: si provano nel browser, non qui.
+      exclude: ['src/**/*.test.ts', 'src/firebase/accesso.ts', 'src/main.ts', 'src/vite-env.d.ts'],
       reporter: ['text', 'json-summary'],
       // Soglie minime: se i test coprono meno codice di così, il controllo fallisce.
       // Il modulo fiscale deve restare coperto per intero (righe e funzioni).

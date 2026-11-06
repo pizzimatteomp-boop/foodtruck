@@ -7,3 +7,4 @@ coverage/
 # Mai nel repository
 .env
 .env.*
+.firebase/

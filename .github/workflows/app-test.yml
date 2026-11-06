@@ -48,6 +48,9 @@ jobs:
       - name: Test automatici con copertura minima (Vitest)
         run: npm run coverage
 
+      - name: Pacchetto da pubblicare (build)
+        run: npm run build
+
       - name: Riepilogo copertura
         if: always()
         run: |
@@ -92,3 +95,50 @@ jobs:
 
       - name: Test delle regole per ruolo
         run: npm run test:regole
+
+  # Pubblicazione su vegman-prova (https://vegman-prova.firebaseapp.com): schermate e regole del database.
+  # Solo da main e solo se tutti i controlli sono passati. vegman-app (dati veri) NON viene toccato.
+  pubblica-prova:
+    name: Pubblica su vegman-prova
+    needs: [test, regole]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: pubblica-prova
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: app/.nvmrc
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Installa le dipendenze
+        run: npm ci --no-audit --no-fund
+
+      - name: Pacchetto per l'ambiente di prova
+        run: npm run build
+        env:
+          VITE_AMBIENTE: prova
+
+      - name: Pubblica schermate e regole
+        env:
+          CHIAVE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_VEGMAN_PROVA }}
+        run: |
+          if [ -z "$CHIAVE" ]; then
+            echo "::warning::Manca la chiave FIREBASE_SERVICE_ACCOUNT_VEGMAN_PROVA: pubblicazione saltata."
+            exit 0
+          fi
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/chiave.json"
+          printf '%s' "$CHIAVE" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
+          npx firebase deploy --only hosting,firestore:rules --project vegman-prova --non-interactive
+          echo "Pubblicata su https://vegman-prova.firebaseapp.com" >> "$GITHUB_STEP_SUMMARY"

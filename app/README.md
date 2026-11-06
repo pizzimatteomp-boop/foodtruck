@@ -7,6 +7,8 @@ Piano: «Super app VegMan · Piano fase 0» (Claude Docs).
 ## Struttura
 - `src/fiscal/` — documento commerciale online dell'Agenzia delle Entrate: costruzione di vendite e annulli, con test sui casi reali.
 - `src/firebase/` — progetti Firebase (`config.ts`), accesso con Google e cache offline (`accesso.ts`), profilo della persona (`profilo.ts`), permessi per ruolo (`ruoli.ts`).
+- `src/ui/` e `src/main.ts`, `index.html` — schermata di accesso (Google, codice utente da mandare al titolare, ruolo).
+- `firebase.json` — pubblicazione (Firebase Hosting, cache: pagina sempre aggiornata, file dell'app in cache per un anno) ed emulatore.
 - `firestore.rules` — regole di accesso al database per ruolo; provate in `tests/regole/` sull'emulatore Firestore.
 
 ## Comandi
@@ -16,9 +18,13 @@ npm run check      # controllo dei tipi + test con copertura minima (come su Git
 npm test           # solo i test veloci
 npm run test:regole # regole del database sull'emulatore (serve Java 21)
 npm run test:watch # test che ripartono a ogni modifica
+npm run dev        # app sul computer (http://localhost:5173), ambiente di prova
+npm run build      # pacchetto da pubblicare in dist/
 ```
 
 Su GitHub, a ogni modifica della cartella `app/`, partono in automatico: controllo dei tipi, test con copertura minima (modulo fiscale coperto al 100% delle righe), controllo delle vulnerabilità note e test delle regole del database con tutti i ruoli. Una volta al mese Dependabot propone l'aggiornamento delle librerie, solo per versioni uscite da almeno 14 giorni.
+
+Pubblicazione: a ogni modifica su `main` che passa tutti i controlli, GitHub pubblica schermate e regole del database su **vegman-prova** (https://vegman-prova.firebaseapp.com), con la chiave `FIREBASE_SERVICE_ACCOUNT_VEGMAN_PROVA` salvata nei segreti del repository. `vegman-app` (dati veri) non viene mai pubblicato in automatico.
 
 Versione di Node: quella in `.nvmrc`.
 
