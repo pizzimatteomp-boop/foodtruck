@@ -139,6 +139,8 @@ jobs:
           fi
           printf '%s' "$CHIAVE" > "$RUNNER_TEMP/chiave.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/chiave.json" >> "$GITHUB_ENV"
+          # Dati pubblici della chiave (non segreti): servono a capire con quale account si pubblica.
+          jq -r '"Account: \(.client_email // "?") · progetto: \(.project_id // "?") · tipo: \(.type // "?")"' "$RUNNER_TEMP/chiave.json" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Pubblica le schermate
         if: env.GOOGLE_APPLICATION_CREDENTIALS != ''
