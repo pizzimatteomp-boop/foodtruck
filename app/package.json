@@ -20,7 +20,8 @@
   },
   "dependencies": {
     "bignumber.js": "11.1.5",
-    "firebase": "13.1.0"
+    "firebase": "13.1.0",
+    "preact": "11.0.1"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "6.0.0",

@@ -7,7 +7,9 @@ Piano: «Super app VegMan · Piano fase 0» (Claude Docs).
 ## Struttura
 - `src/fiscal/` — documento commerciale online dell'Agenzia delle Entrate: costruzione di vendite e annulli, con test sui casi reali.
 - `src/firebase/` — progetti Firebase (`config.ts`), accesso con Google e cache offline (`accesso.ts`), profilo della persona (`profilo.ts`), permessi per ruolo (`ruoli.ts`).
-- `src/ui/` e `src/main.ts`, `index.html` — schermata di accesso (Google, codice utente da mandare al titolare, ruolo) e pannello «Persone» del titolare.
+- `src/main.tsx`, `src/app/` — avvio, stato dell'accesso, pagine e menu per ruolo (`navigazione.ts`, indirizzi con #).
+- `src/ui/` — schermate in Preact: accesso, struttura con menu (in basso sul telefono, a lato sul computer), Home, Persone.
+- `public/` — icone, `manifest.webmanifest` (app installabile) e `sw.js` (service worker: app apribile senza rete).
 - `src/persone/` — abilitare persone, cambiare ruolo, disattivare (controlli e accesso al database).
 - `firebase.json` — pubblicazione (Firebase Hosting, cache: pagina sempre aggiornata, file dell'app in cache per un anno) ed emulatore.
 - `firestore.rules` — regole di accesso al database per ruolo; provate in `tests/regole/` sull'emulatore Firestore.

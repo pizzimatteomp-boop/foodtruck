@@ -65,6 +65,8 @@ test('persona nuova → abilitata dal titolare → entra con il ruolo cassa', as
   await accedi(matteo, MATTEO);
   await expect(matteo.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
   await expect(matteo.getByText('Ruolo: Titolare')).toBeVisible();
+  await matteo.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Persone' }).click();
+  await expect(matteo).toHaveURL(/#\/persone$/);
   const persone = matteo.getByRole('region', { name: 'Persone' });
   await expect(persone.getByText('Matteo · tu')).toBeVisible();
   await persone.getByLabel('Codice utente').fill(GIULIA.uid);
@@ -79,6 +81,11 @@ test('persona nuova → abilitata dal titolare → entra con il ruolo cassa', as
   await giulia.reload();
   await expect(giulia.getByRole('heading', { name: 'Ciao Giulia' })).toBeVisible();
   await expect(giulia.getByText('Ruolo: Cassa')).toBeVisible();
+  await expect(giulia.getByRole('region', { name: 'Persone' })).toHaveCount(0);
+  await expect(giulia.getByRole('navigation', { name: 'Menu' })).toHaveCount(0);
+  // Anche scrivendo l'indirizzo a mano, la cassa non entra nella pagina Persone.
+  await giulia.goto('/#/persone');
+  await expect(giulia.getByRole('heading', { name: 'Ciao Giulia' })).toBeVisible();
   await expect(giulia.getByRole('region', { name: 'Persone' })).toHaveCount(0);
 
   // 4. Il titolare la disattiva: al rientro torna «in attesa».
@@ -100,4 +107,23 @@ test('esci riporta alla schermata di accesso', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
   await page.getByRole('button', { name: 'Esci' }).click();
   await expect(page.getByRole('button', { name: 'Accedi con Google' })).toBeVisible();
+});
+
+test('l\'app si apre anche senza rete dopo la prima visita', async ({ page, context }) => {
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Accedi con Google' })).toBeVisible();
+  // Aspetta che il service worker abbia preso il controllo e salvato la pagina.
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Benvenuto in VegMan' })).toBeVisible();
+  await context.setOffline(false);
+});
+
+test('scheda dell\'app installabile', async ({ request }) => {
+  const m = await (await request.get('/manifest.webmanifest')).json();
+  expect(m).toMatchObject({ name: 'VegMan', display: 'standalone', start_url: '/' });
+  for (const i of m.icons) expect((await request.get(i.src)).ok()).toBe(true);
 });

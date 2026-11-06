@@ -10,3 +10,4 @@ coverage/
 .firebase/
 test-results/
 playwright-report/
+dist-prove/

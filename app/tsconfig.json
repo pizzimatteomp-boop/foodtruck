@@ -22,7 +22,9 @@
     "noImplicitReturns": true,
     "exactOptionalPropertyTypes": true,
     "verbatimModuleSyntax": true,
-    "noEmit": true
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
   },
   "include": [
     "src",

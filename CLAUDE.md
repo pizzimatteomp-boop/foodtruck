@@ -88,7 +88,7 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
 2. [x] Struttura `app/`, modulo fiscale con 12 test, bozza regole Firestore, workflow GitHub
 3. [x] Database: accesso Google, ruoli e regole definitive (27 test sull'emulatore), pannello «Persone» del titolare, prova completa nel browser, pubblicazione automatica su `vegman-prova` con l'account `github-pubblicazione`; primo accesso e profilo titolare di Matteo fatti il 6/11/2026
 4. [ ] Ingredienti, fatture e ricette (vedi sezione sopra), in due tappe:
-   - 4a. Base pulita: Preact, app installabile e offline, menu tra le pagine
+   - 4a. [x] Base pulita: Preact, app installabile e apribile senza rete (service worker scritto a mano), menu tra le pagine per ruolo; prove nel browser sul pacchetto vero
    - 4b. Import da VegMan Planner con verifica al centesimo del food cost, fatture XML/ZIP, tre categorie, collegamento articoli, pagina Ingredienti, editor ricette, storico mensile con grafici, avvisi
 5. [ ] Modulo fiscale di rete: accesso Fisconline, emissione, annullo, PDF, gestione errori, simulatore; con lo stesso accesso download mensile delle fatture ricevute e promemoria il 5 del mese
 6. [ ] App Android di prova (Capacitor) installata sullo smartphone di Matteo
