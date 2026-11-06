@@ -3,7 +3,7 @@ import type { Firestore } from 'firebase/firestore';
 import { useState } from 'preact/hooks';
 import { foodCost } from '../foodcost/calcolo';
 import { ErroreImport, leggiPlanner, type RisultatoImport } from '../importazione/planner';
-import { salvaImportPlanner } from '../importazione/salva';
+import { salvaImportPlanner } from '../importazione/salva.db';
 import { euro, percentuale } from './formato';
 
 const oggi = () => new Date().toISOString().slice(0, 10);

@@ -13,7 +13,8 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import { configPer, type Ambiente } from './config';
-import { leggiProfilo, type Profilo } from './profilo';
+import type { Profilo } from './profilo';
+import { leggiProfilo } from './profilo.db';
 
 export interface Servizi {
   app: FirebaseApp;

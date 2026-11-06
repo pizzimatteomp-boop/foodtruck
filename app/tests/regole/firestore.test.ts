@@ -10,11 +10,12 @@ import {
 import {
   addDoc, collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc, updateDoc, type Firestore,
 } from 'firebase/firestore';
-import { leggiProfilo } from '../../src/firebase/profilo';
-import { elencaPersone, preparaPersona, salvaPersona } from '../../src/persone/persone';
+import { leggiProfilo } from '../../src/firebase/profilo.db';
+import { preparaPersona } from '../../src/persone/persone';
+import { elencaPersone, salvaPersona } from '../../src/persone/persone.db';
 import { leggiPlanner } from '../../src/importazione/planner';
-import { salvaImportPlanner } from '../../src/importazione/salva';
-import { collegaArticolo, salvaIngrediente, unisciIngredienti } from '../../src/ingredienti/operazioni';
+import { salvaImportPlanner } from '../../src/importazione/salva.db';
+import { collegaArticolo, salvaIngrediente, unisciIngredienti } from '../../src/ingredienti/operazioni.db';
 import type { Articolo, Prodotto } from '../../src/foodcost/modello';
 
 let env: RulesTestEnvironment;

@@ -2,8 +2,7 @@
  * Gestione delle persone (solo titolare): abilitare chi ha fatto l'accesso, cambiare ruolo, disattivare.
  * Le regole del database (firestore.rules) impediscono comunque tutto ciò che qui non è previsto.
  */
-import { collection, doc, getDocs, setDoc, type Firestore } from 'firebase/firestore';
-import { profiloDa, type Profilo } from '../firebase/profilo';
+import type { Profilo } from '../firebase/profilo';
 import { eRuolo, type Ruolo } from '../firebase/ruoli';
 
 export class ErrorePersona extends Error {
@@ -52,11 +51,3 @@ export function ordinaPersone(persone: Profilo[]): Profilo[] {
     || a.nome.localeCompare(b.nome, 'it'));
 }
 
-export async function elencaPersone(db: Firestore): Promise<Profilo[]> {
-  const s = await getDocs(collection(db, 'utenti'));
-  return ordinaPersone(s.docs.map((d) => profiloDa(d.id, d.data())).filter((p): p is Profilo => p !== null));
-}
-
-export async function salvaPersona(db: Firestore, uid: string, dati: DatiPersona): Promise<void> {
-  await setDoc(doc(db, 'utenti', uid), dati);
-}

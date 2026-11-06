@@ -12,7 +12,8 @@ Piano: «Super app VegMan · Piano fase 0» (Claude Docs).
 - `public/` — icone, `manifest.webmanifest` (app installabile) e `sw.js` (service worker: app apribile senza rete).
 - `src/foodcost/` — modello dati (ingredienti, prodotti con ricette, articoli, acquisti) e calcolo di prezzi e food cost; `confronto-planner.test.ts` verifica che dia gli stessi numeri del codice di VegMan Planner.
 - `src/ingredienti/` — modifiche a ingredienti e collegamenti con gli articoli (conversioni, unione dei doppioni); `src/foodcost/unita.ts` e `somiglianza.ts` per prezzi leggibili, conversioni proposte e suggerimenti.
-- `src/dati/useRaccolta.ts` — lettura delle raccolte del database, sempre aggiornata e disponibile anche senza rete.
+- `*.db.ts` — il codice che legge e scrive nel database, provato sull'emulatore (`tests/regole`); il resto è logica pura coperta dai test veloci.
+- `src/dati/useRaccolta.db.ts` — lettura delle raccolte del database, sempre aggiornata e disponibile anche senza rete.
 - `src/importazione/` — import una tantum dal backup di VegMan Planner (lettura, avvisi, salvataggio senza doppioni).
 - `src/persone/` — abilitare persone, cambiare ruolo, disattivare (controlli e accesso al database).
 - `firebase.json` — pubblicazione (Firebase Hosting, cache: pagina sempre aggiornata, file dell'app in cache per un anno) ed emulatore.

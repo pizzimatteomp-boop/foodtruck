@@ -5,9 +5,8 @@ import { prezzoIngrediente } from '../foodcost/calcolo';
 import type { Articolo, CategoriaIngrediente } from '../foodcost/modello';
 import { suggerimenti } from '../foodcost/somiglianza';
 import { fattoreSuggerito } from '../foodcost/unita';
-import {
-  CATEGORIE, collegaArticolo, ErroreIngrediente, preparaFattore, preparaIngrediente, salvaIngrediente, unisciIngredienti,
-} from '../ingredienti/operazioni';
+import { CATEGORIE, ErroreIngrediente, preparaFattore, preparaIngrediente } from '../ingredienti/operazioni';
+import { collegaArticolo, salvaIngrediente, unisciIngredienti } from '../ingredienti/operazioni.db';
 import { dataItaliana, FINESTRA_GIORNI, oggi, TestoPrezzo, type DatiFoodCost } from './Ingredienti';
 
 type Esito = { testo: string; errore: boolean } | null;

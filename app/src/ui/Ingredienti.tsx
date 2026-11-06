@@ -4,7 +4,7 @@ import { useMemo, useState } from 'preact/hooks';
 import { prezzoIngrediente, type PrezzoIngrediente } from '../foodcost/calcolo';
 import type { Acquisto, Articolo, Ingrediente, Prodotto } from '../foodcost/modello';
 import { prezzoMostrato } from '../foodcost/unita';
-import { useRaccolta } from '../dati/useRaccolta';
+import { useRaccolta } from '../dati/useRaccolta.db';
 import { euro } from './formato';
 import { SchedaIngrediente } from './SchedaIngrediente';
 

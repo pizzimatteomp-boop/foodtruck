@@ -22,15 +22,15 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      // Schermate (*.tsx) e accesso Google: si provano nel browser (tests/browser), non qui.
-      exclude: ['src/**/*.test.ts', 'src/**/*.tsx', 'src/firebase/accesso.ts', 'src/vite-env.d.ts'],
+      // Schermate (*.tsx) e accesso Google si provano nel browser (tests/browser); il codice che legge e scrive
+      // nel database (*.db.ts) si prova sull'emulatore (tests/regole). Qui resta la logica pura.
+      exclude: ['src/**/*.test.ts', 'src/**/*.tsx', 'src/**/*.db.ts', 'src/firebase/accesso.ts', 'src/vite-env.d.ts'],
       reporter: ['text', 'json-summary'],
       // Soglie minime: se i test coprono meno codice di così, il controllo fallisce.
       // Il modulo fiscale deve restare coperto per intero (righe e funzioni).
       thresholds: {
-        // Le funzioni che leggono/scrivono nel database sono provate sull'emulatore (test:regole), non qui.
         lines: 90,
-        functions: 80,
+        functions: 90,
         'src/fiscal/**': { lines: 100, functions: 100, statements: 95, branches: 80 },
       },
     },
