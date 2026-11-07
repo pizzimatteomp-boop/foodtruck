@@ -47,6 +47,13 @@ Documento completo: «Super app VegMan · Fatture, ingredienti e food cost» (Cl
 ## Cassa: desideri di Matteo (7/11/2026, per la fase «comande e cassa»)
 - Interfaccia simile a **Billy** (con cui Matteo si è trovato bene); prodotti come pulsanti (già così nella Cassa · prova).
 - **Tastierino per importi liberi** (riga a prezzo diverso), come Billy.
+- Schermata di Billy (foto del 7/11/2026), da cui prendere l'impostazione, non la grafica:
+  - in alto le righe dello scontrino (nome, «1 pz × 10,00 €», totale riga), a righe alterne;
+  - barra «Totale (n pz) · importo» con freccia per emettere;
+  - campo «Descrizione» per la riga a importo libero;
+  - riga di tasti di pagamento CONT / ELET / N.R. (non riscosso) / INT;
+  - due pagine scorrevoli: (1) tastierino 0–9, «.», «×» (quantità) con una colonna di 4 prodotti preferiti; (2) ricerca, schede per gruppo (Tutte, Vegman, …) e griglia di prodotti a 4 colonne, colori per gruppo.
+  - Nella nostra: colori del marchio, prodotti e gruppi dalla pagina Prodotti, in più i movimenti senza incasso (omaggio, pasto staff, scarto…) e la quadratura.
 - **Fatture elettroniche** ai clienti che le chiedono (Billy lo fa): da studiare (invio allo SdI dal portale Fatture e Corrispettivi con lo stesso accesso Fisconline).
 
 ## Vendite e movimenti di prodotto (deciso il 6/11/2026)
