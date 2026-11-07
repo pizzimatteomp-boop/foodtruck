@@ -72,6 +72,46 @@ function intestazione(h: Record<string, string>, nome: string): string | undefin
   return k === undefined ? undefined : h[k];
 }
 
+const ENTITA: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: '\'' };
+export function decodifica(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (t, e: string) => {
+    if (e[0] === '#') return String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1)));
+    return ENTITA[e.toLowerCase()] ?? t;
+  });
+}
+
+export interface Ponte { tipo: 'modulo' | 'meta' | 'script'; url: string; metodo: 'GET' | 'POST'; campi: Record<string, string> }
+
+const AGENZIA = /^https:\/\/([a-z0-9-]+\.)*agenziaentrate\.gov\.it\//i;
+
+/**
+ * Pagina «ponte» che un browser attraverserebbe da solo: modulo che si invia da sé, meta refresh,
+ * rimando via script. Solo verso siti dell'Agenzia. null se la pagina non rimanda altrove.
+ */
+export function pontePagina(html: string, base: string): Ponte | null {
+  const assoluto = (u: string) => { try { const x = new URL(decodifica(u), base).toString(); return AGENZIA.test(x) ? x : null; } catch { return null; } };
+  if (/\.submit\(\s*\)|onload\s*=/i.test(html)) {
+    const f = /<form\b([^>]*)>([\s\S]*?)<\/form>/i.exec(html);
+    if (f) {
+      const a = attributi(f[1]!);
+      const url = assoluto(a.action ?? base);
+      if (url) {
+        const campi: Record<string, string> = {};
+        for (const m of f[2]!.matchAll(/<input\b([^>]*)>/gi)) {
+          const x = attributi(m[1]!);
+          if (x.name && !['submit', 'button', 'image', 'reset'].includes((x.type ?? '').toLowerCase())) campi[x.name] = decodifica(x.value ?? '');
+        }
+        return { tipo: 'modulo', url, metodo: (a.method ?? 'get').toUpperCase() === 'POST' ? 'POST' : 'GET', campi };
+      }
+    }
+  }
+  const meta = /<meta\b[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*content\s*=\s*["'][^"']*?url\s*=\s*([^"'>\s]+)/i.exec(html);
+  if (meta) { const url = assoluto(meta[1]!.replace(/^['"]|['"]$/g, '')); if (url) return { tipo: 'meta', url, metodo: 'GET', campi: {} }; }
+  const js = /(?:location\.(?:href\s*=|replace\(|assign\()|location\s*=)\s*["']([^"']+)["']/i.exec(html);
+  if (js) { const url = assoluto(js[1]!); if (url) return { tipo: 'script', url, metodo: 'GET', campi: {} }; }
+  return null;
+}
+
 function attributi(tag: string): Record<string, string> {
   const a: Record<string, string> = {};
   for (const m of tag.matchAll(/([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g)) {
@@ -198,9 +238,27 @@ export async function entraNelPortale(t: Traccia, c: Credenziali): Promise<void>
   if (dopo.stato === 404 || dopo.stato === 405 || dopo.stato >= 500) throw new PortaleCambiato(`L'accesso ha risposto ${dopo.stato}.`);
   if (dopo.stato >= 300) throw new AccessoRifiutato(codiceErrore(dopo.testo) ?? `risposta ${dopo.stato}`);
 
-  const home = await t.chiama('Fatture e Corrispettivi', { url: destinazione(pagina.url), metodo: 'GET' });
+  const home = await apriPagina(t, 'Fatture e Corrispettivi', destinazione(pagina.url));
   if (eLogin(home.url)) throw new PortaleCambiato('Dopo l\'accesso il portale chiede di nuovo le credenziali (sessione non tenuta).');
-  if (!/to=FATBTB/.test(destinazione(pagina.url))) await t.chiama('Fatture e Corrispettivi', { url: `${PORTALE}/PortaleWeb/home?to=FATBTB`, metodo: 'GET' });
+  if (!/to=FATBTB/.test(destinazione(pagina.url))) await apriPagina(t, 'Fatture e Corrispettivi', `${PORTALE}/PortaleWeb/home?to=FATBTB`);
+  // Nel browser PortaleWeb rimanda qui: è la pagina che apre la sessione su ivaservizi.
+  await apriPagina(t, 'Ingresso servizi IVA', `${IVASERVIZI}/instr/InstradamentofcWeb/home`).catch(() => undefined);
+}
+
+/** Apre una pagina come un browser: attraversa fino a 6 pagine ponte (moduli automatici, meta refresh, script). */
+export async function apriPagina(t: Traccia, passo: string, url: string): Promise<RispostaWeb> {
+  let r = await t.chiama(passo, { url, metodo: 'GET' });
+  for (let i = 1; i <= 6; i++) {
+    const p = /html/i.test(intestazione(r.intestazioni, 'content-type') ?? '') ? pontePagina(r.testo, r.url) : null;
+    const ultimo = t.passi[t.passi.length - 1]!;
+    if (!p) {
+      if (/html/i.test(ultimo.tipo ?? '')) ultimo.nota = `titolo «${/<title[^>]*>([\s\S]*?)<\/title>/i.exec(r.testo)?.[1]?.replace(/\s+/g, ' ').trim().slice(0, 60) ?? '-'}», nessun rimando nella pagina`;
+      return r;
+    }
+    ultimo.nota = `ponte (${p.tipo}) → ${senzaParametri(p.url)}${Object.keys(p.campi).length ? `; campi: ${Object.keys(p.campi).join(', ')}` : ''}`;
+    r = await t.chiama(`${passo} · ponte ${i}`, p.metodo === 'POST' ? { url: p.url, metodo: 'POST', modulo: p.campi } : { url: p.url, metodo: 'GET' });
+  }
+  return r;
 }
 
 /** Scelta dell'utenza «Me stesso» in Fatture e Corrispettivi. */

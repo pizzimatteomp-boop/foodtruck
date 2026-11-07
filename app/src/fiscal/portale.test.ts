@@ -2,21 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { webNativo, type OpzioniHttp } from './nativo';
 import {
   AccessoRifiutato, accediPortale, codiceErrore, destinazione, eLogin, ggmmaaaa, IVASERVIZI, letturaDiProva, partitaIvaDa,
-  messaggioSicuro, PortaleCambiato, PORTALE, senzaParametri, strutturaPagina, Traccia, type RichiestaWeb, type RispostaWeb,
+  messaggioSicuro, PortaleCambiato, PORTALE, apriPagina, decodifica, pontePagina, senzaParametri, strutturaPagina, Traccia, type RichiestaWeb, type RispostaWeb,
 } from './portale';
 import { ErroreRete } from './trasporto';
 
 // Tutto inventato: nessuna credenziale vera, nessun portale vero.
 const CRED = { codiceFiscale: 'XXXXXX00X00X000X', password: 'Segreta!123', pin: '9876543210' };
-const SEGRETI = [CRED.codiceFiscale, CRED.password, CRED.pin, 'COOKIE-SEGRETO', 'TOKEN-SEGRETO', 'B2B-SEGRETO'];
+const SEGRETI = [CRED.codiceFiscale, CRED.password, CRED.pin, 'COOKIE-SEGRETO', 'TOKEN-SEGRETO', 'B2B-SEGRETO', 'LARES-SEGRETO'];
 const LOGIN = `https://iampe.agenziaentrate.gov.it/sam/UI/Login?realm=/agenziaentrate&goto=${encodeURIComponent('https://portale.agenziaentrate.gov.it/PortaleWeb/home?to=FATBTB')}`;
 const SPA = '<!doctype html><html><head><title>Agenzia delle Entrate - Area riservata</title></head><body><script defer src="/loginam/dist/js/app.bundle.min.js"></script></body><div id="root"></div></html>';
 
-type Opzioni = { rifiuta?: string; sceltaSoloModulo?: boolean; altraPagina?: boolean; senzaToken?: boolean; sessionePersa?: boolean; erroreAccesso?: number; erroreScelta?: boolean };
+type Opzioni = { senzaPonte?: boolean; rifiuta?: string; sceltaSoloModulo?: boolean; altraPagina?: boolean; senzaToken?: boolean; sessionePersa?: boolean; erroreAccesso?: number; erroreScelta?: boolean };
 
 function portaleFinto(o: Opzioni = {}) {
   const viste: RichiestaWeb[] = [];
   let dentro = false;
+  let dentroIva = false;
   let scelto = false;
   const r = (stato: number, url: string, testo = '', intestazioni: Record<string, string> = {}): RispostaWeb => ({ stato, url, intestazioni: { 'Content-Type': testo.startsWith('{') || testo.startsWith('[') ? 'application/json;charset=UTF-8' : 'text/html', 'Set-Cookie': 'S=COOKIE-SEGRETO', ...intestazioni }, testo });
   const web = async (q: RichiestaWeb): Promise<RispostaWeb> => {
@@ -34,7 +35,11 @@ function portaleFinto(o: Opzioni = {}) {
       return r(200, q.url, '{"ok":true}');
     }
     if (!dentro) return r(200, LOGIN, SPA);
-    if (p === '/PortaleWeb/home') return r(200, `${IVASERVIZI}/instr/InstradamentofcWeb/home`, '<html>instr</html>');
+    // Come OpenAM: la sessione su ivaservizi si apre solo attraversando la pagina ponte (modulo automatico con gettone).
+    if (p === '/PortaleWeb/home') return r(200, q.url, o.senzaPonte ? '<html><title>Home</title></html>' : `<html><body onload="document.forms[0].submit()"><form method="post" action="${IVASERVIZI}/agent/cdsso"><input type="hidden" name="LARES" value="LARES&#x2D;SEGRETO"><input type="submit" value="Continua"></form></body></html>`);
+    if (p === '/agent/cdsso' && q.metodo === 'POST') { dentroIva = q.modulo?.LARES === 'LARES-SEGRETO'; return r(200, q.url, '<html><head><meta http-equiv="refresh" content="0;url=/instr/InstradamentofcWeb/home"></head></html>'); }
+    if (p === '/instr/InstradamentofcWeb/home') return r(200, q.url, '<html><title>Fatture e Corrispettivi</title></html>');
+    if (!dentroIva && !o.senzaPonte) return r(403, q.url, '<html>Forbidden</html>');
     if (p.endsWith('/rs/initLight')) return r(200, q.url, '{"ok":true}');
     if (p.endsWith('/rs/infouser-fc')) return r(200, q.url, '{"utente":{"cf":"XXXXXX00X00X000X","nome":"PROVA"},"incarichi":[{"pIva":"11111111111"}]}');
     if (p.endsWith('/rs/wizardTemplate')) return r(200, q.url, '<div>scelta</div>');
@@ -62,6 +67,31 @@ const nessunSegreto = (t: Traccia) => {
   const tutto = JSON.stringify(t.passi) + t.testo();
   for (const s of SEGRETI) expect(tutto).not.toContain(s);
 };
+
+describe('pagine ponte', () => {
+  const B = 'https://portale.agenziaentrate.gov.it/x';
+  it('modulo automatico, meta refresh, script; solo siti dell\'Agenzia', () => {
+    expect(pontePagina('<body onload="x()"><form action="https://ivaservizi.agenziaentrate.gov.it/a?b=1&amp;c=2"><input name="k" value="v&#43;&quot;&#x41;&lt;&nbsp;"><input type="submit" name="s"><input value="senza"></form>', B))
+      .toEqual({ tipo: 'modulo', url: 'https://ivaservizi.agenziaentrate.gov.it/a?b=1&c=2', metodo: 'GET', campi: { k: 'v+"A<&nbsp;' } });
+    expect(pontePagina('<script>document.forms[0].submit()</script><form method="POST"></form>', B)).toEqual({ tipo: 'modulo', url: B, metodo: 'POST', campi: {} });
+    expect(pontePagina('<body onload="x()"><form action="https://cattivo.it/"></form>', B)).toBeNull();
+    expect(pontePagina('<body onload="x()">niente</body>', B)).toBeNull();
+    expect(pontePagina('<meta http-equiv="Refresh" content="0; URL=/y">', B)).toEqual({ tipo: 'meta', url: 'https://portale.agenziaentrate.gov.it/y', metodo: 'GET', campi: {} });
+    expect(pontePagina('<meta http-equiv="refresh" content="0;url=https://cattivo.it/">', B)).toBeNull();
+    expect(pontePagina('<script>window.location.href = "https://ivaservizi.agenziaentrate.gov.it/z"</script>', B)?.url).toBe('https://ivaservizi.agenziaentrate.gov.it/z');
+    expect(pontePagina("<script>location.replace('/w')</script>", B)?.tipo).toBe('script');
+    expect(pontePagina("<script>location='http://[rotto'</script>", B)).toBeNull();
+    expect(pontePagina('<html>normale</html>', B)).toBeNull();
+    expect(decodifica('&amp;&#65;&#x42;&zzz;')).toBe('&AB&zzz;');
+  });
+
+  it('una catena di ponti si ferma a 6', async () => {
+    let n = 0;
+    const t = new Traccia(async (q) => { n++; return { stato: 200, url: q.url, intestazioni: { 'content-type': 'text/html' }, testo: '<meta http-equiv="refresh" content="0;url=/ancora">' }; });
+    await apriPagina(t, 'Giro', 'https://portale.agenziaentrate.gov.it/inizio');
+    expect(n).toBe(7);
+  });
+});
 
 describe('accesso: pezzi', () => {
   it('codice d\'errore, destinazione, indirizzi senza parametri, pagina di accesso, data di Roma', () => {
@@ -116,12 +146,23 @@ describe('accesso al portale (finto) e letture di prova', () => {
     expect(viste.find((v) => v.url.includes('/rs/fe/ricevute/'))!.url).toContain('/dal/08102026/al/07112026/ricerca/ricezione');
     expect(viste[1]).toMatchObject({ metodo: 'POST', url: 'https://iampe.agenziaentrate.gov.it/api/login/telematico' });
     expect(viste[2]!.url).toBe('https://portale.agenziaentrate.gov.it/PortaleWeb/home?to=FATBTB');
+    expect(t.testo()).toContain('ponte (modulo) → ivaservizi.agenziaentrate.gov.it/agent/cdsso; campi: LARES');
+    expect(t.testo()).toContain('Fatture e Corrispettivi · ponte 1 · POST ivaservizi.agenziaentrate.gov.it/agent/cdsso → 200 [text/html] · ponte (meta) → ivaservizi.agenziaentrate.gov.it/instr/InstradamentofcWeb/home');
+    expect(t.testo()).toContain('titolo «Fatture e Corrispettivi», nessun rimando nella pagina');
     expect(t.testo()).toContain('2. Invio credenziali · POST iampe.agenziaentrate.gov.it/api/login/telematico → 200 [application/json] · chiavi: ok');
     expect(t.testo()).toContain('x-b2bcookie presente, x-token presente');
     expect(t.testo()).toContain('2 fatture');
     expect(t.testo()).toContain('chiavi: utente, incarichi');
     expect(t.testo()).toContain('→ ivaservizi.agenziaentrate.gov.it/instr/InstradamentofcWeb/home');
     nessunSegreto(t);
+  });
+
+  it('senza pagina ponte, e con l\'ingresso ai servizi IVA che non risponde: si va avanti', async () => {
+    const base = portaleFinto({ senzaPonte: true });
+    const t = new Traccia(async (q) => { if (q.url.includes('InstradamentofcWeb')) throw new ErroreRete('giù'); return base.web(q); });
+    await accediPortale(t, CRED);
+    expect(t.testo()).toContain('titolo «Home», nessun rimando nella pagina');
+    expect(t.testo()).toContain('Ingresso servizi IVA · GET ivaservizi.agenziaentrate.gov.it/instr/InstradamentofcWeb/home → rete');
   });
 
   it('scelta dell\'utenza accettata solo come modulo: riprova in quel formato', async () => {
