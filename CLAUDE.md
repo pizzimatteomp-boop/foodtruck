@@ -90,6 +90,17 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
 - **Senza rete** non si emette: serve il registro di emergenza (da gestire nell'app) e la regolarizzazione dopo.
 - Da verificare nel prototipo: durata della sessione del portale, scadenza della password Fisconline.
 
+## Fatture e Corrispettivi: cosa sappiamo (studio nel browser del 7/11/2026)
+Solo consultazione, nessun valore personale annotato. Adesione al servizio di consultazione attiva dal 18/04/2023 (non revocata).
+- Accesso: tratto da «Accedi» al portale non registrato (lo strumento perde le richieste tra domini); noti solo i campi `IDToken1/2/3`. Da studiare sul telefono (5b). Un cambio password manda a `/PortaleWeb/home` invece che a Fatture e Corrispettivi.
+- Ingresso: `PortaleWeb/home?to=FATBTB`. Scelta utenza automatica: `POST /instr/instradamento-fatture-rest/rs/setUserChoice` con `tipoutenza=meStesso` (altre: `delegaDiretta`, `delMassiva`), `cf`, `pIva` (nomi dal codice della pagina).
+- Prima delle chiamate: `GET /cons/cons-services/sc/tokenB2BCookie/get` → header `x-b2bcookie` e `x-token`, da rimandare a ogni richiesta (senza: 409).
+- Elenco ricevute: `GET /cons/cons-services/rs/fe/ricevute/dal/{ggmmaaaa}/al/{ggmmaaaa}/ricerca/ricezione?v={timestamp}` (oppure `.../ricerca/emissione`). **Massimo 93 giorni estremi compresi**: oltre risponde 200 con elenco vuoto senza errore → spezzare i periodi.
+- Identificativo: `idFattura` (11 cifre); dettaglio e file con `tipoInvio`+`idFattura` (es. `FPR…`).
+- File: `GET /cons/cons-services/rs/fatture/file/{FPR…}?tipoFile=FILE_FATTURA&download=1` (stessi header) → .xml.p7m CAdES anche se Content-Type dice `application/xml`. Lo scaricamento non cambia la «presa visione».
+- Download massivo (`/cons/mass-web/#/richieste/fatture`): richiesta asincrona da preparare e scaricare dopo; non serve per il giro mensile.
+- Durata della sessione: verifica in corso (7/11/2026).
+
 ## Dati utili
 - Google Sheet «foodtruck» (ID `1VaprnuFm5gY2Mlorrv9zFS4C7KSW65Nq2wxEKDs8cjo`): scheda **Data**, cella A1 = JSON completo di VegMan Planner (fonte dell'import); schede Ricette, Prodotti, Ingredienti, Acquisti, Comande.
 - Scontrini DCO 2026: 6.751, 104.491 € IVA inclusa, scontrino medio 15,48 €.
@@ -114,6 +125,9 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
    - 5b. [ ] Accesso Fisconline (login, scelta utenza «Me stesso»), da studiare nei dettagli dopo il login e provare solo sul telefono
    - 5c. [ ] Download fatture ricevute dal portale Fatture e Corrispettivi: indirizzi da studiare con Matteo (brief in chat del 7/11/2026)
 6. [ ] App Android di prova (Capacitor) installata sullo smartphone di Matteo
+   - 6a. [x] Trasporto HTTP nativo (`app/src/fiscal/nativo.ts`) e archivio invii sul telefono (`archivioSuDispositivo`)
+   - 6b. [ ] Progetto `app/android/` (appId `it.vegman.app`, backup disattivato), accesso Google nativo (`@capacitor-firebase/authentication`, poi `signInWithCredential`), APK firmato costruito da GitHub (job «App Android», segreti `ANDROID_KEYSTORE_BASE64` e `ANDROID_KEYSTORE_PASSWORD`, la chiave non è mai nel repository). Manca: segreti caricati da Matteo, app Android registrata in Firebase `vegman-prova` e `google-services.json`
+   - 6c. [ ] Cassaforte credenziali (Keystore, `@aparajita/capacitor-secure-storage`) e pagina «Cassa · prova» sul simulatore
 7. [ ] Matteo inserisce le credenziali sul telefono
 8. [ ] Vendita di prova + annullo dall'app, con via libera di Matteo
 9. [ ] Verifica di sessione, errori di rete, ripresa senza doppioni; resoconto

@@ -136,6 +136,79 @@ jobs:
         env:
           CI: true
 
+  # App Android di cassa (Capacitor). Firmata con la chiave nei segreti di GitHub; senza chiave si controlla solo che si costruisca.
+  # Da main l'APK firmato si scarica da GitHub > Actions > questa esecuzione > «VegMan-android».
+  android:
+    name: App Android (APK)
+    needs: [test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: app/.nvmrc
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Installa le dipendenze
+        run: npm ci --no-audit --no-fund
+
+      - name: Pacchetto per l'ambiente di prova e copia nel progetto Android
+        run: npm run build && npx cap sync android
+        env:
+          VITE_AMBIENTE: prova
+
+      - name: Prepara la chiave di firma
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KP: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KS" ] || [ -z "$KP" ]; then
+            echo "::warning::Manca la chiave di firma Android: costruisco solo la versione di controllo, niente APK da installare."
+            exit 0
+          fi
+          printf '%s' "$KS" | base64 -d > "$RUNNER_TEMP/vegman.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/vegman.jks" >> "$GITHUB_ENV"
+
+      - name: Costruisci l'APK
+        working-directory: app/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_FILE" ]; then
+            ./gradlew --no-daemon assembleRelease
+            mkdir -p "$RUNNER_TEMP/apk" && cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/apk/VegMan-prova-${GITHUB_RUN_NUMBER}.apk"
+            "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$RUNNER_TEMP/apk/"*.apk | grep -E "SHA-1|SHA-256" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            ./gradlew --no-daemon assembleDebug
+          fi
+
+      - name: APK da scaricare
+        if: env.ANDROID_KEYSTORE_FILE != '' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v5
+        with:
+          name: VegMan-android
+          path: ${{ runner.temp }}/apk/*.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Cancella la chiave dal computer di GitHub
+        if: always()
+        run: rm -f "$RUNNER_TEMP/vegman.jks"
+
   # Pubblicazione su vegman-prova (https://vegman-prova.firebaseapp.com): schermate e regole del database.
   # Solo da main e solo se tutti i controlli sono passati. vegman-app (dati veri) NON viene toccato.
   pubblica-prova:

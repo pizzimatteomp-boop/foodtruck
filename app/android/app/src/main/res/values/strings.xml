@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VegMan</string>
+    <string name="title_activity_main">VegMan</string>
+    <string name="package_name">it.vegman.app</string>
+    <string name="custom_url_scheme">it.vegman.app</string>
+</resources>

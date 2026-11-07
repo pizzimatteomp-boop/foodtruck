@@ -3,6 +3,7 @@
  * Firestore usa la cache offline: l'app continua a funzionare senza rete e sincronizza dopo.
  * Provato a mano nell'app (serve un vero accesso Google); la logica testabile sta in profilo.ts e ruoli.ts.
  */
+import { Capacitor } from '@capacitor/core';
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   browserLocalPersistence, connectAuthEmulator, getAuth, GoogleAuthProvider, onAuthStateChanged, setPersistence,
@@ -45,6 +46,15 @@ export function avviaFirebase(ambiente: Ambiente, opzioni: { emulatori?: boolean
 }
 
 export async function accediConGoogle({ auth }: Servizi): Promise<User> {
+  // Nell'app Android la finestra di Google del sito non funziona: si usa l'accesso nativo del telefono
+  // e il suo token entra in Firebase come per il sito.
+  if (Capacitor.isNativePlatform()) {
+    const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+    const r = await FirebaseAuthentication.signInWithGoogle();
+    const idToken = r.credential?.idToken;
+    if (!idToken) throw new Error('Accesso con Google non completato.');
+    return (await signInWithCredential(auth, GoogleAuthProvider.credential(idToken))).user;
+  }
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   return (await signInWithPopup(auth, provider)).user;
@@ -59,7 +69,11 @@ export async function accediProva({ auth }: Servizi, u: { sub: string; email: st
   return (await signInWithCredential(auth, GoogleAuthProvider.credential(token))).user;
 }
 
-export function esci({ auth }: Servizi): Promise<void> {
+export async function esci({ auth }: Servizi): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+    await FirebaseAuthentication.signOut().catch(() => undefined);
+  }
   return signOut(auth);
 }
 

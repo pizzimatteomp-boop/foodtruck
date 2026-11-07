@@ -1,5 +1,6 @@
 /** Avvio dell'app. */
 import { render } from 'preact';
+import { Capacitor } from '@capacitor/core';
 import { App } from './app/App';
 import { accediProva, avviaFirebase } from './firebase/accesso';
 import type { Ambiente } from './firebase/config';
@@ -17,7 +18,8 @@ if (emulatori) {
 }
 
 // App installabile e apribile senza rete: il service worker conserva le pagine dell'app.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+// Nell'app Android le pagine sono già dentro il pacchetto: niente service worker.
+if (import.meta.env.PROD && 'serviceWorker' in navigator && !Capacitor.isNativePlatform()) {
   window.addEventListener('load', () => void navigator.serviceWorker.register('/sw.js'));
 }
 
