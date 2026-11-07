@@ -23,6 +23,7 @@ import { pianoFatture } from '../../src/fatture/piano';
 import { salvaAcquistoManuale, salvaFatture } from '../../src/fatture/salva.db';
 import { eliminaProdotto, salvaProdotto } from '../../src/prodotti/operazioni.db';
 import { pubblicaMenu } from '../../src/menu/menu.db';
+import { salvaFotografia, salvaSogliaRincaro } from '../../src/storico/storico.db';
 import { preparaAcquistoManuale } from '../../src/fatture/manuale';
 
 let env: RulesTestEnvironment;
@@ -400,5 +401,22 @@ describe('menu pubblico', () => {
     await assertFails(setDoc(doc(db('matteo'), 'menu', 'altro'), { voci: [], aggiornatoIl: serverTimestamp(), aggiornatoDa: 'matteo' }));
     await assertFails(setDoc(doc(db('matteo'), 'menu', 'pubblico'), { voci: [], aggiornatoIl: serverTimestamp(), aggiornatoDa: 'matteo', costi: 1 }));
     await assertFails(deleteDoc(doc(db('matteo'), 'menu', 'pubblico')));
+  });
+});
+
+describe('storico e impostazioni', () => {
+  const f = { mese: '2026-10', ingredienti: { i1: { nome: 'Ceci', unita: 'g', prezzo: 0.002, stato: 'recente' } }, prodotti: {} };
+  it('fotografia: la salva il titolare una volta, poi non si cambia; gli altri non la vedono', async () => {
+    await salvaFotografia(db('matteo'), f, 'matteo');
+    await assertFails(salvaFotografia(db('matteo'), { ...f, prodotti: { x: { nome: 'x', prezzo: 1, costo: 0, percentuale: 0, completo: true } } }, 'matteo'));
+    await assertFails(deleteDoc(doc(db('matteo'), 'storico', '2026-10')));
+    await assertFails(salvaFotografia(db('matteo'), { ...f, mese: 'ottobre' }, 'matteo'));
+    await assertFails(getDoc(doc(db('anna'), 'storico', '2026-10')));
+    await assertFails(salvaFotografia(db('anna'), { ...f, mese: '2026-09' }, 'anna'));
+  });
+  it('soglia dei rincari: solo il titolare, tra 1 e 100', async () => {
+    await salvaSogliaRincaro(db('matteo'), 15);
+    await assertFails(salvaSogliaRincaro(db('matteo'), 0));
+    await assertFails(salvaSogliaRincaro(db('anna'), 15));
   });
 });

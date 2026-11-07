@@ -8,6 +8,7 @@ import { prezzoMostrato } from '../foodcost/unita';
 import { ALIQUOTE, ErroreProdotto, preparaProdotto, usatoIn } from '../prodotti/operazioni';
 import { eliminaProdotto, salvaProdotto } from '../prodotti/operazioni.db';
 import { TestoLista } from './Allergeni';
+import { AndamentoFoodCost } from './Andamenti';
 import { euro, percentuale } from './formato';
 import { FINESTRA_GIORNI, oggi } from './Ingredienti';
 import type { DatiProdotti } from './Prodotti';
@@ -173,6 +174,8 @@ export function SchedaProdotto({ db, id, dati }: { db: Firestore; id: string | n
         <button type="submit" class="primario">{id ? 'Salva' : 'Crea prodotto'}</button>
         <p role="status" class={esito?.errore ? 'esito errore' : 'esito'}>{esito?.testo ?? ''}</p>
       </form>
+
+      {esistente && esistente.tipo === 'vendibile' && <AndamentoFoodCost db={db} prodotto={esistente} dati={dati} />}
 
       {id && (
         <details>

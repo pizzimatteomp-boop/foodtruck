@@ -5,6 +5,7 @@ import type { Ambiente } from '../firebase/config';
 import type { Profilo } from '../firebase/profilo';
 import { Accesso } from '../ui/Accesso';
 import { Allergeni } from '../ui/Allergeni';
+import { Avvisi, FotografiaAutomatica } from '../ui/Avvisi';
 import { Fatture } from '../ui/Fatture';
 import { GestioneMenu } from '../ui/GestioneMenu';
 import { MenuPubblico } from '../ui/MenuPubblico';
@@ -46,9 +47,11 @@ export function App({ servizi, ambiente }: { servizi: Servizi; ambiente: Ambient
   const pagina = paginaDa(hash, stato.profilo.ruolo);
   return (
     <Struttura servizi={servizi} ambiente={ambiente} profilo={stato.profilo} pagina={pagina}>
+      {stato.profilo.ruolo === 'titolare' && <FotografiaAutomatica db={servizi.db} uid={stato.uid} />}
       {pagina.id === 'persone' ? <Persone db={servizi.db} titolareUid={stato.uid} />
         : pagina.id === 'importa' ? <Importa db={servizi.db} uid={stato.uid} />
         : pagina.id === 'prodotti' ? <Prodotti db={servizi.db} parametro={parametroDa(hash)} />
+        : pagina.id === 'avvisi' ? <Avvisi db={servizi.db} />
         : pagina.id === 'pubblica' ? <GestioneMenu db={servizi.db} uid={stato.uid} parametro={parametroDa(hash)} />
         : pagina.id === 'allergeni' ? <Allergeni db={servizi.db} />
         : pagina.id === 'fatture' ? <Fatture db={servizi.db} uid={stato.uid} />

@@ -6,7 +6,7 @@ import { ErroreImport, leggiPlanner, type RisultatoImport } from '../importazion
 import { salvaImportPlanner } from '../importazione/salva.db';
 import { euro, percentuale } from './formato';
 
-const oggi = () => new Date().toISOString().slice(0, 10);
+import { oggi } from '../dati/oggi';
 
 export function Importa({ db, uid }: { db: Firestore; uid: string }) {
   const [dati, setDati] = useState<RisultatoImport | null>(null);

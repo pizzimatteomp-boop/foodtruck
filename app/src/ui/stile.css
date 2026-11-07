@@ -279,3 +279,18 @@ input.corto { width: 80px; }
   .foglio { padding: 0; border-radius: 0; }
   .foglio + .foglio { break-before: page; }
 }
+
+/* Grafici */
+.grafico { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.grafico svg { width: 100%; height: auto; display: block; color: var(--testo); }
+.grafico .griglia { stroke: var(--bordo); stroke-width: 1; }
+.grafico .asse { fill: var(--tenue); font-size: 13px; font-variant-numeric: tabular-nums; }
+.grafico .soglia { stroke: var(--lampone); stroke-width: 1.5; stroke-dasharray: 6 5; }
+.grafico .soglia-testo { fill: var(--lampone); font-weight: 600; }
+.legenda-grafico { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.85rem; color: var(--tenue); }
+.legenda-grafico i { display: inline-block; width: 12px; height: 4px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.variazioni { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.variazioni div { padding: 8px 10px; border-radius: 10px; background: var(--sfondo); display: flex; flex-direction: column; }
+.variazioni small { color: var(--tenue); }
+.su { color: var(--lampone); font-weight: 700; }
+.giu { color: #2E7D5B; font-weight: 700; }

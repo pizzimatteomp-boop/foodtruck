@@ -9,7 +9,8 @@ import { euro } from './formato';
 import { SchedaIngrediente } from './SchedaIngrediente';
 
 export const FINESTRA_GIORNI = 60;
-export const oggi = () => new Date().toISOString().slice(0, 10);
+export { oggi } from '../dati/oggi';
+import { oggi } from '../dati/oggi';
 export const dataItaliana = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
 
 export function TestoPrezzo({ p, unita }: { p: PrezzoIngrediente; unita: string }) {

@@ -27,6 +27,11 @@ async function creaUtenteGoogle(u: typeof MATTEO): Promise<void> {
   expect(r.ok, await r.text()).toBe(true);
 }
 
+// Data di prova fissa (7/11/2026): prezzi, medie e storico non cambiano col passare dei mesi.
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() => localStorage.setItem('vegman-oggi', '2026-11-07'));
+});
+
 test.beforeAll(async () => {
   await fetch(`http://127.0.0.1:9099/emulator/v1/projects/${PROGETTO}/accounts`, { method: 'DELETE' });
   await fetch(`http://127.0.0.1:8080/emulator/v1/projects/${PROGETTO}/databases/(default)/documents`, { method: 'DELETE' });
@@ -415,4 +420,44 @@ test('menu pubblico: pubblicazione, QR code leggibile, pagina aperta a tutti IT/
   await expect(page.getByRole('region', { name: 'Menu e QR' }).getByLabel('Stato del menu')).toContainText('Ci sono modifiche non ancora pubblicate.');
   await cliente.reload();
   await expect(cliente.getByRole('article', { name: 'Test wrap' })).toContainText('6,00 €');
+});
+
+test('storico, grafici e avvisi: fotografia di ottobre, rincari, soglie', async ({ page }) => {
+  await accedi(page, MATTEO);
+  await apri(page, 'Avvisi');
+  const avvisi = page.getByRole('region', { name: 'Avvisi' });
+  // La fotografia di ottobre si salva da sola al primo accesso di novembre
+  await expect(avvisi.getByLabel('Fotografie salvate')).toHaveText('Salvate: ottobre 2026.');
+  const fc = avvisi.getByRole('list', { name: 'Avvisi food cost' });
+  await expect(fc).toContainText('Wrap di prova: food cost 7,3% (soglia 5%)');
+  // Sale: 0,80 €/kg a fine ottobre → (2 kg a 0,80 + 1 kg a 2,00) / 3 kg = 1,20 €/kg oggi
+  await expect(fc).toContainText('Sale: +50% rispetto alla fine del mese scorso');
+  const daFare = avvisi.getByRole('list', { name: 'Da fare' });
+  await expect(daFare).toContainText('1 articolo delle fatture da controllare');
+  await expect(daFare).toContainText('Menu: ci sono modifiche non ancora pubblicate');
+  await avvisi.screenshot({ path: 'test-results/avvisi.png' });
+
+  // Soglia dei rincari al 60%: l'avviso del sale sparisce
+  await avvisi.getByLabel('Soglia rincaro').fill('60');
+  await avvisi.getByRole('button', { name: 'Salva' }).click();
+  await expect(avvisi.getByRole('status')).toHaveText('Soglia salvata.');
+  await expect(fc).not.toContainText('Sale');
+
+  // Grafico del prezzo del sale: ottobre 0,80 €/kg, novembre 2,00 €/kg (+150% su 1 mese)
+  await fc.getByRole('link', { name: /Wrap di prova/ }).click();
+  const andamentoFc = page.getByLabel('Andamento del food cost');
+  await expect(andamentoFc.getByRole('img', { name: 'Food cost di Wrap di prova mese per mese' })).toBeVisible();
+  await andamentoFc.getByText('Vedi i numeri').click();
+  await expect(andamentoFc.getByRole('table')).toContainText('ott 26');
+  await expect(andamentoFc.getByRole('table')).toContainText('7,3%');
+  await page.goto('/#/ingredienti');
+  await page.getByRole('region', { name: 'Ingredienti' }).getByRole('link', { name: /^Sale/ }).click();
+  const andamento = page.getByLabel('Andamento del prezzo');
+  await expect(andamento.getByRole('img', { name: 'Prezzo di Sale mese per mese' })).toBeVisible();
+  await expect(andamento).toContainText('su 1 mese+150%');
+  await andamento.getByText('Vedi i numeri').click();
+  const numeri = andamento.getByRole('table');
+  await expect(numeri.getByRole('row', { name: /ott 26/ })).toContainText('0,80 €');
+  await expect(numeri.getByRole('row', { name: /nov 26/ })).toContainText('2,00 €');
+  await andamento.screenshot({ path: 'test-results/andamento-prezzo.png' });
 });

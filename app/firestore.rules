@@ -104,6 +104,21 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- Storico: fotografia mensile di prezzi e food cost, mai modificata ----------
+    match /storico/{mese} {
+      allow read: if titolare();
+      allow create: if titolare() && mese.matches('^[0-9]{4}-[0-9]{2}$') && nuovo().mese == mese
+        && nuovo().keys().hasOnly(['mese', 'ingredienti', 'prodotti', 'creatoDa', 'creatoIl']) && firmato();
+      allow update, delete: if false;
+    }
+
+    // ---------- Impostazioni del titolare ----------
+    match /impostazioni/foodcost {
+      allow read: if titolare();
+      allow write: if titolare() && nuovo().keys().hasOnly(['sogliaRincaro'])
+        && nuovo().sogliaRincaro is number && nuovo().sogliaRincaro > 0 && nuovo().sogliaRincaro <= 100;
+    }
+
     // ---------- Menu pubblico (QR code): lo legge chiunque, lo pubblica solo il titolare ----------
     // Contiene solo nomi, prezzi, ingredienti e allergeni dei prodotti in menu.
     match /menu/{id} {
