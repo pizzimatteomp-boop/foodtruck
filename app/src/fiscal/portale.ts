@@ -3,7 +3,7 @@
  * Vedi CLAUDE.md, «Fatture e Corrispettivi: cosa sappiamo» e «Documento commerciale online».
  *
  * Sicurezza:
- *  - le credenziali vanno solo nel corpo del POST di accesso (e il codice fiscale nella scelta dell'utenza);
+ *  - le credenziali vanno solo nel corpo JSON dell'accesso (e il codice fiscale nella scelta dell'utenza);
  *  - il resoconto («traccia») contiene solo passi, indirizzi SENZA parametri, codici di risposta e NOMI
  *    di campi/chiavi: mai valori, cookie, token o credenziali (verificato dai test);
  *  - un accesso rifiutato non viene mai ripetuto da solo (troppi tentativi bloccano l'utenza Fisconline).
@@ -44,9 +44,19 @@ export interface PassoTraccia {
   nota?: string;
 }
 
+/** Codici di errore dell'accesso (dal codice della pagina di accesso dell'Agenzia). */
+const MOTIVI: Record<string, string> = {
+  INVALID_CREDENTIALS: 'credenziali errate',
+  PASSWORD_EXPIRED: 'password scaduta: cambiala sul sito dell\'Agenzia e salvala di nuovo qui',
+  FAILED_LOGIN_ATTEMPTS: 'troppi tentativi falliti',
+  ACCOUNT_LOCKED: 'utenza bloccata',
+};
+
 export class AccessoRifiutato extends Error {
   override name = 'AccessoRifiutato';
-  constructor() { super('Il portale ha rifiutato l\'accesso (credenziali sbagliate, scadute o da cambiare). L\'app non riprova da sola.'); }
+  constructor(readonly codice: string) {
+    super(`Il portale ha rifiutato l'accesso (${MOTIVI[codice] ?? codice}). L'app non riprova da sola.`);
+  }
 }
 export class PortaleCambiato extends Error {
   override name = 'PortaleCambiato';
@@ -62,42 +72,12 @@ function intestazione(h: Record<string, string>, nome: string): string | undefin
   return k === undefined ? undefined : h[k];
 }
 
-const ENTITA: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: '\'', '#39': '\'' };
-function decodifica(s: string): string {
-  return s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (t, e: string) => {
-    if (/^#x/i.test(e)) return String.fromCodePoint(parseInt(e.slice(2), 16));
-    if (/^#\d/.test(e) && !(e in ENTITA)) return String.fromCodePoint(Number(e.slice(1)));
-    return ENTITA[e.toLowerCase()] ?? t;
-  });
-}
 function attributi(tag: string): Record<string, string> {
   const a: Record<string, string> = {};
   for (const m of tag.matchAll(/([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g)) {
-    a[m[1]!.toLowerCase()] = decodifica(m[2] ?? m[3] ?? m[4] ?? '');
+    a[m[1]!.toLowerCase()] = m[2] ?? m[3] ?? m[4] ?? '';
   }
   return a;
-}
-
-export interface Modulo {
-  azione: string;
-  metodo: 'GET' | 'POST';
-  campi: { nome: string; valore: string; tipo: string }[];
-}
-
-/** Trova il modulo di accesso (quello con IDToken1) e ne legge azione e campi. */
-export function leggiModulo(html: string, base: string): Modulo | null {
-  for (const f of html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)) {
-    const corpo = f[2]!;
-    if (!/name\s*=\s*["']?IDToken1\b/i.test(corpo)) continue;
-    const a = attributi(f[1]!);
-    const campi = [...corpo.matchAll(/<input\b([^>]*)>/gi)].map((m) => attributi(m[1]!))
-      .filter((x) => x.name)
-      .map((x) => ({ nome: x.name!, valore: x.value ?? '', tipo: (x.type ?? 'text').toLowerCase() }));
-    let azione: string;
-    try { azione = new URL(a.action || base, base).toString(); } catch { return null; }
-    return { azione, metodo: (a.method ?? 'get').toUpperCase() === 'POST' ? 'POST' : 'GET', campi };
-  }
-  return null;
 }
 
 /**
@@ -129,19 +109,6 @@ export function strutturaPagina(html: string, base: string): string {
     `collegamenti di accesso: ${accessi.join(', ') || 'nessuno'}`,
     `contiene: ${parole.join(', ') || 'nessuna parola chiave'}`,
   ].join('; ');
-}
-
-/** Il modulo compilato: campi nascosti come sono, credenziali al loro posto, pulsanti esclusi. */
-export function compilaModulo(m: Modulo, c: Credenziali): Record<string, string> {
-  const dati: Record<string, string> = {};
-  for (const x of m.campi) {
-    if (['submit', 'button', 'image', 'reset', 'checkbox', 'radio', 'file'].includes(x.tipo)) continue;
-    dati[x.nome] = x.valore;
-  }
-  dati.IDToken1 = c.codiceFiscale;
-  dati.IDToken2 = c.password;
-  dati.IDToken3 = c.pin;
-  return dati;
 }
 
 /** È la pagina di accesso? (dopo il POST vuol dire: rifiutato) */
@@ -186,23 +153,42 @@ export class Traccia {
 
 const ts = () => `v=${Date.now()}`;
 
-/** Accesso Fisconline e scelta «Me stesso». Lancia AccessoRifiutato (non ripetere!) o PortaleCambiato. */
+const LOGIN_API = 'https://iampe.agenziaentrate.gov.it/api/login/telematico';
+
+/** Il codice d'errore («details») della risposta di accesso, se c'è. */
+export function codiceErrore(testo: string): string | undefined {
+  try { const d = (JSON.parse(testo) as { details?: unknown }).details; return typeof d === 'string' && /^[A-Z_]{3,40}$/.test(d) ? d : undefined; } catch { return undefined; }
+}
+
+/** Indirizzo dove andare dopo l'accesso (parametro goto della pagina di accesso, solo siti dell'Agenzia). */
+export function destinazione(urlAccesso: string): string {
+  try {
+    const g = new URL(urlAccesso).searchParams.get('goto');
+    if (g && /^https:\/\/[a-z0-9.-]+\.agenziaentrate\.gov\.it\//i.test(g)) return g;
+  } catch { /* indirizzo non valido */ }
+  return `${PORTALE}/PortaleWeb/home?to=FATBTB`;
+}
+
+/**
+ * Accesso Fisconline (come la pagina dell'Agenzia: JSON a /api/login/telematico) e scelta «Me stesso».
+ * Lancia AccessoRifiutato (non ripetere!) o PortaleCambiato.
+ */
 export async function accediPortale(t: Traccia, c: Credenziali): Promise<void> {
   const pagina = await t.chiama('Pagina di accesso', { url: `${IVASERVIZI}/portale/`, metodo: 'GET' });
-  const m = leggiModulo(pagina.testo, pagina.url);
-  if (!m) {
+  if (!eLogin(pagina.url)) {
     t.passi[t.passi.length - 1]!.nota = strutturaPagina(pagina.testo, pagina.url);
-    throw new PortaleCambiato('Non trovo il modulo di accesso Fisconline nella pagina.');
+    throw new PortaleCambiato('La pagina di accesso non è quella attesa.');
   }
-  const nascosti = m.campi.filter((x) => !/^IDToken[123]$/.test(x.nome)).map((x) => `${x.nome}(${x.tipo})`);
-  t.passi[t.passi.length - 1]!.nota = `modulo ${m.metodo} → ${senzaParametri(m.azione)}; campi: ${nascosti.join(', ') || 'nessuno'}`;
+  const dopo = await t.chiama('Invio credenziali', {
+    url: LOGIN_API, metodo: 'POST', json: { username: c.codiceFiscale, password: c.password, pin: c.pin },
+    intestazioni: { Origin: 'https://iampe.agenziaentrate.gov.it', Referer: pagina.url },
+  }, (x) => { const k = codiceErrore(x.testo); return k ? `esito: ${k}` : chiaviJson(x.testo); });
+  if (dopo.stato === 404 || dopo.stato === 405 || dopo.stato >= 500) throw new PortaleCambiato(`L'accesso ha risposto ${dopo.stato}.`);
+  if (dopo.stato >= 300) throw new AccessoRifiutato(codiceErrore(dopo.testo) ?? `risposta ${dopo.stato}`);
 
-  const dopo = await t.chiama('Invio credenziali', { url: m.azione, metodo: 'POST', modulo: compilaModulo(m, c) });
-  if (dopo.stato >= 400) throw new PortaleCambiato(`L'accesso ha risposto ${dopo.stato}.`);
-  if (eLogin(dopo.url) || leggiModulo(dopo.testo, dopo.url)) throw new AccessoRifiutato();
-
-  const home = await t.chiama('Fatture e Corrispettivi', { url: `${PORTALE}/PortaleWeb/home?to=FATBTB`, metodo: 'GET' });
+  const home = await t.chiama('Fatture e Corrispettivi', { url: destinazione(pagina.url), metodo: 'GET' });
   if (eLogin(home.url)) throw new PortaleCambiato('Dopo l\'accesso il portale chiede di nuovo le credenziali (sessione non tenuta).');
+  if (!/to=FATBTB/.test(destinazione(pagina.url))) await t.chiama('Fatture e Corrispettivi', { url: `${PORTALE}/PortaleWeb/home?to=FATBTB`, metodo: 'GET' });
 
   const R = `${IVASERVIZI}/instr/instradamento-fatture-rest/rs`;
   await t.chiama('Avvio', { url: `${R}/initLight?${ts()}`, metodo: 'GET' }, (x) => chiaviJson(x.testo));

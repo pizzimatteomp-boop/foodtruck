@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { webNativo, type OpzioniHttp } from './nativo';
 import {
-  AccessoRifiutato, accediPortale, compilaModulo, eLogin, ggmmaaaa, IVASERVIZI, leggiModulo, letturaDiProva, partitaIvaDa,
+  AccessoRifiutato, accediPortale, codiceErrore, destinazione, eLogin, ggmmaaaa, IVASERVIZI, letturaDiProva, partitaIvaDa,
   PortaleCambiato, PORTALE, senzaParametri, strutturaPagina, Traccia, type RichiestaWeb, type RispostaWeb,
 } from './portale';
 import { ErroreRete } from './trasporto';
@@ -9,16 +9,10 @@ import { ErroreRete } from './trasporto';
 // Tutto inventato: nessuna credenziale vera, nessun portale vero.
 const CRED = { codiceFiscale: 'XXXXXX00X00X000X', password: 'Segreta!123', pin: '9876543210' };
 const SEGRETI = [CRED.codiceFiscale, CRED.password, CRED.pin, 'COOKIE-SEGRETO', 'TOKEN-SEGRETO', 'B2B-SEGRETO'];
-const LOGIN = 'https://iampe.agenziaentrate.gov.it/sam/UI/Login?realm=/agenziaentrate&goto=aHR0cHM6Ly9wb3J0YWxl';
-const MODULO = `<html><body><form name="Login" method="post" action="/sam/UI/Login?realm=/agenziaentrate">
-  <input type="text" name="IDToken1" value=""><input type='password' name='IDToken2'><input type="password" name="IDToken3" />
-  <input type="hidden" name="goto" value="aHR0cHM6Ly9wb3J0YWxl"><input type="hidden" name="gotoOnFail" value="">
-  <input type="hidden" name="encoded" value="true"><input type="hidden" name="gx_charset" value="UTF-8">
-  <input type="hidden" name="newpost" value="&quot;s&amp;i&#39;&#x41;"><input type="hidden" name="x_7f3" value="abc">
-  <input type="submit" name="Login.Submit" value="Accedi"><input type="checkbox" name="ricorda" value="1"><input type="hidden" value="senza-nome">
-</form><form><input name="q"></form></body></html>`;
+const LOGIN = `https://iampe.agenziaentrate.gov.it/sam/UI/Login?realm=/agenziaentrate&goto=${encodeURIComponent('https://portale.agenziaentrate.gov.it/PortaleWeb/home?to=FATBTB')}`;
+const SPA = '<!doctype html><html><head><title>Agenzia delle Entrate - Area riservata</title></head><body><script defer src="/loginam/dist/js/app.bundle.min.js"></script></body><div id="root"></div></html>';
 
-type Opzioni = { rifiuta?: boolean; sceltaSoloModulo?: boolean; senzaModulo?: boolean; senzaToken?: boolean; sessionePersa?: boolean; erroreAccesso?: number; erroreScelta?: boolean };
+type Opzioni = { rifiuta?: string; sceltaSoloModulo?: boolean; altraPagina?: boolean; senzaToken?: boolean; sessionePersa?: boolean; erroreAccesso?: number; erroreScelta?: boolean };
 
 function portaleFinto(o: Opzioni = {}) {
   const viste: RichiestaWeb[] = [];
@@ -29,16 +23,17 @@ function portaleFinto(o: Opzioni = {}) {
     viste.push(q);
     const u = new URL(q.url);
     const p = u.pathname;
-    if (p === '/portale/') return r(200, LOGIN, o.senzaModulo ? '<html>manutenzione</html>' : MODULO);
-    if (p === '/sam/UI/Login' && q.metodo === 'POST') {
+    if (p === '/portale/') return o.altraPagina ? r(200, 'https://www.agenziaentrate.gov.it/manutenzione', '<html><title>Manutenzione</title></html>') : r(200, LOGIN, SPA);
+    if (p === '/api/login/telematico' && q.metodo === 'POST') {
       if (o.erroreAccesso) return r(o.erroreAccesso, q.url, 'errore');
-      const m = q.modulo!;
-      const ok = !o.rifiuta && m.IDToken1 === CRED.codiceFiscale && m.IDToken2 === CRED.password && m.IDToken3 === CRED.pin && m.newpost === '"s&i\'A' && m.x_7f3 === 'abc';
-      if (!ok) return r(200, LOGIN, MODULO);
+      const m = q.json as Record<string, string>;
+      if (q.intestazioni?.Origin !== 'https://iampe.agenziaentrate.gov.it') return r(403, q.url, '{}');
+      if (o.rifiuta) return r(401, q.url, o.rifiuta === 'non-json' ? 'no' : `{"details":"${o.rifiuta}"}`);
+      if (m.username !== CRED.codiceFiscale || m.password !== CRED.password || m.pin !== CRED.pin) return r(401, q.url, '{"details":"INVALID_CREDENTIALS"}');
       dentro = !o.sessionePersa;
-      return r(200, `${PORTALE}/PortaleWeb/home`, '<html>home</html>');
+      return r(200, q.url, '{"ok":true}');
     }
-    if (!dentro) return r(200, LOGIN, MODULO);
+    if (!dentro) return r(200, LOGIN, SPA);
     if (p === '/PortaleWeb/home') return r(200, `${IVASERVIZI}/instr/InstradamentofcWeb/home`, '<html>instr</html>');
     if (p.endsWith('/rs/initLight')) return r(200, q.url, '{"ok":true}');
     if (p.endsWith('/rs/infouser-fc')) return r(200, q.url, '{"utente":{"cf":"XXXXXX00X00X000X","nome":"PROVA"},"incarichi":[{"pIva":"11111111111"}]}');
@@ -68,21 +63,14 @@ const nessunSegreto = (t: Traccia) => {
   for (const s of SEGRETI) expect(tutto).not.toContain(s);
 };
 
-describe('modulo di accesso', () => {
-  it('trova il modulo giusto, decodifica i valori, compila senza pulsanti', () => {
-    const m = leggiModulo(MODULO, LOGIN)!;
-    expect(m.metodo).toBe('POST');
-    expect(m.azione).toBe('https://iampe.agenziaentrate.gov.it/sam/UI/Login?realm=/agenziaentrate');
-    expect(m.campi.find((x) => x.nome === 'newpost')!.valore).toBe('"s&i\'A');
-    const d = compilaModulo(m, CRED);
-    expect(Object.keys(d)).toEqual(['IDToken1', 'IDToken2', 'IDToken3', 'goto', 'gotoOnFail', 'encoded', 'gx_charset', 'newpost', 'x_7f3']);
-    expect(d.IDToken3).toBe(CRED.pin);
-    expect(leggiModulo('<form action="/x" method="get"><input name="IDToken1"></form>', 'https://a.it/b')).toEqual({ azione: 'https://a.it/x', metodo: 'GET', campi: [{ nome: 'IDToken1', valore: '', tipo: 'text' }] });
-    expect(leggiModulo('<form><input name="IDToken1"></form>', 'non un indirizzo')).toBeNull();
-    expect(leggiModulo('<html></html>', LOGIN)).toBeNull();
-  });
-
-  it('indirizzi senza parametri; pagina di accesso riconosciuta; data sul fuso di Roma', () => {
+describe('accesso: pezzi', () => {
+  it('codice d\'errore, destinazione, indirizzi senza parametri, pagina di accesso, data di Roma', () => {
+    expect(codiceErrore('{"details":"PASSWORD_EXPIRED"}')).toBe('PASSWORD_EXPIRED');
+    expect(codiceErrore('{"details":"<script>"}')).toBeUndefined();
+    expect(codiceErrore('no')).toBeUndefined();
+    expect(destinazione(LOGIN)).toBe('https://portale.agenziaentrate.gov.it/PortaleWeb/home?to=FATBTB');
+    expect(destinazione('https://iampe.agenziaentrate.gov.it/sam/UI/Login?goto=https://cattivo.it/')).toBe(`${PORTALE}/PortaleWeb/home?to=FATBTB`);
+    expect(destinazione('rotto')).toBe(`${PORTALE}/PortaleWeb/home?to=FATBTB`);
     expect(senzaParametri('https://a.it/x/y?cf=SEGRETO#z')).toBe('a.it/x/y');
     expect(senzaParametri('rotto')).toBe('?');
     expect(eLogin(LOGIN)).toBe(true);
@@ -126,7 +114,9 @@ describe('accesso al portale (finto) e letture di prova', () => {
     const e = await letturaDiProva(t, new Date('2026-11-07T12:00:00Z'));
     expect(e).toEqual({ datiEsercente: true, fattureUltimi30Giorni: 2, adesione: true });
     expect(viste.find((v) => v.url.includes('/rs/fe/ricevute/'))!.url).toContain('/dal/08102026/al/07112026/ricerca/ricezione');
-    expect(t.passi[0]!.nota).toBe('modulo POST → iampe.agenziaentrate.gov.it/sam/UI/Login; campi: goto(hidden), gotoOnFail(hidden), encoded(hidden), gx_charset(hidden), newpost(hidden), x_7f3(hidden), Login.Submit(submit), ricorda(checkbox)');
+    expect(viste[1]).toMatchObject({ metodo: 'POST', url: 'https://iampe.agenziaentrate.gov.it/api/login/telematico' });
+    expect(viste[2]!.url).toBe('https://portale.agenziaentrate.gov.it/PortaleWeb/home?to=FATBTB');
+    expect(t.testo()).toContain('2. Invio credenziali · POST iampe.agenziaentrate.gov.it/api/login/telematico → 200 [application/json] · chiavi: ok');
     expect(t.testo()).toContain('x-b2bcookie presente, x-token presente');
     expect(t.testo()).toContain('2 fatture');
     expect(t.testo()).toContain('chiavi: utente, incarichi');
@@ -141,18 +131,32 @@ describe('accesso al portale (finto) e letture di prova', () => {
     nessunSegreto(t);
   });
 
-  it('credenziali rifiutate: un solo tentativo, errore chiaro', async () => {
-    const { web, viste } = portaleFinto({ rifiuta: true });
+  it('credenziali rifiutate: un solo tentativo, motivo chiaro', async () => {
+    for (const [codice, testo] of [['INVALID_CREDENTIALS', 'credenziali errate'], ['PASSWORD_EXPIRED', 'password scaduta'], ['ACCOUNT_LOCKED', 'utenza bloccata'], ['FAILED_LOGIN_ATTEMPTS', 'troppi tentativi'], ['ALTRO_CODICE', 'ALTRO_CODICE'], ['non-json', 'risposta 401']] as const) {
+      const { web, viste } = portaleFinto({ rifiuta: codice });
+      const t = new Traccia(web);
+      const e = await accediPortale(t, CRED).catch((x: unknown) => x);
+      expect(e).toBeInstanceOf(AccessoRifiutato);
+      expect((e as Error).message).toContain(testo);
+      expect(viste.filter((v) => v.metodo === 'POST')).toHaveLength(1);
+      if (codice !== 'non-json') expect(t.testo()).toContain(`esito: ${codice}`);
+      nessunSegreto(t);
+    }
+  });
+
+  it('se la pagina di accesso porta altrove, verso Fatture e Corrispettivi si va comunque', async () => {
+    const base = portaleFinto();
+    const web = async (q: RichiestaWeb) => (q.url.endsWith('/portale/') ? { stato: 200, url: 'https://iampe.agenziaentrate.gov.it/sam/UI/Login?realm=/agenziaentrate', intestazioni: {}, testo: SPA } : base.web(q));
     const t = new Traccia(web);
-    await expect(accediPortale(t, CRED)).rejects.toBeInstanceOf(AccessoRifiutato);
-    expect(viste.filter((v) => v.metodo === 'POST')).toHaveLength(1);
-    nessunSegreto(t);
+    await accediPortale(t, CRED);
+    expect(base.viste.filter((v) => v.url.includes('PortaleWeb/home'))).toHaveLength(1);
   });
 
   it('portale cambiato: modulo assente, errore all\'invio, sessione non tenuta, scelta fallita', async () => {
-    const senza = new Traccia(portaleFinto({ senzaModulo: true }).web);
+    const senza = new Traccia(portaleFinto({ altraPagina: true }).web);
     await expect(accediPortale(senza, CRED)).rejects.toBeInstanceOf(PortaleCambiato);
-    expect(senza.testo()).toContain('moduli: nessuno');
+    expect(senza.testo()).toContain('titolo «Manutenzione»');
+    await expect(accediPortale(new Traccia(portaleFinto({ erroreAccesso: 404 }).web), CRED)).rejects.toThrow(/404/);
     await expect(accediPortale(new Traccia(portaleFinto({ erroreAccesso: 500 }).web), CRED)).rejects.toThrow(/500/);
     await expect(accediPortale(new Traccia(portaleFinto({ sessionePersa: true }).web), CRED)).rejects.toThrow(/di nuovo le credenziali/);
     await expect(accediPortale(new Traccia(portaleFinto({ erroreScelta: true }).web), CRED)).rejects.toThrow(/Me stesso/);
