@@ -91,15 +91,22 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
 - Da verificare nel prototipo: durata della sessione del portale, scadenza della password Fisconline.
 
 ## Fatture e Corrispettivi: cosa sappiamo (studio nel browser del 7/11/2026)
-Solo consultazione, nessun valore personale annotato. Adesione al servizio di consultazione attiva dal 18/04/2023 (non revocata).
-- Accesso: tratto da «Accedi» al portale non registrato (lo strumento perde le richieste tra domini); noti solo i campi `IDToken1/2/3`. Da studiare sul telefono (5b). Un cambio password manda a `/PortaleWeb/home` invece che a Fatture e Corrispettivi.
-- Ingresso: `PortaleWeb/home?to=FATBTB`. Scelta utenza automatica: `POST /instr/instradamento-fatture-rest/rs/setUserChoice` con `tipoutenza=meStesso` (altre: `delegaDiretta`, `delMassiva`), `cf`, `pIva` (nomi dal codice della pagina).
-- Prima delle chiamate: `GET /cons/cons-services/sc/tokenB2BCookie/get` → header `x-b2bcookie` e `x-token`, da rimandare a ogni richiesta (senza: 409).
-- Elenco ricevute: `GET /cons/cons-services/rs/fe/ricevute/dal/{ggmmaaaa}/al/{ggmmaaaa}/ricerca/ricezione?v={timestamp}` (oppure `.../ricerca/emissione`). **Massimo 93 giorni estremi compresi**: oltre risponde 200 con elenco vuoto senza errore → spezzare i periodi.
-- Identificativo: `idFattura` (11 cifre); dettaglio e file con `tipoInvio`+`idFattura` (es. `FPR…`).
-- File: `GET /cons/cons-services/rs/fatture/file/{FPR…}?tipoFile=FILE_FATTURA&download=1` (stessi header) → .xml.p7m CAdES anche se Content-Type dice `application/xml`. Lo scaricamento non cambia la «presa visione».
-- Download massivo (`/cons/mass-web/#/richieste/fatture`): richiesta asincrona da preparare e scaricare dopo; non serve per il giro mensile.
-- Durata della sessione: verifica in corso (7/11/2026).
+Solo consultazione, nessun valore personale annotato. Base `https://ivaservizi.agenziaentrate.gov.it` salvo altro dominio. `{ts}` = millisecondi anti-cache.
+- **Accesso** (tratto POST → PortaleWeb non registrato: lo strumento perde le richieste tra domini; quel giorno c'era anche il cambio password obbligatorio):
+  1. `GET /portale/` → rimando a `iampe…/sam/UI/Login`
+  2. `GET iampe…/sam/UI/Login?realm=/agenziaentrate&goto={…/PortaleWeb/home?to=FATBTB}` → 200
+  3. `POST` modulo OpenAM (inviato da JavaScript): `IDToken1/2/3` + nascosti `goto`, `gotoOnFail`, `encoded`, `gx_charset`, `newpost` e un altro dal nome non leggibile. Rimandi e corpo non visti
+  4. `GET portale.agenziaentrate.gov.it/PortaleWeb/home?to=FATBTB` → rimando a `/instr/InstradamentofcWeb/home`
+  5. `GET /instr/instradamento-fatture-rest/rs/initLight`, `/dp/PI2FC`, `/rs/infouser-fc`, `/rs/wizardTemplate` (scelta utenza)
+  6. `POST /instr/instradamento-fatture-rest/rs/setUserChoice?v={ts}` → 200, inviata in automatico; campi dal JavaScript: `tipoutenza` (`meStesso`/`delegaDiretta`/`delMassiva`), `cf`, `pIva` (formato del corpo non visto). Prima della scelta `/rs/fullTemplate` risponde 406
+  7. Home: `/rs/servizi`, `/rs/comunicazioni`, `/ser/api/fatture/v1/ul/me/adesione/stato`, `/ser/api/portale/v1/gestori/me`
+  - La pagina usa `FattCorrActiveB`/`FattCorrActiveToken` nel localStorage; una GET a `iampe…/sam/UI/Login?…goto=…FATBTB` resta «pending» (controllo di sessione)
+- **Token**: `GET /cons/cons-services/sc/tokenB2BCookie/get?v={ts}` → 200 corpo vuoto, header di risposta `x-b2bcookie` e `x-token`, da rimandare come header (senza: 409).
+- **Elenco**: `GET /cons/cons-services/rs/fe/ricevute/dal/{ggmmaaaa}/al/{ggmmaaaa}/ricerca/{ricezione|emissione}?v={ts}` → JSON `{dataRicercaDa, dataRicercaA, totaleFatture, limiteBloccoTotaleFatture (8000), fatture:[{idFattura (11 cifre), tipoInvio ("FPR"), tipoDocumento, numeroFattura, stato, dataFattura "aaaa-mm-gg", dataAccoglienzaFile, dataConsegna "gg/mm/aaaa", imponibile "+…,dd", imposta, pivaEmittente, denominazioneEmittente, idPaeseCedente, pivaCliente, cfCliente, fileDownload{idInvio, statoFile, fileDownload, presaVisione, …}, …}]}`. **Massimo 93 giorni estremi compresi**: oltre 200 con `fatture: []` senza errore → spezzare. Altri: `/rs/fe/emesse`, `/rs/fe/mc` (messe a disposizione), `/rs/ft/ricevute|emesse` (transfrontaliere). Dettaglio: `/rs/fatture/dettaglio/{tipoInvio}{idFattura}`.
+- **File**: `GET /cons/cons-services/rs/fatture/file/{tipoInvio}{idFattura}?tipoFile=FILE_FATTURA&download=1&v={ts}` (stessi header) → `Content-Disposition: attachment; filename=….xml.p7m`, Content-Type `application/xml` ma è CAdES DER (`30 80 06 09`). Non cambia `presaVisione`/`statoVisto`.
+- Download massivo (`/cons/mass-web/#/richieste/fatture`): asincrono, non serve per il giro mensile.
+- **Adesione**: `GET /ser/api/fatture/v1/ul/me/adesione/stato`; attiva dal 18/04/2023, non revocata.
+- **Sessione**: ancora valida dopo 34 minuti di inattività (durata massima da misurare); scaduta → rimando a `iampe…/sam/UI/Login?realm=/agenziaentrate&goto=…FATBTB`. Le pagine HTML `/cons/cons-web/…` aperte direttamente danno 404: usare solo le API.
 
 ## Dati utili
 - Google Sheet «foodtruck» (ID `1VaprnuFm5gY2Mlorrv9zFS4C7KSW65Nq2wxEKDs8cjo`): scheda **Data**, cella A1 = JSON completo di VegMan Planner (fonte dell'import); schede Ricette, Prodotti, Ingredienti, Acquisti, Comande.
