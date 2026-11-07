@@ -4,7 +4,7 @@ import {
 } from './emissione';
 import { ServizioDCO } from './servizio';
 import { SimulatoreAgenzia, type Guasto } from './simulatore';
-import { RifiutoAgenzia, SessioneScaduta } from './trasporto';
+import { ErroreServizio, RifiutoAgenzia, SessioneScaduta, type Trasporto } from './trasporto';
 
 // Dati inventati: nessuno scontrino vero, tutto sul simulatore.
 const CEDENTE: Cedente = { partitaIva: '00000000000', codiceFiscale: 'XXXXXX00X00X000X', nome: 'PROVA', cognome: 'PROVA', indirizzo: 'VIA PROVA 1', cap: '00000', comune: 'PROVA', provincia: 'XX', nazione: 'IT' };
@@ -171,5 +171,53 @@ describe('confronto con l\'ultimo scontrino', () => {
     expect(corrisponde(u, { ...imp, data: '08/11/2026' })).toBe(false);
     expect(corrisponde(u, { ...imp, righe: [{ ...imp.righe[0]!, prezzo: 10 }] })).toBe(false);
     expect(corrisponde(u, { ...imp, righe: [] })).toBe(false);
+  });
+});
+
+describe('casi rari', () => {
+  it('errore sconosciuto del trasporto: l\'invio resta in sospeso (prudenza) finché non si verifica', async () => {
+    const { sim, a } = prepara();
+    const rotto: Trasporto = { invia: async (r) => { if (r.metodo === 'POST') throw new TypeError('guasto imprevisto'); return sim.invia(r); } };
+    const s = new ServizioDCO(rotto);
+    await expect(emettiVendita(s, a, vendita(), QUANDO)).rejects.toThrow('guasto imprevisto');
+    await expect(emettiVendita(s, a, vendita(), QUANDO)).rejects.toThrow(InvioInSospeso);
+    expect(await verificaSospeso(s, a)).toBeNull(); // l'Agenzia non ha niente: si può riprovare
+    expect(a.stato.sospeso).toBeNull();
+    const v = await emettiVendita(new ServizioDCO(sim), a, vendita(), QUANDO);
+    const letto = await new ServizioDCO(sim).documento(v.idtrx);
+    await expect(inviaAnnulloReso(s, a, documentoAnnullo({ cedente: CEDENTE, originale: letto, quando: QUANDO }), QUANDO)).rejects.toThrow('guasto imprevisto');
+    expect(a.stato.sospeso).toMatchObject({ tipo: 'A' });
+  });
+
+  it('documento o PDF inesistenti, risposta che non è un PDF, percorsi sconosciuti: errore del servizio', async () => {
+    const { sim, s } = prepara();
+    await expect(s.documento('000')).rejects.toThrow(ErroreServizio);
+    await expect(s.pdf('000')).rejects.toThrow('(404)');
+    const strano = new ServizioDCO({ invia: async () => ({ stato: 200, tipo: 'application/json', corpo: { non: 'pdf' } }) });
+    await expect(strano.pdf('1')).rejects.toThrow(ErroreServizio);
+    expect((await sim.invia({ metodo: 'GET', percorso: 'altro' })).stato).toBe(404);
+    expect(await s.ultimaVendita()).toBeNull();
+    const vuoto = new ServizioDCO({ invia: async () => ({ stato: 0, tipo: '', corpo: null }) });
+    await expect(vuoto.datiFiscali()).rejects.toThrow(ErroreServizio);
+  });
+
+  it('sessione scaduta riconosciuta da 401/403 o dal rinvio alla pagina di accesso', async () => {
+    for (const r of [{ stato: 401, tipo: 'application/json' }, { stato: 403, tipo: '' }, { stato: 200, tipo: 'application/json', urlFinale: 'https://iampe.agenziaentrate.gov.it/sam/UI/Login' }]) {
+      const s = new ServizioDCO({ invia: async () => ({ corpo: null, ...r }) });
+      await expect(s.ultimaVendita()).rejects.toThrow(SessioneScaduta);
+    }
+    const { sim, s } = prepara();
+    sim.sessioneValida = false;
+    await expect(s.datiFiscali()).rejects.toThrow(SessioneScaduta);
+  });
+
+  it('simulatore: documento senza contenuto e reso di uno scontrino inesistente rifiutati', async () => {
+    const { s } = prepara();
+    await expect(s.invia({})).rejects.toThrow('Documento non valido');
+    const finto = { idtrx: '1', datiTrasmissione: { numeroProgressivo: 'DCW2026/0000-0001' }, documentoCommerciale: { elementiContabili: [{ idElementoContabile: '1', descrizioneProdotto: 'X', quantita: '1', prezzoLordo: '1', aliquotaIVA: '10' as const }] } };
+    await expect(s.invia(documentoAnnullo({ cedente: CEDENTE, originale: finto, quando: QUANDO }))).rejects.toThrow('non trovato');
+    const doc = vendita();
+    doc.documentoCommerciale.vendita[0]!.importo = '1.00';
+    await expect(s.invia(doc)).rejects.toThrow('Pagamenti diversi');
   });
 });

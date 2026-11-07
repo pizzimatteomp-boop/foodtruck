@@ -17,8 +17,7 @@ export class ServizioDCO {
   private async chiama(r: Richiesta): Promise<Risposta> {
     const x = await this.t.invia(r);
     if (eSessioneScaduta(x)) throw new SessioneScaduta();
-    if (x.stato >= 500 || x.stato === 0) throw new ErroreServizio(x.stato);
-    if (x.stato >= 400) throw new ErroreServizio(x.stato);
+    if (x.stato >= 400 || x.stato === 0) throw new ErroreServizio(x.stato);
     return x;
   }
 
