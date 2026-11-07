@@ -19,7 +19,7 @@ import { documentoAnnullo, documentoVendita, type Cedente } from '../fiscal/dco'
 import { emettiVendita, inviaAnnulloReso, verificaSospeso } from '../fiscal/emissione';
 import { BASE_DCO, trasportoNativo, type FunzioneHttp } from '../fiscal/nativo';
 import { ServizioDCO } from '../fiscal/servizio';
-import { cedenteDaAgenzia, descriviCedente, trasportoRegistrato, VENDITA_DI_PROVA } from '../fiscal/vero';
+import { cedenteDaAgenzia, descriviCedente, strutturaDati, trasportoRegistrato, VENDITA_DI_PROVA } from '../fiscal/vero';
 import { euro } from './formato';
 
 const NATIVA = Capacitor.isNativePlatform();
@@ -158,7 +158,9 @@ function AgenziaVera() {
     await apriSessione(t);
     registro.push(...t.testo().split('\n'));
     const servizio = new ServizioDCO(trasportoRegistrato(trasportoNativo(CapacitorHttp.request as unknown as FunzioneHttp, BASE_DCO, 20000), registro));
-    const cedente = cedenteDaAgenzia(await servizio.datiFiscali());
+    const dati = await servizio.datiFiscali();
+    registro.push(`Campi esercente: ${strutturaDati(dati)}`);
+    const cedente = cedenteDaAgenzia(dati);
     // Un invio rimasto in sospeso (es. app chiusa a metà) si chiarisce prima di tutto.
     const recuperato = await verificaSospeso(servizio, await archivioVero());
     if (recuperato) await salvaUltimo({ idtrx: recuperato.idtrx, progressivo: recuperato.progressivo, quando: new Date().toISOString() });

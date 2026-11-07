@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { documentoVendita } from './dco';
 import { SimulatoreAgenzia } from './simulatore';
 import { ErroreRete } from './trasporto';
-import { cedenteDaAgenzia, DatiEsercenteIncompleti, descriviCedente, trasportoRegistrato, VENDITA_DI_PROVA } from './vero';
+import { cedenteDaAgenzia, DatiEsercenteIncompleti, descriviCedente, strutturaDati, trasportoRegistrato, VENDITA_DI_PROVA } from './vero';
 
 // Dati inventati, nella forma restituita da dati/fiscali.
 const DATI = {
@@ -30,7 +30,9 @@ describe('vendita vera: preparazione', () => {
 
   it('dati incompleti: errore che dice cosa manca', () => {
     expect(() => cedenteDaAgenzia(null)).toThrow(DatiEsercenteIncompleti);
-    expect(() => cedenteDaAgenzia({ ...DATI, altriDatiIdentificativi: { cap: 5 } })).toThrow(/indirizzo, comune, provincia, denominazione o cognome/);
+    expect(() => cedenteDaAgenzia({ ...DATI, altriDatiIdentificativi: { cap: 5 } })).toThrow(/indirizzo, comune, provincia, denominazione o cognome\. Campi ricevuti: \{identificativiFiscali\{codicePaese, partitaIva, codiceFiscale\}, altriDatiIdentificativi\{cap\}, multiAttivita\[0\]\}/);
+    expect(strutturaDati({ a: [{ b: 1 }], c: 'SEGRETO' })).toBe('{a[1 × {b}], c}');
+    expect(strutturaDati('x')).toBe('string');
   });
 
   it('il registro annota percorso e codice, mai i contenuti', async () => {

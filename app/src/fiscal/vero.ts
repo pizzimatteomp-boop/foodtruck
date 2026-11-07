@@ -30,8 +30,18 @@ export function cedenteDaAgenzia(dati: unknown): Cedente {
   else { c.nome = testo(a.nome); c.cognome = testo(a.cognome); }
   const mancano: string[] = (['partitaIva', 'codiceFiscale', 'indirizzo', 'cap', 'comune', 'provincia'] as const).filter((k) => !c[k]);
   if (!c.denominazione && !c.cognome) mancano.push('denominazione o cognome');
-  if (mancano.length) throw new DatiEsercenteIncompleti(`Dati dell'esercente incompleti: manca ${mancano.join(', ')}.`);
+  if (mancano.length) throw new DatiEsercenteIncompleti(`Dati dell'esercente incompleti: manca ${mancano.join(', ')}. Campi ricevuti: ${strutturaDati(dati)}`);
   return c;
+}
+
+/** Nomi dei campi (mai i valori) dei dati dell'esercente, per il resoconto. */
+export function strutturaDati(dati: unknown): string {
+  const nomi = (v: unknown): string => {
+    if (Array.isArray(v)) return `[${v.length}${v.length ? ` × ${nomi(v[0])}` : ''}]`;
+    if (v && typeof v === 'object') return `{${Object.entries(v).map(([k, x]) => (x && typeof x === 'object' ? `${k}${nomi(x)}` : k)).join(', ')}}`;
+    return '';
+  };
+  return nomi(dati) || typeof dati;
 }
 
 /** Riassunto per lo schermo (dati dell'esercente, pubblici sullo scontrino). */
