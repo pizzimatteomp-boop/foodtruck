@@ -201,6 +201,13 @@ test('ingredienti: collegare un articolo dà il prezzo; nuovo packaging', async 
   await expect(page.getByRole('region', { name: 'Ingredienti' }).getByRole('heading', { name: /Packaging/ })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Ingredienti' }).getByRole('link', { name: /Tovagliolo/ })).toContainText('senza prezzo');
   await page.getByRole('region', { name: 'Ingredienti' }).screenshot({ path: 'test-results/ingredienti.png' });
+
+  // Eliminare: bloccato con spiegazione se usato in una ricetta
+  await page.getByRole('region', { name: 'Ingredienti' }).getByRole('link', { name: /Olio di semi/ }).click();
+  const olio = page.getByRole('region', { name: 'Scheda ingrediente' });
+  await olio.getByText('È un doppione? Unisci o elimina').click();
+  await expect(olio.getByRole('note')).toContainText('Non si può eliminare perché è usato in: Mayo di prova');
+  await expect(olio.getByRole('button', { name: 'Elimina ingrediente' })).toHaveCount(0);
 });
 
 test('fatture: caricare uno ZIP, classificare le righe nuove, acquisto a mano', async ({ page }) => {
@@ -330,6 +337,7 @@ test('prodotti: nuova ricetta con costi e lista ingredienti mentre scrivi; nome 
   await scheda.getByLabel('Soglia food cost').fill('5');
   await expect(fc.locator('.oltre')).toHaveText('7,9%');
   await scheda.getByLabel('In menu').check();
+  await expect(scheda.getByText('Compare nel menu pubblico')).toBeVisible();
   await scheda.getByRole('button', { name: 'Crea prodotto' }).click();
   await expect(scheda.getByRole('heading', { name: 'Wrap di prova' })).toBeVisible();
   await scheda.screenshot({ path: 'test-results/scheda-prodotto.png' });
@@ -349,6 +357,7 @@ test('prodotti: nuova ricetta con costi e lista ingredienti mentre scrivi; nome 
   await mayo.getByRole('button', { name: 'Salva' }).click();
   await expect(mayo.getByRole('status')).toHaveText('Salvato.');
   await expect(mayo).toContainText('Non si può eliminare: è usato in');
+  await expect(mayo.getByLabel('In menu')).toHaveCount(0); // i semilavorati non vanno in menu
   await page.goto('/#/prodotti');
   const riga = page.getByRole('region', { name: 'Prodotti' }).getByRole('link', { name: /Wrap di prova/ });
   await expect(riga).toContainText('in menu');

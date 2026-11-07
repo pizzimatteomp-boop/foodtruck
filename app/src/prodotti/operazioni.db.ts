@@ -1,5 +1,5 @@
 /** Scrittura dei prodotti nel database (provata sull'emulatore: tests/regole). */
-import { collection, deleteDoc, doc, setDoc, type Firestore } from 'firebase/firestore';
+import { collection, deleteDoc, doc, setDoc, updateDoc, type Firestore } from 'firebase/firestore';
 import type { Prodotto } from '../foodcost/modello';
 
 export async function salvaProdotto(db: Firestore, id: string | null, dati: Omit<Prodotto, 'id'>): Promise<string> {
@@ -10,4 +10,8 @@ export async function salvaProdotto(db: Firestore, id: string | null, dati: Omit
 
 export function eliminaProdotto(db: Firestore, id: string): Promise<void> {
   return deleteDoc(doc(db, 'prodotti', id));
+}
+
+export function impostaInMenu(db: Firestore, id: string, inMenu: boolean): Promise<void> {
+  return updateDoc(doc(db, 'prodotti', id), { inMenu });
 }

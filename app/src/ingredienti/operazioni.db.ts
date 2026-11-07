@@ -41,3 +41,11 @@ export async function salvaEtichetta(db: Firestore, id: string, etichetta: Etich
   b.set(doc(db, 'ingredienti', id), { etichetta }, { merge: true });
   await b.commit();
 }
+
+/** Elimina un ingrediente non usato nelle ricette: i suoi articoli vengono scollegati, gli acquisti restano. */
+export async function eliminaIngrediente(db: Firestore, id: string, articoli: readonly Articolo[]): Promise<void> {
+  const b = writeBatch(db);
+  for (const a of articoli.filter((x) => x.ingrediente === id)) b.set(doc(db, 'articoli', a.id), { ...senzaId(a), ingrediente: null });
+  b.delete(doc(db, 'ingredienti', id));
+  await b.commit();
+}

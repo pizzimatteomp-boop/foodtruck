@@ -294,3 +294,10 @@ input.corto { width: 80px; }
 .variazioni small { color: var(--tenue); }
 .su { color: var(--lampone); font-weight: 700; }
 .giu { color: #2E7D5B; font-weight: 700; }
+
+/* Riquadro «In menu» in cima alla scheda prodotto */
+.riquadro-menu { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--bordo); background: var(--sfondo); cursor: pointer; }
+.riquadro-menu.attivo { border-color: var(--menta); background: color-mix(in srgb, var(--menta) 45%, var(--scheda)); }
+.riquadro-menu input { width: 26px; height: 26px; min-height: 0; accent-color: var(--pulsante); flex: none; }
+.riquadro-menu strong { display: block; font-size: 1.05rem; }
+.riquadro-menu small { color: var(--tenue); }

@@ -1,12 +1,12 @@
 /** Scheda di un ingrediente: dati, fonti (articoli dei fornitori) con il loro prezzo, collegamenti, unione, eliminazione. */
-import { deleteDoc, doc, type Firestore } from 'firebase/firestore';
+import type { Firestore } from 'firebase/firestore';
 import { useState } from 'preact/hooks';
 import { prezzoIngrediente } from '../foodcost/calcolo';
 import type { Articolo, CategoriaIngrediente } from '../foodcost/modello';
 import { suggerimenti } from '../foodcost/somiglianza';
 import { fattoreSuggerito } from '../foodcost/unita';
 import { CATEGORIE, ErroreIngrediente, preparaFattore, preparaIngrediente } from '../ingredienti/operazioni';
-import { collegaArticolo, salvaIngrediente, unisciIngredienti } from '../ingredienti/operazioni.db';
+import { collegaArticolo, eliminaIngrediente, salvaIngrediente, unisciIngredienti } from '../ingredienti/operazioni.db';
 import { AndamentoPrezzo } from './Andamenti';
 import { EtichettaIngrediente } from './EtichettaIngrediente';
 import { dataItaliana, FINESTRA_GIORNI, oggi, TestoPrezzo, type DatiFoodCost } from './Ingredienti';
@@ -112,9 +112,10 @@ export function SchedaIngrediente({ db, id, dati }: { db: Firestore; id: string 
   }
 
   async function elimina() {
-    if (!id || !confirm(`Eliminare «${esistente!.nome}»?`)) return;
+    const avviso = fonti.length ? ` Le sue ${fonti.length} fonti verranno scollegate (gli acquisti restano nello storico).` : '';
+    if (!id || !confirm(`Eliminare «${esistente!.nome}»?${avviso}`)) return;
     try {
-      await deleteDoc(doc(db, 'ingredienti', id));
+      await eliminaIngrediente(db, id, dati.articoli);
       location.hash = '#/ingredienti';
     } catch (e) { setEsito({ testo: messaggio(e), errore: true }); }
   }
@@ -186,10 +187,9 @@ export function SchedaIngrediente({ db, id, dati }: { db: Firestore; id: string 
                   .map((i) => <option key={i.id} value={i.id}>{i.nome}</option>)}
               </select>
               <button type="button" class="secondario" disabled={!unisciCon} onClick={() => void unisci()}>Unisci</button>
-              <button type="button" class="secondario pericolo" disabled={fonti.length > 0 || usatoIn.length > 0} onClick={() => void elimina()}
-                title={fonti.length || usatoIn.length ? 'Si può eliminare solo se non ha fonti e non è in nessuna ricetta' : ''}>
-                Elimina ingrediente
-              </button>
+              {usatoIn.length > 0
+                ? <p class="nota" role="note">Non si può eliminare perché è usato in: <strong>{usatoIn.map((p) => p.nome).join(', ')}</strong>. Toglilo prima da queste ricette, oppure usa «Unisci» per spostarle su un altro ingrediente.</p>
+                : <button type="button" class="secondario pericolo" onClick={() => void elimina()}>Elimina ingrediente</button>}
             </div>
           </details>
         </>

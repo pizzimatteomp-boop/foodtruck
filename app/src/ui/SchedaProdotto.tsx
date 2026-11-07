@@ -6,7 +6,7 @@ import { costoProdotto, foodCost } from '../foodcost/calcolo';
 import type { Prodotto, RigaRicetta } from '../foodcost/modello';
 import { prezzoMostrato } from '../foodcost/unita';
 import { ALIQUOTE, ErroreProdotto, preparaProdotto, usatoIn } from '../prodotti/operazioni';
-import { eliminaProdotto, salvaProdotto } from '../prodotti/operazioni.db';
+import { eliminaProdotto, impostaInMenu, salvaProdotto } from '../prodotti/operazioni.db';
 import { TestoLista } from './Allergeni';
 import { AndamentoFoodCost } from './Andamenti';
 import { euro, percentuale } from './formato';
@@ -71,6 +71,16 @@ export function SchedaProdotto({ db, id, dati }: { db: Firestore; id: string | n
       setEsito({ testo: e instanceof ErroreProdotto ? e.message : (e as { code?: string }).code === 'permission-denied' ? 'Operazione non permessa.' : 'Salvataggio non riuscito: riprova.', errore: true });
     }
   }
+  /** La spunta «In menu» sui prodotti già salvati si salva subito. */
+  async function cambiaMenu(v: boolean) {
+    setM({ ...m, inMenu: v });
+    if (!id) return;
+    try {
+      await impostaInMenu(db, id, v);
+      setEsito({ testo: v ? 'Aggiunto al menu.' : 'Tolto dal menu.', errore: false });
+    } catch { setEsito({ testo: 'Salvataggio non riuscito: riprova.', errore: true }); setM({ ...m, inMenu: !v }); }
+  }
+
   async function elimina() {
     if (!id || !confirm(`Eliminare «${esistente!.nome}»?`)) return;
     await eliminaProdotto(db, id);
@@ -91,6 +101,13 @@ export function SchedaProdotto({ db, id, dati }: { db: Firestore; id: string | n
             </button>
           ))}
         </div>
+        {m.tipo === 'vendibile' && (
+          <label class={m.inMenu ? 'riquadro-menu attivo' : 'riquadro-menu'}>
+            <input type="checkbox" aria-label="In menu" checked={m.inMenu} onChange={(e) => void cambiaMenu(e.currentTarget.checked)} />
+            <span><strong>{m.inMenu ? 'In menu' : 'Non in menu'}</strong>
+              <small>{m.inMenu ? 'Compare nel menu pubblico (dopo «Pubblica» in Menu e QR)' : 'Spunta per metterlo nel menu pubblico'}</small></span>
+          </label>
+        )}
         <label class="campo"><span>Nome</span>
           <input aria-label="Nome" required value={m.nome} onInput={(e) => setM({ ...m, nome: e.currentTarget.value })} /></label>
         <div class="due">
@@ -153,10 +170,6 @@ export function SchedaProdotto({ db, id, dati }: { db: Firestore; id: string | n
           <>
             <label class="conversione">Avvisami se il food cost supera
               <input aria-label="Soglia food cost" inputMode="decimal" class="corto" value={m.soglia} onInput={(e) => setM({ ...m, soglia: e.currentTarget.value })} /> %
-            </label>
-            <label class="spunta">
-              <input type="checkbox" checked={m.inMenu} onChange={(e) => setM({ ...m, inMenu: e.currentTarget.checked })} />
-              In menu (compare nel menu pubblico)
             </label>
           </>
         )}

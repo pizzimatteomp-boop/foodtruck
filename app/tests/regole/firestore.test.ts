@@ -15,13 +15,13 @@ import { preparaPersona } from '../../src/persone/persone';
 import { elencaPersone, salvaPersona } from '../../src/persone/persone.db';
 import { leggiPlanner } from '../../src/importazione/planner';
 import { salvaImportPlanner } from '../../src/importazione/salva.db';
-import { collegaArticolo, salvaEtichetta, salvaIngrediente, unisciIngredienti } from '../../src/ingredienti/operazioni.db';
+import { collegaArticolo, eliminaIngrediente, salvaEtichetta, salvaIngrediente, unisciIngredienti } from '../../src/ingredienti/operazioni.db';
 import type { Articolo, Prodotto } from '../../src/foodcost/modello';
 import { readFileSync as leggiFile } from 'node:fs';
 import { leggiFatturaPA } from '../../src/fatture/fatturapa';
 import { pianoFatture } from '../../src/fatture/piano';
 import { salvaAcquistoManuale, salvaFatture } from '../../src/fatture/salva.db';
-import { eliminaProdotto, salvaProdotto } from '../../src/prodotti/operazioni.db';
+import { eliminaProdotto, impostaInMenu, salvaProdotto } from '../../src/prodotti/operazioni.db';
 import { pubblicaMenu } from '../../src/menu/menu.db';
 import { salvaFotografia, salvaSogliaRincaro } from '../../src/storico/storico.db';
 import { preparaAcquistoManuale } from '../../src/fatture/manuale';
@@ -418,5 +418,21 @@ describe('storico e impostazioni', () => {
     await salvaSogliaRincaro(db('matteo'), 15);
     await assertFails(salvaSogliaRincaro(db('matteo'), 0));
     await assertFails(salvaSogliaRincaro(db('anna'), 15));
+  });
+});
+
+describe('eliminare un ingrediente con fonti, spunta «in menu» immediata', () => {
+  it('l\'ingrediente sparisce, i suoi articoli restano scollegati; in menu si cambia da solo', async () => {
+    const m = db('matteo');
+    const id = await salvaIngrediente(m, 'da-togliere', { nome: 'Vecchio', categoria: 'alimentare', unita: 'g', gruppo: '', confezione: null });
+    const a: Articolo = { id: 'art-vecchio', nome: 'VECCHIO 1 KG', unita: 'PZ', categoria: 'alimentare', ingrediente: id, fattore: 1000 };
+    await collegaArticolo(m, a, id, 1000, 'alimentare');
+    await eliminaIngrediente(m, id, [a]);
+    expect((await getDoc(doc(m, 'ingredienti', id))).exists()).toBe(false);
+    expect((await getDoc(doc(m, 'articoli', 'art-vecchio'))).data()).toMatchObject({ ingrediente: null, categoria: 'alimentare' });
+    const p = await salvaProdotto(m, null, { nome: 'P', tipo: 'vendibile', gruppo: '', prezzo: 5, resa: { quantita: 1, unita: 'pz' }, ricetta: [], quotaVendite: 0, inMenu: false });
+    await impostaInMenu(m, p, true);
+    expect((await getDoc(doc(m, 'prodotti', p))).data()!.inMenu).toBe(true);
+    await assertFails(impostaInMenu(db('anna'), p, false));
   });
 });
