@@ -21,6 +21,7 @@ import { readFileSync as leggiFile } from 'node:fs';
 import { leggiFatturaPA } from '../../src/fatture/fatturapa';
 import { pianoFatture } from '../../src/fatture/piano';
 import { salvaAcquistoManuale, salvaFatture } from '../../src/fatture/salva.db';
+import { eliminaProdotto, salvaProdotto } from '../../src/prodotti/operazioni.db';
 import { preparaAcquistoManuale } from '../../src/fatture/manuale';
 
 let env: RulesTestEnvironment;
@@ -59,7 +60,7 @@ beforeEach(async () => {
     for (const [uid, p] of Object.entries(PERSONE)) await setDoc(doc(d, 'utenti', uid), p);
     await setDoc(doc(d, 'eventi', 'ev1'), { nome: 'Festa di Osimo' });
     await setDoc(doc(d, 'eventi', 'ev1', 'checklist', 'v1'), { voce: 'Friggitrice', fatto: false });
-    await setDoc(doc(d, 'prodotti', 'r1'), { nome: 'Kebab' });
+    await setDoc(doc(d, 'prodotti', 'r1'), { nome: 'Kebab', tipo: 'vendibile', gruppo: '', prezzo: 12, resa: { quantita: 1, unita: 'pz' }, ricetta: [], quotaVendite: 0 });
     await setDoc(doc(d, 'ingredienti', 'i1'), { nome: 'Ceci', categoria: 'alimentare', unita: 'g', gruppo: '', confezione: null });
     await setDoc(doc(d, 'articoli', 'art1'), { nome: 'CECI 5 KG', unita: 'PZ', categoria: null, ingrediente: null, fattore: 1 });
     await setDoc(doc(d, 'acquisti', 'a1'), { fornitore: 'X', totale: 100 });
@@ -367,5 +368,22 @@ describe('etichette degli ingredienti', () => {
     expect(d.nome).toBe('Panino');
     await assertSucceeds(getDoc(doc(db('luca'), 'ingredienti', id)));
     await assertFails(setDoc(doc(m, 'ingredienti', 'x'), { nome: 'X', categoria: 'alimentare', unita: 'g', gruppo: '', confezione: null, etichetta: { ...etichetta, prezzo: 3 } }));
+  });
+});
+
+describe('prodotti e ricette nel database', () => {
+  const p = { nome: 'Wrap', nomeEn: 'Wrap', tipo: 'vendibile' as const, gruppo: '', prezzo: 9.5, iva: '10' as const, resa: { quantita: 1, unita: 'pz' },
+    ricetta: [{ tipo: 'ingrediente' as const, id: 'i1', quantita: 1 }], quotaVendite: 0, inMenu: true, soglia: 30 };
+  it('il titolare crea, modifica, elimina; dati controllati; il team legge ma non scrive', async () => {
+    const id = await salvaProdotto(db('matteo'), null, p);
+    await salvaProdotto(db('matteo'), id, { ...p, prezzo: 10 });
+    expect((await getDoc(doc(db('luca'), 'prodotti', id))).data()).toMatchObject({ prezzo: 10, inMenu: true });
+    await assertFails(salvaProdotto(db('matteo'), 'x', { ...p, tipo: 'altro' as never }));
+    await assertFails(salvaProdotto(db('matteo'), 'x', { ...p, iva: '7' as never }));
+    await assertFails(salvaProdotto(db('matteo'), 'x', { ...p, costo: 3 } as never));
+    await assertFails(salvaProdotto(db('luca'), id, p));
+    await assertFails(salvaProdotto(db('anna'), id, p));
+    await eliminaProdotto(db('matteo'), id);
+    expect((await getDoc(doc(db('matteo'), 'prodotti', id))).exists()).toBe(false);
   });
 });

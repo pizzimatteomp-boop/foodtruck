@@ -6,7 +6,7 @@ import { ALLERGENI, type Lingua } from '../etichette/allergeni';
 import { listaIngredienti, riepilogoAllergeni, segmentiLista, type ListaIngredienti } from '../etichette/lista';
 import type { Ingrediente, Prodotto } from '../foodcost/modello';
 
-function Testo({ l, lingua }: { l: ListaIngredienti; lingua: Lingua }) {
+export function TestoLista({ l, lingua }: { l: ListaIngredienti; lingua: Lingua }) {
   const r = riepilogoAllergeni(l, lingua);
   const t = lingua === 'it' ? { ing: 'Ingredienti', con: 'Contiene', puo: 'Può contenere', nessuno: 'nessun allergene' } : { ing: 'Ingredients', con: 'Contains', puo: 'May contain', nessuno: 'no allergens' };
   return (
@@ -58,8 +58,8 @@ export function Allergeni({ db }: { db: Firestore }) {
           {l.problemi.it.length > 0 && <ul class="avvisi errore">{l.problemi.it.map((x) => <li key={x}>{x}</li>)}</ul>}
           {l.voci.length === 0 ? <p class="nota">Ricetta vuota.</p> : (
             <>
-              <Testo l={l} lingua="it" />
-              <Testo l={l} lingua="en" />
+              <TestoLista l={l} lingua="it" />
+              <TestoLista l={l} lingua="en" />
               {l.problemi.en.length > 0 && <ul class="avvisi">{l.problemi.en.map((x) => <li key={x}>Inglese: {x}</li>)}</ul>}
             </>
           )}

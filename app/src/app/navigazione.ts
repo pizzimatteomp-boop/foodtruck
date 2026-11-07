@@ -5,19 +5,24 @@
 import { puo, type Ruolo } from '../firebase/ruoli';
 
 export interface Pagina {
-  id: 'home' | 'fatture' | 'ingredienti' | 'allergeni' | 'persone' | 'importa';
+  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'allergeni' | 'persone' | 'importa';
   titolo: string;
   icona: string;
+  /** Una riga per il pannello della Home. */
+  descrizione: string;
+  /** Nel menu in basso del telefono (le altre si aprono dalla Home). */
+  principale: boolean;
   visibile: (ruolo: Ruolo) => boolean;
 }
 
 export const PAGINE: readonly Pagina[] = [
-  { id: 'home', titolo: 'Home', icona: '🏠', visibile: () => true },
-  { id: 'fatture', titolo: 'Fatture', icona: '🧾', visibile: (r) => puo(r, 'acquisti') },
-  { id: 'ingredienti', titolo: 'Ingredienti', icona: '🥕', visibile: (r) => puo(r, 'acquisti') },
-  { id: 'allergeni', titolo: 'Allergeni', icona: '🌾', visibile: (r) => puo(r, 'acquisti') },
-  { id: 'persone', titolo: 'Persone', icona: '👥', visibile: (r) => puo(r, 'utenti') },
-  { id: 'importa', titolo: 'Importa', icona: '⬆', visibile: (r) => puo(r, 'acquisti') },
+  { id: 'home', titolo: 'Home', icona: '🏠', descrizione: '', principale: true, visibile: () => true },
+  { id: 'prodotti', titolo: 'Prodotti', icona: '🌯', descrizione: 'Ricette, food cost e menu', principale: true, visibile: (r) => puo(r, 'acquisti') },
+  { id: 'ingredienti', titolo: 'Ingredienti', icona: '🥕', descrizione: 'Prezzi, fonti ed etichette', principale: true, visibile: (r) => puo(r, 'acquisti') },
+  { id: 'fatture', titolo: 'Fatture', icona: '🧾', descrizione: 'Carica le fatture, controlla le righe nuove', principale: true, visibile: (r) => puo(r, 'acquisti') },
+  { id: 'allergeni', titolo: 'Allergeni', icona: '🌾', descrizione: 'Liste ingredienti e tabella allergeni', principale: false, visibile: (r) => puo(r, 'acquisti') },
+  { id: 'persone', titolo: 'Persone', icona: '👥', descrizione: 'Chi può entrare e con quale ruolo', principale: false, visibile: (r) => puo(r, 'utenti') },
+  { id: 'importa', titolo: 'Importa', icona: '⬆', descrizione: 'Dati da VegMan Planner', principale: false, visibile: (r) => puo(r, 'acquisti') },
 ];
 
 export function pagineVisibili(ruolo: Ruolo): Pagina[] {

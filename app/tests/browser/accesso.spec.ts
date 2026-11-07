@@ -45,6 +45,12 @@ test.beforeAll(async () => {
  * Entra come utente Google simulato. La finestra di Google vera non si può aprire qui (scarica codice da
  * apis.google.com): si salta solo quella, il resto (accesso, profilo, regole, schermate) è quello vero.
  */
+/** Apre una pagina dal pannello della Home (sul telefono non tutte sono nel menu in basso). */
+async function apri(page: Page, titolo: string): Promise<void> {
+  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Home' }).click();
+  await page.getByRole('navigation', { name: 'Pagine' }).getByRole('link', { name: new RegExp(titolo) }).click();
+}
+
 async function accedi(page: Page, u: typeof MATTEO): Promise<void> {
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Accedi con Google' })).toBeVisible();
@@ -65,7 +71,7 @@ test('persona nuova → abilitata dal titolare → entra con il ruolo cassa', as
   await accedi(matteo, MATTEO);
   await expect(matteo.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
   await expect(matteo.getByText('Ruolo: Titolare')).toBeVisible();
-  await matteo.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Persone' }).click();
+  await apri(matteo, 'Persone');
   await expect(matteo).toHaveURL(/#\/persone$/);
   const persone = matteo.getByRole('region', { name: 'Persone' });
   await expect(persone.getByText('Matteo · tu')).toBeVisible();
@@ -130,7 +136,7 @@ test('scheda dell\'app installabile', async ({ request }) => {
 
 test('il titolare importa un backup di VegMan Planner e vede il food cost', async ({ page }) => {
   await accedi(page, MATTEO);
-  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Importa' }).click();
+  await apri(page, 'Importa');
   const importa = page.getByRole('region', { name: 'Importa' });
   await importa.getByLabel('File di backup (.json)').setInputFiles('tests/browser/dati/backup-inventato.json');
   const conti = importa.getByRole('table', { name: 'Conteggi' });
@@ -158,7 +164,7 @@ test('il titolare importa un backup di VegMan Planner e vede il food cost', asyn
 
 test('ingredienti: collegare un articolo dà il prezzo; nuovo packaging', async ({ page }) => {
   await accedi(page, MATTEO);
-  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Ingredienti' }).click();
+  await apri(page, 'Ingredienti');
   const elenco = page.getByRole('region', { name: 'Ingredienti' });
   await expect(elenco.getByRole('link', { name: /Panino/ })).toContainText('0,40 €/pz');
   await expect(elenco.getByRole('link', { name: /Olio di semi/ })).toContainText('3,00 €/kg');
@@ -191,7 +197,7 @@ test('ingredienti: collegare un articolo dà il prezzo; nuovo packaging', async 
 
 test('fatture: caricare uno ZIP, classificare le righe nuove, acquisto a mano', async ({ page }) => {
   await accedi(page, MATTEO);
-  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Fatture' }).click();
+  await apri(page, 'Fatture');
   const fatture = page.getByRole('region', { name: 'Fatture' });
   await fatture.getByLabel('File delle fatture').setInputFiles('tests/fatture/fatture-inventate.zip');
   const anteprima = fatture.getByLabel('Anteprima del caricamento');
@@ -232,7 +238,7 @@ test('fatture: caricare uno ZIP, classificare le righe nuove, acquisto a mano', 
   await expect(fatture.getByLabel('Anteprima del caricamento')).toContainText('già caricata');
 
   // Prezzi aggiornati negli ingredienti
-  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Ingredienti' }).click();
+  await apri(page, 'Ingredienti');
   const elenco = page.getByRole('region', { name: 'Ingredienti' });
   await expect(elenco.getByRole('link', { name: /Tovagliolo/ })).toContainText('0,0136 €/pz');
   // Sale: 2 kg a 0,80 € + 1 kg a 2,00 € = 3,60 € / 3 kg
@@ -271,7 +277,7 @@ test('allergeni: etichette compilate a mano → lista ingredienti e tabella alle
   await compila(/Olio di semi/, { en: 'Seed oil' });
   await compila(/^Sale/, { en: 'Salt' });
 
-  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Allergeni' }).click();
+  await apri(page, 'Allergeni');
   const pagina = page.getByRole('region', { name: 'Allergeni' });
   const burger = pagina.getByRole('article', { name: 'Etichetta Burger di prova' });
   // Panino 80 g, poi 40 g di Mayo (32 g di olio, 0,4 g di sale)
@@ -284,4 +290,64 @@ test('allergeni: etichette compilate a mano → lista ingredienti e tabella alle
   await expect(riga.getByRole('cell', { name: 'cereali contenenti glutine' })).toHaveText('●');
   await expect(riga.getByRole('cell', { name: 'soia' })).toHaveText('');
   await pagina.screenshot({ path: 'test-results/allergeni.png' });
+});
+
+test('prodotti: nuova ricetta con costi e lista ingredienti mentre scrivi; nome inglese al semilavorato', async ({ page }) => {
+  await accedi(page, MATTEO);
+  await apri(page, 'Prodotti');
+  const elenco = page.getByRole('region', { name: 'Prodotti' });
+  await expect(elenco.getByRole('heading', { name: /In vendita/ })).toBeVisible();
+  await elenco.getByRole('link', { name: '+ Nuovo' }).click();
+
+  const scheda = page.getByRole('region', { name: 'Scheda prodotto' });
+  await scheda.getByLabel('Nome', { exact: true }).fill('Wrap di prova');
+  await scheda.getByLabel('Nome in inglese').fill('Test wrap');
+  await scheda.getByLabel('Prezzo di vendita').fill('6');
+  await scheda.getByRole('button', { name: '+ Aggiungi riga' }).click();
+  await scheda.getByRole('listitem', { name: 'Riga 1' }).getByLabel('Ingrediente o semilavorato').selectOption({ label: 'Panino' });
+  await scheda.getByRole('listitem', { name: 'Riga 1' }).getByLabel('Quantità').fill('1');
+  await expect(scheda.getByRole('listitem', { name: 'Riga 1' })).toContainText('0,40 €');
+  await scheda.getByRole('button', { name: '+ Aggiungi riga' }).click();
+  await scheda.getByRole('listitem', { name: 'Riga 2' }).getByLabel('Ingrediente o semilavorato').selectOption({ label: 'Mayo di prova' });
+  await scheda.getByRole('listitem', { name: 'Riga 2' }).getByLabel('Quantità').fill('30');
+  await expect(scheda.getByRole('listitem', { name: 'Riga 2' })).toContainText('g');
+  // Mayo: 800 g olio a 3 €/kg + 10 g sale a 1,20 €/kg = 2,412 € per 1000 g → 30 g = 0,0724 €; totale 0,4724 € su 6 € = 7,9%
+  const fc = scheda.getByLabel('Food cost', { exact: true });
+  await expect(fc).toContainText('0,47 €');
+  await expect(fc).toContainText('7,9%');
+  await expect(fc).toContainText('5,53 €');
+  const lista = scheda.getByLabel('Lista ingredienti');
+  await expect(lista.locator('[lang=it]')).toContainText('Ingredienti: Panino (farina di frumento, acqua, sale), Mayo di prova (Olio di semi, Sale).');
+  await expect(lista).toContainText('«Mayo di prova»: manca il nome in inglese');
+  await scheda.getByLabel('Soglia food cost').fill('5');
+  await expect(fc.locator('.oltre')).toHaveText('7,9%');
+  await scheda.getByLabel('In menu').check();
+  await scheda.getByRole('button', { name: 'Crea prodotto' }).click();
+  await expect(scheda.getByRole('heading', { name: 'Wrap di prova' })).toBeVisible();
+  await scheda.screenshot({ path: 'test-results/scheda-prodotto.png' });
+
+  // Errori chiari: riga senza quantità
+  await scheda.getByRole('button', { name: '+ Aggiungi riga' }).click();
+  await scheda.getByRole('button', { name: 'Salva' }).click();
+  await expect(scheda.getByRole('status')).toHaveText('Riga 3: scegli l\'ingrediente.');
+  await scheda.getByRole('button', { name: 'Togli la riga 3' }).click();
+
+  // Nome inglese alla Mayo → la lista inglese del Wrap lo usa
+  await page.goto('/#/prodotti');
+  await page.getByRole('region', { name: 'Prodotti' }).getByRole('link', { name: /Mayo di prova/ }).click();
+  const mayo = page.getByRole('region', { name: 'Scheda prodotto' });
+  await expect(mayo.getByRole('button', { name: 'Semilavorato' })).toHaveAttribute('aria-pressed', 'true');
+  await mayo.getByLabel('Nome in inglese').fill('Vegan mayo');
+  await mayo.getByRole('button', { name: 'Salva' }).click();
+  await expect(mayo.getByRole('status')).toHaveText('Salvato.');
+  await expect(mayo).toContainText('Non si può eliminare: è usato in');
+  await page.goto('/#/prodotti');
+  const riga = page.getByRole('region', { name: 'Prodotti' }).getByRole('link', { name: /Wrap di prova/ });
+  await expect(riga).toContainText('in menu');
+  await expect(riga).toContainText('sopra soglia (5%)');
+  await riga.click();
+  await expect(page.getByRole('region', { name: 'Scheda prodotto' }).getByLabel('Lista ingredienti').locator('[lang=en]'))
+    .toContainText('Ingredients: Bun (wheat flour, water, salt), Vegan mayo (Seed oil, Salt).');
+  await page.goto('/#/prodotti');
+  await page.getByRole('region', { name: 'Prodotti' }).screenshot({ path: 'test-results/prodotti.png' });
 });

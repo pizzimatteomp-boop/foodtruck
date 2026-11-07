@@ -55,7 +55,15 @@ export interface Prodotto {
   quotaVendite: number;
   /** Nome in inglese (menu pubblico e liste ingredienti). */
   nomeEn?: string;
+  /** Aliquota IVA di vendita (per la cassa). */
+  iva?: AliquotaVendita;
+  /** Compare nel menu pubblico (solo i vendibili). */
+  inMenu?: boolean;
+  /** Food cost massimo accettato, in % del prezzo: oltre, avviso. */
+  soglia?: number | null;
 }
+
+export type AliquotaVendita = '4' | '5' | '10' | '22';
 
 /** Un articolo comprato da un fornitore (es. «Ceci secchi 5 kg» da Metro). */
 export interface Articolo {

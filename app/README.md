@@ -12,6 +12,7 @@ Piano: «Super app VegMan · Piano fase 0» (Claude Docs).
 - `public/` — icone, `manifest.webmanifest` (app installabile) e `sw.js` (service worker: app apribile senza rete).
 - `src/foodcost/` — modello dati (ingredienti, prodotti con ricette, articoli, acquisti) e calcolo di prezzi e food cost; `confronto-planner.test.ts` verifica che dia gli stessi numeri del codice di VegMan Planner.
 - `src/etichette/` — i 14 allergeni (IT/EN) e il calcolo della lista ingredienti e allergeni di un prodotto dalla ricetta (`lista.ts`).
+- `src/prodotti/` — controlli su prodotti e ricette (anche i giri tra semilavorati) e scrittura nel database.
 - `src/fatture/` — fatture elettroniche ricevute: lettura di XML, .p7m e ZIP (`xml.ts`, `fatturapa.ts`, `p7m.ts`, `zip.ts`, `file.ts`), piano di import senza doppioni (`piano.ts`), acquisti senza fattura (`manuale.ts`). Fatture di prova inventate in `tests/fatture/`.
 - `src/ingredienti/` — modifiche a ingredienti e collegamenti con gli articoli (conversioni, unione dei doppioni); `src/foodcost/unita.ts` e `somiglianza.ts` per prezzi leggibili, conversioni proposte e suggerimenti.
 - `*.db.ts` — il codice che legge e scrive nel database, provato sull'emulatore (`tests/regole`); il resto è logica pura coperta dai test veloci.

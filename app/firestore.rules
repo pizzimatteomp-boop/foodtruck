@@ -64,7 +64,17 @@ service cloud.firestore {
         && (nuovo().confezione == null || (nuovo().confezione is number && nuovo().confezione > 0));
       allow delete: if titolare();
     }
-    match /prodotti/{id}    { allow read: if team(); allow write: if titolare(); }
+    match /prodotti/{id} {
+      allow read: if team();
+      allow create, update: if titolare()
+        && nuovo().keys().hasOnly(['nome', 'nomeEn', 'tipo', 'gruppo', 'prezzo', 'iva', 'resa', 'ricetta', 'quotaVendite', 'inMenu', 'soglia'])
+        && testo(nuovo().nome) && nuovo().nome.size() <= 80
+        && nuovo().tipo in ['vendibile', 'semilavorato']
+        && nuovo().prezzo is number && nuovo().prezzo >= 0
+        && nuovo().ricetta is list && nuovo().ricetta.size() <= 100
+        && (!('iva' in nuovo()) || nuovo().iva in ['4', '5', '10', '22']);
+      allow delete: if titolare();
+    }
 
     // ---------- Prezzi: articoli dei fornitori e acquisti (righe di fattura) ----------
     // Solo il titolare: da qui si calcolano prezzi e food cost.

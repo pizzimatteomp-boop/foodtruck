@@ -10,6 +10,7 @@ import { Home } from '../ui/Home';
 import { Importa } from '../ui/Importa';
 import { Ingredienti } from '../ui/Ingredienti';
 import { Persone } from '../ui/Persone';
+import { Prodotti } from '../ui/Prodotti';
 import { Struttura } from '../ui/Struttura';
 import type { StatoSchermata } from '../ui/schermata';
 import { paginaDa, parametroDa } from './navigazione';
@@ -43,6 +44,7 @@ export function App({ servizi, ambiente }: { servizi: Servizi; ambiente: Ambient
     <Struttura servizi={servizi} ambiente={ambiente} profilo={stato.profilo} pagina={pagina}>
       {pagina.id === 'persone' ? <Persone db={servizi.db} titolareUid={stato.uid} />
         : pagina.id === 'importa' ? <Importa db={servizi.db} uid={stato.uid} />
+        : pagina.id === 'prodotti' ? <Prodotti db={servizi.db} parametro={parametroDa(hash)} />
         : pagina.id === 'allergeni' ? <Allergeni db={servizi.db} />
         : pagina.id === 'fatture' ? <Fatture db={servizi.db} uid={stato.uid} />
         : pagina.id === 'ingredienti' ? <Ingredienti db={servizi.db} parametro={parametroDa(hash)} />

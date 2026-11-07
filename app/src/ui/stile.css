@@ -202,3 +202,36 @@ code { font-size: 0.9em; background: var(--sfondo); padding: 1px 4px; border-rad
 .avvisi.errore { color: var(--errore); }
 
 .pallino { color: var(--lampone); }
+
+/* Home: pannello delle pagine; sul telefono il menu in basso mostra solo le principali */
+.pannello-pagine { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 8px; }
+.pannello-pagine a { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 12px; background: var(--sfondo); color: var(--testo); text-decoration: none; border: 1px solid var(--bordo); }
+.pannello-pagine a:hover { border-color: var(--accento); }
+.pannello-pagine .icona { font-size: 1.6rem; }
+.pannello-pagine strong { display: block; }
+.pannello-pagine small { color: var(--tenue); }
+@media (max-width: 899px) { .menu a.secondaria { display: none; } }
+
+/* Prodotti e ricette */
+.badge-menu { color: var(--su-selezione); background: var(--selezione); padding: 1px 6px; border-radius: 99px; font-size: 0.75rem; margin-left: 6px; }
+.oltre { color: var(--errore); font-weight: 700; }
+.incompleto-inline { color: var(--errore); }
+.ricetta { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ricetta li { display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'scelta scelta' 'quantita togli' 'costo costo'; gap: 6px 8px; padding: 10px; border-radius: 10px; background: var(--sfondo); }
+.ricetta select { grid-area: scelta; }
+.ricetta .quantita { grid-area: quantita; display: flex; align-items: center; gap: 6px; }
+.ricetta .quantita input { width: 120px; }
+.ricetta .costo-riga { grid-area: costo; font-variant-numeric: tabular-nums; color: var(--tenue); }
+.ricetta button { grid-area: togli; }
+@media (min-width: 600px) {
+  .ricetta li { grid-template-columns: 1fr auto 90px auto; grid-template-areas: 'scelta quantita costo togli'; align-items: center; }
+  .ricetta .costo-riga { text-align: right; }
+}
+input.corto { width: 80px; }
+.riepilogo { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.riepilogo div { display: flex; flex-direction: column; padding: 10px 12px; border-radius: 10px; background: var(--sfondo); }
+.riepilogo small { color: var(--tenue); }
+.riepilogo strong { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+
+.campo > span { font-size: 0.85rem; font-weight: 600; color: var(--tenue); }
+.due .campo { min-width: 0; }
