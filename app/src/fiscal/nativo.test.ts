@@ -30,6 +30,14 @@ describe('trasporto nativo', () => {
     expect(new TextDecoder().decode(pdf)).toBe('%PDF-1');
   });
 
+  it('PDF dichiarato con altro tipo: i byte si leggono lo stesso; si accetta qualunque formato', async () => {
+    const t = trasportoNativo(async (o) => {
+      expect(o.headers.Accept).toBe('*/*');
+      return { status: 200, headers: { 'content-type': 'application/octet-stream' }, data: btoa('%PDF-2') };
+    });
+    expect(new TextDecoder().decode(await new ServizioDCO(t).pdf('5'))).toBe('%PDF-2');
+  });
+
   it('rinvio al login → sessione scaduta', async () => {
     const t = trasportoNativo(async () => ({ status: 200, headers: { 'content-type': 'text/html' }, data: '<html>', url: 'https://iampe.agenziaentrate.gov.it/sam/UI/Login?realm=x' }));
     await expect(new ServizioDCO(t).ultimaVendita()).rejects.toBeInstanceOf(SessioneScaduta);

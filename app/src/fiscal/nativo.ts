@@ -61,7 +61,7 @@ export function trasportoNativo(http: FunzioneHttp, base = BASE_DCO, attesaMs = 
         x = await http({
           url: base + r.percorso,
           method: r.metodo,
-          headers: { Accept: pdf ? 'application/pdf' : 'application/json', ...(r.metodo === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
+          headers: { Accept: pdf ? '*/*' : 'application/json, text/plain, */*', ...(r.metodo === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
           ...(r.corpo === undefined ? {} : { data: r.corpo }),
           responseType: pdf ? 'arraybuffer' : 'json',
           connectTimeout: attesaMs,
@@ -71,7 +71,9 @@ export function trasportoNativo(http: FunzioneHttp, base = BASE_DCO, attesaMs = 
         throw new ErroreRete(`Rete: ${(e as Error)?.message ?? 'errore sconosciuto'}`);
       }
       const tipo = intestazione(x.headers ?? {}, 'content-type');
-      return { stato: x.status, tipo, corpo: leggiCorpo(tipo, x.data), ...(x.url ? { urlFinale: x.url } : {}) };
+      // Il PDF lo chiediamo in byte: arrivano in base64 qualunque sia il tipo dichiarato dal server.
+      const corpo = pdf && x.status === 200 ? leggiCorpo('application/pdf', x.data) : leggiCorpo(tipo, x.data);
+      return { stato: x.status, tipo, corpo, ...(x.url ? { urlFinale: x.url } : {}) };
     },
   };
 }
