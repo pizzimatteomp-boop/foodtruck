@@ -151,3 +151,22 @@ export function archivioInMemoria(): ArchivioInvii & { stato: { sospeso: InvioSo
   };
 }
 
+
+/** Stessa forma di Preferences di Capacitor (memoria del telefono che resta anche chiudendo l'app). */
+export interface MemoriaChiaveValore {
+  get(o: { key: string }): Promise<{ value: string | null }>;
+  set(o: { key: string; value: string }): Promise<void>;
+  remove(o: { key: string }): Promise<void>;
+}
+
+/** Archivio degli invii sul telefono. */
+export function archivioSuDispositivo(m: MemoriaChiaveValore, prefisso = 'vegman-dco'): ArchivioInvii {
+  const S = `${prefisso}-sospeso`, U = `${prefisso}-ultima`;
+  return {
+    sospeso: async () => { const v = (await m.get({ key: S })).value; return v ? JSON.parse(v) as InvioSospeso : null; },
+    salvaSospeso: (x) => m.set({ key: S, value: JSON.stringify(x) }),
+    togliSospeso: () => m.remove({ key: S }),
+    ultimaEmessa: async () => (await m.get({ key: U })).value,
+    salvaUltimaEmessa: (x) => m.set({ key: U, value: x }),
+  };
+}
