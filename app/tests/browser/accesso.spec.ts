@@ -2,7 +2,10 @@
  * Prova completa nel browser, con gli emulatori e le regole vere (firestore.rules):
  * una persona nuova entra e vede il suo codice → il titolare la abilita come cassa → lei rientra e vede il ruolo.
  */
+import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
+
+const richiedi = createRequire(import.meta.url);
 
 const PROGETTO = 'demo-vegman';
 const AUTH = `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/projects/${PROGETTO}`;
@@ -350,4 +353,66 @@ test('prodotti: nuova ricetta con costi e lista ingredienti mentre scrivi; nome 
     .toContainText('Ingredients: Bun (wheat flour, water, salt), Vegan mayo (Seed oil, Salt).');
   await page.goto('/#/prodotti');
   await page.getByRole('region', { name: 'Prodotti' }).screenshot({ path: 'test-results/prodotti.png' });
+});
+
+test('menu pubblico: pubblicazione, QR code leggibile, pagina aperta a tutti IT/EN, stampa', async ({ page, browser }) => {
+  await accedi(page, MATTEO);
+  await apri(page, 'Menu e QR');
+  const gestione = page.getByRole('region', { name: 'Menu e QR' });
+  await expect(gestione.getByLabel('Stato del menu')).toHaveText('Il menu non è ancora pubblicato.');
+  await expect(gestione.getByRole('link', { name: /Wrap di prova/ })).toContainText('6,00 €');
+  await gestione.getByRole('button', { name: 'Pubblica menu' }).click();
+  await expect(gestione.getByRole('status')).toHaveText('Menu pubblicato.');
+  await expect(gestione.getByRole('button', { name: 'Menu già aggiornato' })).toBeDisabled();
+  await expect(gestione.getByLabel('Stato del menu')).toContainText('È aggiornato.');
+
+  // Il QR code sullo schermo si legge e porta al menu pubblico
+  await page.addScriptTag({ path: richiedi.resolve('jsqr/dist/jsQR.js') });
+  const letto = await page.evaluate(async () => {
+    const svg = document.querySelector('.qr svg')!.outerHTML;
+    const img = new Image();
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    await img.decode();
+    const c = Object.assign(document.createElement('canvas'), { width: 400, height: 400 });
+    const x = c.getContext('2d')!;
+    x.drawImage(img, 0, 0, 400, 400);
+    const d = x.getImageData(0, 0, 400, 400);
+    return (window as unknown as { jsQR: (a: Uint8ClampedArray, w: number, h: number) => { data: string } | null }).jsQR(d.data, 400, 400)?.data;
+  });
+  expect(letto).toBe('http://127.0.0.1:5174/#/menu');
+
+  // Un cliente qualsiasi, senza accesso
+  const cliente = await (await browser.newContext({ locale: 'it-IT' })).newPage();
+  await cliente.goto('/#/menu');
+  const wrap = cliente.getByRole('article', { name: 'Wrap di prova' });
+  await expect(wrap).toContainText('6,00 €');
+  await expect(wrap).toContainText('Ingredienti: Panino (farina di frumento, acqua, sale), Mayo di prova (Olio di semi, Sale).');
+  await expect(wrap).toContainText('Contiene: cereali contenenti glutine.');
+  await expect(wrap.locator('strong', { hasText: 'frumento' })).toBeVisible();
+  await expect(cliente.getByText('costo')).toHaveCount(0);
+  await cliente.screenshot({ path: 'test-results/menu-pubblico.png', fullPage: true });
+  await cliente.getByRole('link', { name: 'EN' }).click();
+  const en = cliente.getByRole('article', { name: 'Test wrap' });
+  await expect(en).toContainText('Ingredients: Bun (wheat flour, water, salt), Vegan mayo (Seed oil, Salt).');
+  await expect(en).toContainText('Contains: cereals containing gluten.');
+
+  // Versione da stampare
+  await gestione.getByRole('link', { name: 'Versione da stampare' }).click();
+  const cartello = page.getByRole('table', { name: 'Cartello allergeni' });
+  await expect(cartello.getByRole('row', { name: /Wrap di prova/ }).getByRole('cell', { name: 'cereali contenenti glutine' })).toHaveText('●');
+  await page.emulateMedia({ media: 'print' });
+  await page.screenshot({ path: 'test-results/stampa.png', fullPage: true });
+  await page.emulateMedia({ media: 'screen' });
+
+  // Una modifica al prodotto: il menu pubblicato resta com'era finché non si ripubblica
+  await page.goto('/#/prodotti');
+  await page.getByRole('region', { name: 'Prodotti' }).getByRole('link', { name: /Wrap di prova/ }).click();
+  const scheda = page.getByRole('region', { name: 'Scheda prodotto' });
+  await scheda.getByLabel('Prezzo di vendita').fill('6,50');
+  await scheda.getByRole('button', { name: 'Salva' }).click();
+  await expect(scheda.getByRole('status')).toHaveText('Salvato.');
+  await page.goto('/#/pubblica');
+  await expect(page.getByRole('region', { name: 'Menu e QR' }).getByLabel('Stato del menu')).toContainText('Ci sono modifiche non ancora pubblicate.');
+  await cliente.reload();
+  await expect(cliente.getByRole('article', { name: 'Test wrap' })).toContainText('6,00 €');
 });

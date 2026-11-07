@@ -6,6 +6,8 @@ import type { Profilo } from '../firebase/profilo';
 import { Accesso } from '../ui/Accesso';
 import { Allergeni } from '../ui/Allergeni';
 import { Fatture } from '../ui/Fatture';
+import { GestioneMenu } from '../ui/GestioneMenu';
+import { MenuPubblico } from '../ui/MenuPubblico';
 import { Home } from '../ui/Home';
 import { Importa } from '../ui/Importa';
 import { Ingredienti } from '../ui/Ingredienti';
@@ -36,6 +38,8 @@ export function App({ servizi, ambiente }: { servizi: Servizi; ambiente: Ambient
     else setStato(s);
   }), [servizi]);
 
+  // Menu pubblico (QR code): aperto a tutti, senza accesso.
+  if (/^#\/menu(\?|$)/.test(hash)) return <MenuPubblico db={servizi.db} hash={hash} />;
   if (stato.stato !== 'dentro') {
     return <Accesso stato={stato} servizi={servizi} ambiente={ambiente} onErrore={(errore) => setStato({ stato: 'fuori', errore })} />;
   }
@@ -45,6 +49,7 @@ export function App({ servizi, ambiente }: { servizi: Servizi; ambiente: Ambient
       {pagina.id === 'persone' ? <Persone db={servizi.db} titolareUid={stato.uid} />
         : pagina.id === 'importa' ? <Importa db={servizi.db} uid={stato.uid} />
         : pagina.id === 'prodotti' ? <Prodotti db={servizi.db} parametro={parametroDa(hash)} />
+        : pagina.id === 'pubblica' ? <GestioneMenu db={servizi.db} uid={stato.uid} parametro={parametroDa(hash)} />
         : pagina.id === 'allergeni' ? <Allergeni db={servizi.db} />
         : pagina.id === 'fatture' ? <Fatture db={servizi.db} uid={stato.uid} />
         : pagina.id === 'ingredienti' ? <Ingredienti db={servizi.db} parametro={parametroDa(hash)} />

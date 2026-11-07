@@ -104,6 +104,17 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- Menu pubblico (QR code): lo legge chiunque, lo pubblica solo il titolare ----------
+    // Contiene solo nomi, prezzi, ingredienti e allergeni dei prodotti in menu.
+    match /menu/{id} {
+      allow read: if true;
+      allow create, update: if titolare() && id == 'pubblico'
+        && nuovo().keys().hasOnly(['voci', 'aggiornatoIl', 'aggiornatoDa'])
+        && nuovo().voci is list && nuovo().voci.size() <= 200
+        && nuovo().aggiornatoDa == request.auth.uid && nuovo().aggiornatoIl == request.time;
+      allow delete: if false;
+    }
+
     // ---------- Eventi e checklist ----------
     match /eventi/{id} {
       allow read: if team();

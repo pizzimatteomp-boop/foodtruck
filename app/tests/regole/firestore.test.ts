@@ -22,6 +22,7 @@ import { leggiFatturaPA } from '../../src/fatture/fatturapa';
 import { pianoFatture } from '../../src/fatture/piano';
 import { salvaAcquistoManuale, salvaFatture } from '../../src/fatture/salva.db';
 import { eliminaProdotto, salvaProdotto } from '../../src/prodotti/operazioni.db';
+import { pubblicaMenu } from '../../src/menu/menu.db';
 import { preparaAcquistoManuale } from '../../src/fatture/manuale';
 
 let env: RulesTestEnvironment;
@@ -385,5 +386,19 @@ describe('prodotti e ricette nel database', () => {
     await assertFails(salvaProdotto(db('anna'), id, p));
     await eliminaProdotto(db('matteo'), id);
     expect((await getDoc(doc(db('matteo'), 'prodotti', id))).exists()).toBe(false);
+  });
+});
+
+describe('menu pubblico', () => {
+  const voce = { id: 'k', nome: { it: 'Kebab', en: 'Kebab' }, gruppo: '', prezzo: 12, lista: { it: [{ testo: 'Seitan', grassetto: true }], en: [] }, allergeni: ['glutine' as const], tracce: [] };
+  it('lo pubblica il titolare; lo legge chiunque, anche senza accesso; nessun altro lo scrive', async () => {
+    await pubblicaMenu(db('matteo'), [voce], 'matteo');
+    expect((await getDoc(doc(anonimo(), 'menu', 'pubblico'))).data()!.voci).toEqual([voce]);
+    await assertSucceeds(getDoc(doc(db('nuovo'), 'menu', 'pubblico')));
+    await assertFails(pubblicaMenu(db('anna'), [voce], 'anna'));
+    await assertFails(setDoc(doc(anonimo(), 'menu', 'pubblico'), { voci: [] }));
+    await assertFails(setDoc(doc(db('matteo'), 'menu', 'altro'), { voci: [], aggiornatoIl: serverTimestamp(), aggiornatoDa: 'matteo' }));
+    await assertFails(setDoc(doc(db('matteo'), 'menu', 'pubblico'), { voci: [], aggiornatoIl: serverTimestamp(), aggiornatoDa: 'matteo', costi: 1 }));
+    await assertFails(deleteDoc(doc(db('matteo'), 'menu', 'pubblico')));
   });
 });
