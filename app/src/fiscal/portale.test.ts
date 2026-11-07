@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { webNativo, type OpzioniHttp } from './nativo';
 import {
-  AccessoRifiutato, accediPortale, codiceErrore, destinazione, eLogin, ggmmaaaa, IVASERVIZI, letturaDiProva, partitaIvaDa,
+  AccessoRifiutato, accediPortale, codiceErrore, eLogin, ggmmaaaa, IVASERVIZI, letturaDiProva, partitaIvaDa,
   messaggioSicuro, PortaleCambiato, PORTALE, apriPagina, decodifica, pontePagina, senzaParametri, strutturaPagina, Traccia, type RichiestaWeb, type RispostaWeb,
 } from './portale';
 import { ErroreRete } from './trasporto';
 
 // Tutto inventato: nessuna credenziale vera, nessun portale vero.
 const CRED = { codiceFiscale: 'XXXXXX00X00X000X', password: 'Segreta!123', pin: '9876543210' };
-const SEGRETI = [CRED.codiceFiscale, CRED.password, CRED.pin, 'COOKIE-SEGRETO', 'TOKEN-SEGRETO', 'B2B-SEGRETO', 'LARES-SEGRETO'];
+const SEGRETI = [CRED.codiceFiscale, CRED.password, CRED.pin, 'COOKIE-SEGRETO', 'TOKEN-SEGRETO', 'B2B-SEGRETO', 'LARES-SEGRETO', 'PAPPL-SEGRETO', 'IAPPL-SEGRETO'];
 const LOGIN = `https://iampe.agenziaentrate.gov.it/sam/UI/Login?realm=/agenziaentrate&goto=${encodeURIComponent('https://portale.agenziaentrate.gov.it/PortaleWeb/home?to=FATBTB')}`;
 const SPA = '<!doctype html><html><head><title>Agenzia delle Entrate - Area riservata</title></head><body><script defer src="/loginam/dist/js/app.bundle.min.js"></script></body><div id="root"></div></html>';
 
-type Opzioni = { senzaPonte?: boolean; rifiuta?: string; sceltaSoloModulo?: boolean; altraPagina?: boolean; senzaToken?: boolean; sessionePersa?: boolean; erroreAccesso?: number; erroreScelta?: boolean };
+type Opzioni = { senzaRed?: boolean; vaiKo?: boolean; rifiuta?: string; sceltaSoloModulo?: boolean; altraPagina?: boolean; senzaToken?: boolean; sessionePersa?: boolean; erroreAccesso?: number; erroreScelta?: boolean };
 
 function portaleFinto(o: Opzioni = {}) {
   const viste: RichiestaWeb[] = [];
@@ -35,12 +35,23 @@ function portaleFinto(o: Opzioni = {}) {
       return r(200, q.url, '{"ok":true}');
     }
     if (!dentro) return r(200, LOGIN, SPA);
-    // Come OpenAM: la sessione su ivaservizi si apre solo attraversando la pagina ponte (modulo automatico con gettone).
-    if (p === '/PortaleWeb/home') return r(200, q.url, o.senzaPonte ? '<html><title>Home</title></html>' : `<html><body onload="document.forms[0].submit()"><form method="post" action="${IVASERVIZI}/agent/cdsso"><input type="hidden" name="LARES" value="LARES&#x2D;SEGRETO"><input type="submit" value="Continua"></form></body></html>`);
+    // Come il portale (dal suo codice): initPortale → x-red (o vaiAFatturazione) → pagina ponte che apre la sessione su ivaservizi.
+    if (p === '/PortaleWeb/home') return r(200, q.url, '<html><title>Agenzia delle Entrate - Area riservata</title><div id="root"></div></html>');
+    if (p === '/portale-rest/rs/initPortale') {
+      if (!u.search.includes('to=FATBTB')) return r(200, q.url, '{}');
+      return o.senzaRed ? r(200, q.url, '{"utente":"x"}', { 'x-appl': 'PAPPL-SEGRETO' }) : r(501, q.url, '', { 'x-red': `${IVASERVIZI}/agent/cdsso?tk=LARES-SEGRETO`, 'x-appl': 'PAPPL-SEGRETO' });
+    }
+    if (p === '/portale-rest/rs/servizi/vaiAFatturazione/b2b') {
+      if (q.intestazioni?.['x-appl'] !== 'PAPPL-SEGRETO') return r(403, q.url, '');
+      return r(200, q.url, o.vaiKo ? '{"esito":"KO","messaggio":"no"}' : `{"esito":"OK","url":"${IVASERVIZI}/agent/cdsso?tk=LARES-SEGRETO"}`);
+    }
+    if (p === '/agent/cdsso' && q.metodo === 'GET') return r(200, q.url, `<html><body onload="document.forms[0].submit()"><form method="post" action="/agent/cdsso"><input type="hidden" name="LARES" value="LARES&#x2D;SEGRETO"><input type="submit" value="Continua"></form></body></html>`);
     if (p === '/agent/cdsso' && q.metodo === 'POST') { dentroIva = q.modulo?.LARES === 'LARES-SEGRETO'; return r(200, q.url, '<html><head><meta http-equiv="refresh" content="0;url=/instr/InstradamentofcWeb/home"></head></html>'); }
     if (p === '/instr/InstradamentofcWeb/home') return r(200, q.url, '<html><title>Fatture e Corrispettivi</title></html>');
-    if (!dentroIva && !o.senzaPonte) return r(403, q.url, '<html>Forbidden</html>');
-    if (p.endsWith('/rs/initLight')) return r(200, q.url, '{"ok":true}');
+    if (!dentroIva) return r(403, q.url, 'Error 403: AuthenticationFailed');
+    if (p.endsWith('/rs/initLight')) return r(200, q.url, '{"ok":true}', { 'x-appl': 'IAPPL-SEGRETO' });
+    if (p === '/dp/PI2FC') return r(200, q.url, '<html><title>Servizi</title></html>');
+    if (p.startsWith('/instr/instradamento-fatture-rest/') && q.intestazioni?.['x-appl'] !== 'IAPPL-SEGRETO') return r(403, q.url, 'Error 403: AuthenticationFailed');
     if (p.endsWith('/rs/infouser-fc')) return r(200, q.url, '{"utente":{"cf":"XXXXXX00X00X000X","nome":"PROVA"},"incarichi":[{"pIva":"11111111111"}]}');
     if (p.endsWith('/rs/wizardTemplate')) return r(200, q.url, '<div>scelta</div>');
     if (p.endsWith('/rs/setUserChoice')) {
@@ -94,13 +105,10 @@ describe('pagine ponte', () => {
 });
 
 describe('accesso: pezzi', () => {
-  it('codice d\'errore, destinazione, indirizzi senza parametri, pagina di accesso, data di Roma', () => {
+  it('codice d\'errore, indirizzi senza parametri, pagina di accesso, data di Roma', () => {
     expect(codiceErrore('{"details":"PASSWORD_EXPIRED"}')).toBe('PASSWORD_EXPIRED');
     expect(codiceErrore('{"details":"<script>"}')).toBeUndefined();
     expect(codiceErrore('no')).toBeUndefined();
-    expect(destinazione(LOGIN)).toBe('https://portale.agenziaentrate.gov.it/PortaleWeb/home?to=FATBTB');
-    expect(destinazione('https://iampe.agenziaentrate.gov.it/sam/UI/Login?goto=https://cattivo.it/')).toBe(`${PORTALE}/PortaleWeb/home?to=FATBTB`);
-    expect(destinazione('rotto')).toBe(`${PORTALE}/PortaleWeb/home?to=FATBTB`);
     expect(senzaParametri('https://a.it/x/y?cf=SEGRETO#z')).toBe('a.it/x/y');
     expect(senzaParametri('rotto')).toBe('?');
     expect(eLogin(LOGIN)).toBe(true);
@@ -157,12 +165,22 @@ describe('accesso al portale (finto) e letture di prova', () => {
     nessunSegreto(t);
   });
 
-  it('senza pagina ponte, e con l\'ingresso ai servizi IVA che non risponde: si va avanti', async () => {
-    const base = portaleFinto({ senzaPonte: true });
-    const t = new Traccia(async (q) => { if (q.url.includes('InstradamentofcWeb')) throw new ErroreRete('giù'); return base.web(q); });
-    await accediPortale(t, CRED);
-    expect(t.testo()).toContain('titolo «Home», nessun rimando nella pagina');
-    expect(t.testo()).toContain('Ingresso servizi IVA · GET ivaservizi.agenziaentrate.gov.it/instr/InstradamentofcWeb/home → rete');
+  it('senza x-red si passa da vaiAFatturazione; con esito KO si prova l\'ingresso diretto; /dp/PI2FC che non risponde non blocca', async () => {
+    const a = portaleFinto({ senzaRed: true });
+    const ta = new Traccia(a.web);
+    await accediPortale(ta, CRED);
+    expect(ta.testo()).toContain('Vai a Fatture e Corrispettivi · GET portale.agenziaentrate.gov.it/portale-rest/rs/servizi/vaiAFatturazione/b2b → 200 [application/json] · esito: OK → ivaservizi.agenziaentrate.gov.it/agent/cdsso');
+    expect(ta.testo()).toContain('x-appl presente; chiavi: utente');
+    nessunSegreto(ta);
+    const b = portaleFinto({ senzaRed: true, vaiKo: true });
+    const tb = new Traccia(async (q) => { if (q.url.includes('/dp/PI2FC')) throw new ErroreRete('giù'); return b.web(q); });
+    await expect(accediPortale(tb, CRED)).rejects.toThrow(/Me stesso/);
+    expect(tb.testo()).toContain('esito: KO');
+    expect(tb.testo()).toContain('Servizi IVA (PI2FC) · GET ivaservizi.agenziaentrate.gov.it/dp/PI2FC → rete');
+    expect(tb.testo()).toContain('initLight → 403');
+    const c = new Traccia(async (q) => (q.url.includes('vaiAFatturazione') ? { stato: 200, url: q.url, intestazioni: {}, testo: 'non json' } : a.web(q)));
+    await accediPortale(c, CRED).catch(() => undefined);
+    expect(c.testo()).toContain('vaiAFatturazione/b2b → 200');
   });
 
   it('scelta dell\'utenza accettata solo come modulo: riprova in quel formato', async () => {

@@ -173,14 +173,21 @@ export function messaggioSicuro(e: unknown): string {
 
 export class Traccia {
   readonly passi: PassoTraccia[] = [];
+  /** Gettone «x-appl» per sito, come lo tengono le pagine dell'Agenzia (localStorage) e lo rimandano a ogni chiamata. */
+  private readonly appl = new Map<string, string>();
   constructor(private readonly web: Web) {}
 
   async chiama(passo: string, r: RichiestaWeb, nota?: (x: RispostaWeb) => string | undefined): Promise<RispostaWeb> {
     let x: RispostaWeb;
+    const host = (() => { try { return new URL(r.url).host; } catch { return ''; } })();
+    const gettone = this.appl.get(host);
+    if (gettone && !r.intestazioni?.['x-appl']) r = { ...r, intestazioni: { ...r.intestazioni, 'x-appl': gettone } };
     try { x = await this.web(r); } catch (e) {
       this.passi.push({ passo, metodo: r.metodo, indirizzo: senzaParametri(r.url), stato: 'rete', nota: `errore: ${messaggioSicuro(e)}` });
       throw e;
     }
+    const nuovo = intestazione(x.intestazioni, 'x-appl');
+    if (nuovo && host) this.appl.set(host, nuovo);
     const tipo = (intestazione(x.intestazioni, 'content-type') ?? '').split(';')[0]!.trim();
     const n = nota?.(x);
     this.passi.push({
@@ -206,15 +213,6 @@ export function codiceErrore(testo: string): string | undefined {
   try { const d = (JSON.parse(testo) as { details?: unknown }).details; return typeof d === 'string' && /^[A-Z_]{3,40}$/.test(d) ? d : undefined; } catch { return undefined; }
 }
 
-/** Indirizzo dove andare dopo l'accesso (parametro goto della pagina di accesso, solo siti dell'Agenzia). */
-export function destinazione(urlAccesso: string): string {
-  try {
-    const g = new URL(urlAccesso).searchParams.get('goto');
-    if (g && /^https:\/\/[a-z0-9.-]+\.agenziaentrate\.gov\.it\//i.test(g)) return g;
-  } catch { /* indirizzo non valido */ }
-  return `${PORTALE}/PortaleWeb/home?to=FATBTB`;
-}
-
 /** Accesso Fisconline e scelta «Me stesso». */
 export async function accediPortale(t: Traccia, c: Credenziali): Promise<void> {
   await entraNelPortale(t, c);
@@ -238,11 +236,38 @@ export async function entraNelPortale(t: Traccia, c: Credenziali): Promise<void>
   if (dopo.stato === 404 || dopo.stato === 405 || dopo.stato >= 500) throw new PortaleCambiato(`L'accesso ha risposto ${dopo.stato}.`);
   if (dopo.stato >= 300) throw new AccessoRifiutato(codiceErrore(dopo.testo) ?? `risposta ${dopo.stato}`);
 
-  const home = await apriPagina(t, 'Fatture e Corrispettivi', destinazione(pagina.url));
+  const home = await apriPagina(t, 'Portale', `${PORTALE}/PortaleWeb/home?to=FATBTB`);
   if (eLogin(home.url)) throw new PortaleCambiato('Dopo l\'accesso il portale chiede di nuovo le credenziali (sessione non tenuta).');
-  if (!/to=FATBTB/.test(destinazione(pagina.url))) await apriPagina(t, 'Fatture e Corrispettivi', `${PORTALE}/PortaleWeb/home?to=FATBTB`);
-  // Nel browser PortaleWeb rimanda qui: è la pagina che apre la sessione su ivaservizi.
-  await apriPagina(t, 'Ingresso servizi IVA', `${IVASERVIZI}/instr/InstradamentofcWeb/home`).catch(() => undefined);
+  await versoFatture(t);
+}
+
+const JSON_XHR = { Accept: 'application/json, text/plain, */*', 'Content-Type': 'application/json' };
+
+/** Altre intestazioni di servizio (senza valori) da annotare. */
+function intestazioniNote(x: RispostaWeb): string {
+  return ['x-red', 'x-appl', 'x-msg'].filter((k) => intestazione(x.intestazioni, k)).map((k) => (k === 'x-red' ? `x-red → ${senzaParametri(intestazione(x.intestazioni, k)!)}` : `${k} presente`)).join(', ');
+}
+
+/**
+ * Passaggio dal portale a Fatture e Corrispettivi come fa la pagina del portale (dal suo codice pubblico, 7/11/2026):
+ * initPortale?to=FATBTB → rimando «x-red», altrimenti vaiAFatturazione/b2b → {esito, url}; poi initLight e /dp/PI2FC.
+ */
+export async function versoFatture(t: Traccia): Promise<void> {
+  const PR = `${PORTALE}/portale-rest/rs`;
+  const init = await t.chiama('Avvio portale', { url: `${PR}/initPortale?${ts()}&to=FATBTB`, metodo: 'GET', intestazioni: JSON_XHR },
+    (x) => [intestazioniNote(x), chiaviJson(x.testo)].filter(Boolean).join('; ') || undefined);
+  let verso = intestazione(init.intestazioni, 'x-red');
+  if (!verso) {
+    const vai = await t.chiama('Vai a Fatture e Corrispettivi', { url: `${PR}/servizi/vaiAFatturazione/b2b?${ts()}`, metodo: 'GET', intestazioni: JSON_XHR }, (x) => {
+      try { const j = JSON.parse(x.testo) as { esito?: string; url?: string }; return `esito: ${j.esito ?? '-'}${j.url ? ` → ${senzaParametri(j.url)}` : ''}`; } catch { return chiaviJson(x.testo); }
+    });
+    try { const j = JSON.parse(vai.testo) as { esito?: string; url?: string }; if (j.esito === 'OK' && j.url) verso = new URL(j.url, PORTALE).toString(); } catch { /* niente */ }
+  }
+  await apriPagina(t, 'Fatture e Corrispettivi', verso ?? `${IVASERVIZI}/instr/InstradamentofcWeb/home`);
+  const R = `${IVASERVIZI}/instr/instradamento-fatture-rest`;
+  await t.chiama('Avvio Fatture e Corrispettivi', { url: `${R}/rs/initLight?${ts()}&to=FATBTB`, metodo: 'GET', intestazioni: JSON_XHR },
+    (x) => [intestazioniNote(x), chiaviJson(x.testo)].filter(Boolean).join('; ') || undefined);
+  await t.chiama('Servizi IVA (PI2FC)', { url: `${IVASERVIZI}/dp/PI2FC`, metodo: 'GET' }).catch(() => undefined);
 }
 
 /** Apre una pagina come un browser: attraversa fino a 6 pagine ponte (moduli automatici, meta refresh, script). */
@@ -264,15 +289,14 @@ export async function apriPagina(t: Traccia, passo: string, url: string): Promis
 /** Scelta dell'utenza «Me stesso» in Fatture e Corrispettivi. */
 export async function scegliMeStesso(t: Traccia, c: Credenziali): Promise<void> {
   const R = `${IVASERVIZI}/instr/instradamento-fatture-rest/rs`;
-  await t.chiama('Avvio', { url: `${R}/initLight?${ts()}`, metodo: 'GET' }, (x) => chiaviJson(x.testo));
-  const info = await t.chiama('Utente', { url: `${R}/infouser-fc?${ts()}`, metodo: 'GET' }, (x) => chiaviJson(x.testo));
+  const info = await t.chiama('Utente', { url: `${R}/infouser-fc?${ts()}`, metodo: 'GET', intestazioni: JSON_XHR }, (x) => chiaviJson(x.testo));
   const pIva = partitaIvaDa(info.testo) ?? PARTITA_IVA;
-  await t.chiama('Scelte utenza', { url: `${R}/wizardTemplate?${ts()}`, metodo: 'GET' });
+  await t.chiama('Scelte utenza', { url: `${R}/wizardTemplate?${ts()}`, metodo: 'GET', intestazioni: JSON_XHR });
 
   const scelta = { tipoutenza: 'meStesso', cf: c.codiceFiscale, pIva };
   let s = await t.chiama('Scelta «Me stesso» (JSON)', { url: `${R}/setUserChoice?${ts()}`, metodo: 'POST', json: scelta });
   if (s.stato >= 400) s = await t.chiama('Scelta «Me stesso» (modulo)', { url: `${R}/setUserChoice?${ts()}`, metodo: 'POST', modulo: scelta });
-  const pronto = await t.chiama('Verifica scelta', { url: `${R}/fullTemplate?${ts()}`, metodo: 'GET' });
+  const pronto = await t.chiama('Verifica scelta', { url: `${R}/fullTemplate?${ts()}`, metodo: 'GET', intestazioni: JSON_XHR });
   if (s.stato >= 400 || pronto.stato >= 400) throw new PortaleCambiato('La scelta dell\'utenza «Me stesso» non è riuscita.');
 }
 
