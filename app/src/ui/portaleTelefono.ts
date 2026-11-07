@@ -15,13 +15,19 @@ export async function deposito() {
   return cassaforte({ get: (k) => SecureStorage.get(k), set: (k, v) => SecureStorage.set(k, v), remove: (k) => SecureStorage.remove(k) });
 }
 
-const preferenze = async () => (await import('@capacitor/preferences')).Preferences;
-
+// Attenzione: i plugin di Capacitor non vanno mai restituiti da una funzione async (né passati a await):
+// sono oggetti che rispondono a qualunque nome, anche «then», e l'attesa non finirebbe mai.
 export async function accessoBloccato(): Promise<boolean> {
-  return (await (await preferenze()).get({ key: BLOCCO })).value === '1';
+  const { Preferences } = await import('@capacitor/preferences');
+  return (await Preferences.get({ key: BLOCCO })).value === '1';
 }
 export async function sbloccaAccesso(): Promise<void> {
-  await (await preferenze()).remove({ key: BLOCCO });
+  const { Preferences } = await import('@capacitor/preferences');
+  await Preferences.remove({ key: BLOCCO });
+}
+async function bloccaAccesso(): Promise<void> {
+  const { Preferences } = await import('@capacitor/preferences');
+  await Preferences.set({ key: BLOCCO, value: '1' });
 }
 
 export class AccessoNonPossibile extends Error {
@@ -44,7 +50,7 @@ export async function apriSessione(t: Traccia): Promise<boolean> {
   try {
     await entraNelPortale(t, cred);
   } catch (e) {
-    if (e instanceof AccessoRifiutato) await (await preferenze()).set({ key: BLOCCO, value: '1' });
+    if (e instanceof AccessoRifiutato) await bloccaAccesso();
     throw e;
   }
   return scegliMeStesso(t, cred).then(() => true, () => false);
