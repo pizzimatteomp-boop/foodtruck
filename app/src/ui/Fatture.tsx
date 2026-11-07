@@ -1,11 +1,11 @@
 /** Pagina «Fatture» (solo titolare): caricamento, righe nuove da controllare, acquisti a mano, elenco. */
 import { Capacitor } from '@capacitor/core';
 import type { Firestore } from 'firebase/firestore';
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useRaccolta } from '../dati/useRaccolta.db';
 import { leggiFatturaPA, type Fattura } from '../fatture/fatturapa';
 import { elencoRicevute, giaPresente, scaricaFattura } from '../fiscal/cassetto';
-import { AccessoRifiutato, PortaleCambiato } from '../fiscal/portale';
+import { AccessoRifiutato, Interrotta, PortaleCambiato, type Traccia } from '../fiscal/portale';
 import { AccessoNonPossibile, apriSessione, nuovaTraccia } from './portaleTelefono';
 import { leggiFileFatture } from '../fatture/file';
 import { ErroreAcquisto, preparaAcquistoManuale } from '../fatture/manuale';
@@ -132,12 +132,26 @@ function DalCassetto({ esistenti, disabilitato, onScaricate }: {
   const [errore, setErrore] = useState('');
   const [resoconto, setResoconto] = useState('');
   const [inCorso, setInCorso] = useState(false);
+  const [ultimi, setUltimi] = useState<string[]>([]);
+  const [secondi, setSecondi] = useState(0);
+  const traccia = useRef<Traccia | null>(null);
+  useEffect(() => {
+    if (!inCorso) return undefined;
+    const inizio = Date.now();
+    const id = setInterval(() => setSecondi(Math.round((Date.now() - inizio) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [inCorso]);
 
   async function scarica() {
     if (dal > al) { setErrore('La data iniziale è dopo quella finale.'); return; }
     setInCorso(true);
     setErrore('');
+    setResoconto('');
+    setUltimi([]);
+    setSecondi(0);
     const t = nuovaTraccia();
+    traccia.current = t;
+    t.alPasso = (p) => setUltimi((u) => [...u.slice(-2), `${p.passo} → ${p.stato}`]);
     try {
       setAvanzamento('Accesso al portale…');
       await apriSessione(t);
@@ -149,14 +163,17 @@ function DalCassetto({ esistenti, disabilitato, onScaricate }: {
       const scartati: { nome: string; motivo: string }[] = [];
       for (const [i, f] of daFare.entries()) {
         setAvanzamento(`Scarico ${i + 1} di ${daFare.length} (${elenco.length - nuove.length} già presenti)…`);
-        try { file.push(await scaricaFattura(t, f)); } catch (e) { scartati.push({ nome: `${f.fornitore} n. ${f.numero}`, motivo: (e as Error).message }); }
+        try { file.push(await scaricaFattura(t, f)); } catch (e) {
+          if (e instanceof Interrotta) throw e;
+          scartati.push({ nome: `${f.fornitore} n. ${f.numero}`, motivo: (e as Error).message });
+        }
       }
       if (nuove.length > daFare.length) scartati.push({ nome: 'Altre fatture', motivo: `${nuove.length - daFare.length} non scaricate: ripeti lo scaricamento dopo aver caricato queste.` });
       setAvanzamento(`${elenco.length} fatture nel periodo, ${nuove.length} nuove, ${file.length} scaricate.`);
       onScaricate(file, scartati);
     } catch (e) {
       setAvanzamento('');
-      setErrore(e instanceof AccessoRifiutato || e instanceof PortaleCambiato || e instanceof AccessoNonPossibile || (e as Error).name === 'ErroreCassetto'
+      setErrore(e instanceof AccessoRifiutato || e instanceof PortaleCambiato || e instanceof AccessoNonPossibile || e instanceof Interrotta || (e as Error).name === 'ErroreCassetto'
         ? (e as Error).message : `Interrotto: ${(e as Error)?.name ?? 'errore'}.`);
     }
     setResoconto(`Scarico fatture · ${new Date().toLocaleString('it-IT')}\n${t.testo()}`);
@@ -174,7 +191,9 @@ function DalCassetto({ esistenti, disabilitato, onScaricate }: {
       <button type="button" class="primario" disabled={disabilitato || inCorso || !dal || !al} onClick={() => void scarica()}>
         {inCorso ? 'Scaricamento…' : 'Scarica dal cassetto fiscale'}
       </button>
-      {avanzamento && <p role="status">{avanzamento}</p>}
+      {inCorso && <button type="button" class="secondario piccolo" onClick={() => { if (traccia.current) traccia.current.interrotta = true; }}>Interrompi</button>}
+      {avanzamento && <p role="status">{avanzamento}{inCorso ? ` · ${secondi} s` : ''}</p>}
+      {inCorso && ultimi.length > 0 && <pre class="resoconto">{ultimi.join('\n')}</pre>}
       {errore && <p class="errore" role="alert">{errore}</p>}
       {resoconto && (
         <details>

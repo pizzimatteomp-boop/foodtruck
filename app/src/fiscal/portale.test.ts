@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { webNativo, type OpzioniHttp } from './nativo';
 import {
   AccessoRifiutato, accediPortale, codiceErrore, eLogin, ggmmaaaa, IVASERVIZI, letturaDiProva, partitaIvaDa,
-  messaggioSicuro, PortaleCambiato, PORTALE, apriPagina, decodifica, pontePagina, senzaParametri, strutturaPagina, Traccia, type RichiestaWeb, type RispostaWeb,
+  Interrotta, messaggioSicuro, PortaleCambiato, PORTALE, apriPagina, decodifica, pontePagina, senzaParametri, strutturaPagina, Traccia, type RichiestaWeb, type RispostaWeb,
 } from './portale';
 import { ErroreRete } from './trasporto';
 
@@ -245,6 +245,19 @@ describe('accesso al portale (finto) e letture di prova', () => {
     const t = new Traccia(async () => { throw new ErroreRete('giù'); });
     await expect(accediPortale(t, CRED)).rejects.toBeInstanceOf(ErroreRete);
     expect(t.passi).toEqual([{ passo: 'Pagina di accesso', metodo: 'GET', indirizzo: 'ivaservizi.agenziaentrate.gov.it/portale/', stato: 'rete', nota: 'errore: giù' }]);
+  });
+
+  it('avanzamento passo per passo e interruzione', async () => {
+    const t = new Traccia(portaleFinto().web);
+    const visti: string[] = [];
+    t.alPasso = (p) => { visti.push(`${p.passo}:${p.stato}`); if (visti.length === 2) t.interrotta = true; };
+    await expect(accediPortale(t, CRED)).rejects.toBeInstanceOf(Interrotta);
+    expect(visti).toEqual(['Pagina di accesso:200', 'Invio credenziali:200']);
+    const r = new Traccia(async () => { throw new ErroreRete('giù'); });
+    const v: string[] = [];
+    r.alPasso = (p) => v.push(String(p.stato));
+    await expect(accediPortale(r, CRED)).rejects.toBeInstanceOf(ErroreRete);
+    expect(v).toEqual(['rete']);
   });
 
   it('messaggi d\'errore senza parametri; letture che continuano dopo un errore', async () => {

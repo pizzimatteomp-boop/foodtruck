@@ -29,7 +29,7 @@ export class AccessoNonPossibile extends Error {
 }
 
 export function nuovaTraccia(): Traccia {
-  return new Traccia(webNativo(CapacitorHttp.request as unknown as FunzioneHttp, navigator.userAgent));
+  return new Traccia(webNativo(CapacitorHttp.request as unknown as FunzioneHttp, navigator.userAgent, 20000));
 }
 
 /** Entra nel portale. Restituisce se la scelta «Me stesso» è riuscita (dopo l'accesso si va avanti comunque). */

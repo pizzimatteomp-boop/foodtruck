@@ -175,10 +175,18 @@ export function messaggioSicuro(e: unknown): string {
   return m.replace(/\?[^\s'"]*/g, '?…').replace(/\s+/g, ' ').slice(0, 200) || 'nessun messaggio';
 }
 
+export class Interrotta extends Error {
+  override name = 'Interrotta';
+  constructor() { super('Interrotto da te.'); }
+}
+
 export class Traccia {
   readonly passi: PassoTraccia[] = [];
   /** Gettone «x-appl» per sito, come lo tengono le pagine dell'Agenzia (localStorage) e lo rimandano a ogni chiamata. */
   private readonly appl = new Map<string, string>();
+  /** Chiamato a ogni passo (per mostrare l'avanzamento); interrotta = la prossima chiamata si ferma. */
+  alPasso?: (p: PassoTraccia) => void;
+  interrotta = false;
   constructor(private readonly web: Web) {}
 
   async chiama(passo: string, r: RichiestaWeb, nota?: (x: RispostaWeb) => string | undefined): Promise<RispostaWeb> {
@@ -186,8 +194,10 @@ export class Traccia {
     const host = (() => { try { return new URL(r.url).host; } catch { return ''; } })();
     const gettone = this.appl.get(host);
     if (gettone && !r.intestazioni?.['x-appl']) r = { ...r, intestazioni: { ...r.intestazioni, 'x-appl': gettone } };
+    if (this.interrotta) throw new Interrotta();
     try { x = await this.web(r); } catch (e) {
       this.passi.push({ passo, metodo: r.metodo, indirizzo: senzaParametri(r.url), stato: 'rete', nota: `errore: ${messaggioSicuro(e)}` });
+      this.alPasso?.(this.passi.at(-1)!);
       throw e;
     }
     const nuovo = intestazione(x.intestazioni, 'x-appl');
@@ -199,6 +209,7 @@ export class Traccia {
       ...(senzaParametri(x.url) !== senzaParametri(r.url) ? { finale: senzaParametri(x.url) } : {}),
       ...(tipo ? { tipo } : {}), ...(n ? { nota: n } : {}),
     });
+    this.alPasso?.(this.passi.at(-1)!);
     return x;
   }
 
