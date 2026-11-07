@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "142177740062",
+    "project_id": "vegman-prova",
+    "storage_bucket": "vegman-prova.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:142177740062:android:b64c1a43a73ed0dae1d50f",
+        "android_client_info": {
+          "package_name": "it.vegman.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "142177740062-7hu48qd3bb5mk74mvem3jd7e70fubhtt.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDll9aORDfqwcbYkqcYOWwrQd9ml5dy8h4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "142177740062-7hu48qd3bb5mk74mvem3jd7e70fubhtt.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
