@@ -66,12 +66,21 @@ service cloud.firestore {
     match /articoli/{id} {
       allow read, delete: if titolare();
       allow create, update: if titolare()
-        && nuovo().keys().hasOnly(['nome', 'unita', 'categoria', 'ingrediente', 'fattore'])
+        && nuovo().keys().hasOnly(['nome', 'unita', 'categoria', 'ingrediente', 'fattore', 'fornitore', 'partitaIva', 'codice'])
         && (nuovo().categoria == null || nuovo().categoria in ['alimentare', 'packaging', 'non_alimentare'])
         && (nuovo().ingrediente == null || nuovo().ingrediente is string)
         && nuovo().fattore is number && nuovo().fattore > 0;
     }
     match /acquisti/{id}    { allow read, write: if titolare(); }
+
+    // Fatture ricevute: si caricano e restano come sono (si possono solo eliminare se caricate per errore).
+    match /fatture/{id} {
+      allow read, delete: if titolare();
+      allow create: if titolare()
+        && nuovo().keys().hasOnly(['fornitore', 'partitaIva', 'tipo', 'numero', 'data', 'totale', 'righe', 'file'])
+        && testo(nuovo().numero) && nuovo().data is string && nuovo().totale is number;
+      allow update: if false;
+    }
 
     // Registro degli import (Planner, fatture): si aggiunge e basta.
     match /importazioni/{id} {

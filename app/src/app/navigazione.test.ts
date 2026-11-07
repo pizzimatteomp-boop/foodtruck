@@ -1,8 +1,8 @@
 import { indirizzo, paginaDa, pagineVisibili, parametroDa } from './navigazione';
 
 describe('pagine per ruolo', () => {
-  it('il titolare vede Home, Ingredienti, Persone e Importa; cassa e team solo la Home', () => {
-    expect(pagineVisibili('titolare').map((p) => p.id)).toEqual(['home', 'ingredienti', 'persone', 'importa']);
+  it('il titolare vede Home, Fatture, Ingredienti, Persone e Importa; cassa e team solo la Home', () => {
+    expect(pagineVisibili('titolare').map((p) => p.id)).toEqual(['home', 'fatture', 'ingredienti', 'persone', 'importa']);
     expect(pagineVisibili('cassa').map((p) => p.id)).toEqual(['home']);
     expect(pagineVisibili('team').map((p) => p.id)).toEqual(['home']);
   });
@@ -29,6 +29,6 @@ describe('pagine per ruolo', () => {
   });
 
   it('indirizzi', () => {
-    expect(pagineVisibili('titolare').map(indirizzo)).toEqual(['#/', '#/ingredienti', '#/persone', '#/importa']);
+    expect(pagineVisibili('titolare').map(indirizzo)).toEqual(['#/', '#/fatture', '#/ingredienti', '#/persone', '#/importa']);
   });
 });

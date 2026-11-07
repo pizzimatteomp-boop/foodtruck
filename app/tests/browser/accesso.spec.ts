@@ -188,3 +188,54 @@ test('ingredienti: collegare un articolo dà il prezzo; nuovo packaging', async 
   await expect(page.getByRole('region', { name: 'Ingredienti' }).getByRole('link', { name: /Tovagliolo/ })).toContainText('senza prezzo');
   await page.getByRole('region', { name: 'Ingredienti' }).screenshot({ path: 'test-results/ingredienti.png' });
 });
+
+test('fatture: caricare uno ZIP, classificare le righe nuove, acquisto a mano', async ({ page }) => {
+  await accedi(page, MATTEO);
+  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Fatture' }).click();
+  const fatture = page.getByRole('region', { name: 'Fatture' });
+  await fatture.getByLabel('File delle fatture').setInputFiles('tests/fatture/fatture-inventate.zip');
+  const anteprima = fatture.getByLabel('Anteprima del caricamento');
+  await expect(anteprima).toContainText('1 fattura nuova');
+  await expect(anteprima).toContainText('3 righe: 0 aggiornano subito un prezzo, 3 articoli nuovi da controllare');
+  await expect(anteprima).toContainText('presente due volte nei file caricati');
+  await expect(anteprima).toContainText('file di servizio del portale');
+  await expect(anteprima.getByRole('table', { name: 'Fatture nuove' })).toContainText('INGROSSO INVENTATO S.R.L. & C.');
+  await anteprima.getByRole('button', { name: 'Carica 1 fattura' }).click();
+  await expect(anteprima.getByRole('status')).toHaveText('Fatture caricate.');
+
+  // Righe nuove: tovaglioli → packaging collegati a «Tovagliolo» (500 pz a confezione), trasporto → non alimentare
+  const tovaglioli = fatture.getByRole('listitem', { name: /Da controllare: TOVAGLIOLI/ });
+  await tovaglioli.getByRole('button', { name: 'Packaging' }).click();
+  await expect(tovaglioli.getByLabel('Ingrediente')).toHaveValue(/.+/);
+  await expect(tovaglioli.getByLabel('Conversione')).toHaveValue('500');
+  await tovaglioli.getByRole('button', { name: 'Conferma' }).click();
+  await expect(tovaglioli).toHaveCount(0);
+  const trasporto = fatture.getByRole('listitem', { name: /Da controllare: TRASPORTO/ });
+  await trasporto.getByRole('button', { name: 'Non alimentare' }).click();
+  await trasporto.getByRole('button', { name: 'Conferma' }).click();
+  await expect(trasporto).toHaveCount(0);
+  await expect(fatture.getByRole('listitem', { name: /Da controllare: CECI/ })).toBeVisible();
+
+  // Acquisto senza fattura: 1 kg di sale dal contadino per 2 €
+  const manuale = fatture.getByRole('form', { name: 'Acquisto senza fattura' });
+  await manuale.getByLabel('Ingrediente comprato').selectOption({ label: 'Sale' });
+  await manuale.getByLabel('Da chi').fill('Contadino inventato');
+  await manuale.getByLabel('Quantità').fill('1000');
+  await manuale.getByLabel('Totale pagato').fill('2,00');
+  await manuale.getByRole('button', { name: 'Registra acquisto' }).click();
+  await expect(manuale.getByRole('status')).toHaveText('Registrato: Sale da Contadino inventato.');
+  await fatture.screenshot({ path: 'test-results/fatture.png' });
+
+  // Ricaricare lo stesso file: nessun doppione
+  await fatture.getByLabel('File delle fatture').setInputFiles('tests/fatture/fattura-inventata.xml.p7m');
+  await expect(fatture.getByLabel('Anteprima del caricamento')).toContainText('0 fatture nuove');
+  await expect(fatture.getByLabel('Anteprima del caricamento')).toContainText('già caricata');
+
+  // Prezzi aggiornati negli ingredienti
+  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Ingredienti' }).click();
+  const elenco = page.getByRole('region', { name: 'Ingredienti' });
+  await expect(elenco.getByRole('link', { name: /Tovagliolo/ })).toContainText('0,0136 €/pz');
+  // Sale: 2 kg a 0,80 € + 1 kg a 2,00 € = 3,60 € / 3 kg
+  await expect(elenco.getByRole('link', { name: /Sale/ })).toContainText('1,20 €/kg');
+  await expect(elenco.getByRole('link', { name: /Sale/ })).toContainText('2 fonti');
+});

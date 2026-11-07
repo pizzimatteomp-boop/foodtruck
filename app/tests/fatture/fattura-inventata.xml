@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fattura INVENTATA per i test: fornitore, numeri e prodotti non sono reali. -->
+<p:FatturaElettronica versione="FPR12" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">
+  <FatturaElettronicaHeader>
+    <DatiTrasmissione><IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>00000000000</IdCodice></IdTrasmittente><ProgressivoInvio>A1</ProgressivoInvio><FormatoTrasmissione>FPR12</FormatoTrasmissione><CodiceDestinatario>0000000</CodiceDestinatario></DatiTrasmissione>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>99999999999</IdCodice></IdFiscaleIVA>
+        <Anagrafica><Denominazione>INGROSSO INVENTATO S.R.L. &amp; C.</Denominazione></Anagrafica>
+        <RegimeFiscale>RF01</RegimeFiscale>
+      </DatiAnagrafici>
+    </CedentePrestatore>
+    <CessionarioCommittente><DatiAnagrafici><IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>00000000001</IdCodice></IdFiscaleIVA><Anagrafica><Denominazione>CLIENTE DI PROVA</Denominazione></Anagrafica></DatiAnagrafici></CessionarioCommittente>
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody>
+    <DatiGenerali><DatiGeneraliDocumento><TipoDocumento>TD01</TipoDocumento><Divisa>EUR</Divisa><Data>2026-10-12</Data><Numero>1234/FD</Numero><ImportoTotaleDocumento>39.41</ImportoTotaleDocumento></DatiGeneraliDocumento></DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <CodiceArticolo><CodiceTipo>EAN</CodiceTipo><CodiceValore>8000000000001</CodiceValore></CodiceArticolo>
+        <CodiceArticolo><CodiceTipo>INTERNO</CodiceTipo><CodiceValore>CEC5</CodiceValore></CodiceArticolo>
+        <Descrizione>CECI SECCHI   SACCO 5 KG</Descrizione>
+        <Quantita>2.00</Quantita><UnitaMisura>pz</UnitaMisura>
+        <PrezzoUnitario>11.50000000</PrezzoUnitario>
+        <ScontoMaggiorazione><Tipo>SC</Tipo><Importo>1.00</Importo></ScontoMaggiorazione>
+        <PrezzoTotale>21.00</PrezzoTotale><AliquotaIVA>10.00</AliquotaIVA>
+      </DettaglioLinee>
+      <DettaglioLinee>
+        <NumeroLinea>2</NumeroLinea>
+        <Descrizione>TOVAGLIOLI 33X33 CONF. 500 PZ</Descrizione>
+        <Quantita>1.00</Quantita><UnitaMisura>CF</UnitaMisura>
+        <PrezzoUnitario>6.80</PrezzoUnitario><PrezzoTotale>6.80</PrezzoTotale><AliquotaIVA>22.00</AliquotaIVA>
+      </DettaglioLinee>
+      <DettaglioLinee>
+        <NumeroLinea>3</NumeroLinea>
+        <Descrizione>TRASPORTO</Descrizione>
+        <PrezzoUnitario>5.00</PrezzoUnitario><PrezzoTotale>5.00</PrezzoTotale><AliquotaIVA>22.00</AliquotaIVA>
+      </DettaglioLinee>
+      <DatiRiepilogo><AliquotaIVA>10.00</AliquotaIVA><ImponibileImporto>21.00</ImponibileImporto><Imposta>2.10</Imposta></DatiRiepilogo>
+    </DatiBeniServizi>
+  </FatturaElettronicaBody>
+</p:FatturaElettronica>

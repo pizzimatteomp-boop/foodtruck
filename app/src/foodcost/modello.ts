@@ -49,6 +49,10 @@ export interface Articolo {
   ingrediente: string | null;
   /** Quante unità di ingrediente ci sono in un'unità di articolo (es. 1 CO = 24 pz → 24). */
   fattore: number;
+  /** Fornitore, partita IVA e codice articolo (dalle fatture elettroniche; assenti per gli articoli di Planner). */
+  fornitore?: string;
+  partitaIva?: string;
+  codice?: string;
 }
 
 export interface Acquisto {

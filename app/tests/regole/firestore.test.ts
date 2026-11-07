@@ -17,6 +17,11 @@ import { leggiPlanner } from '../../src/importazione/planner';
 import { salvaImportPlanner } from '../../src/importazione/salva.db';
 import { collegaArticolo, salvaIngrediente, unisciIngredienti } from '../../src/ingredienti/operazioni.db';
 import type { Articolo, Prodotto } from '../../src/foodcost/modello';
+import { readFileSync as leggiFile } from 'node:fs';
+import { leggiFatturaPA } from '../../src/fatture/fatturapa';
+import { pianoFatture } from '../../src/fatture/piano';
+import { salvaAcquistoManuale, salvaFatture } from '../../src/fatture/salva.db';
+import { preparaAcquistoManuale } from '../../src/fatture/manuale';
 
 let env: RulesTestEnvironment;
 
@@ -322,5 +327,29 @@ describe('operazioni sugli ingredienti nel database', () => {
     expect((await getDoc(doc(m, 'ingredienti', 'ceci-doppio'))).exists()).toBe(false);
     expect((await getDoc(doc(m, 'articoli', 'art-ceci'))).data()).toMatchObject({ ingrediente: ceci });
     expect((await getDoc(doc(m, 'prodotti', 'hummus'))).data()!.ricetta).toEqual([{ tipo: 'ingrediente', id: ceci, quantita: 100 }]);
+  });
+});
+
+describe('fatture nel database', () => {
+  const fattura = leggiFatturaPA(leggiFile('tests/fatture/fattura-inventata.xml', 'utf8'))[0]!;
+  const vuoto = { fatture: new Set<string>(), acquisti: [], articoli: [] };
+
+  it('il titolare carica: fattura, righe e articoli nuovi; la fattura non si modifica', async () => {
+    const m = db('matteo');
+    const p = pianoFatture([{ file: 'f.xml', fattura }], vuoto);
+    await salvaFatture(m, p, 'matteo');
+    expect((await getDocs(collection(m, 'acquisti'))).docs.filter((d) => d.data().origine === 'fattura')).toHaveLength(3);
+    expect((await getDoc(doc(m, 'articoli', p.articoliNuovi[0]!.id))).data()).toMatchObject({ categoria: null, fornitore: fattura.fornitore.nome, codice: 'CEC5' });
+    await assertFails(updateDoc(doc(m, 'fatture', p.fatture[0]!.id), { totale: 0 }));
+    await assertFails(getDoc(doc(db('anna'), 'fatture', p.fatture[0]!.id)));
+    await assertFails(salvaFatture(db('anna'), pianoFatture([{ file: 'f.xml', fattura: { ...fattura, numero: 'altra' } }], vuoto), 'anna'));
+  });
+
+  it('acquisto manuale: articolo collegato e riga di acquisto', async () => {
+    const ing = { id: 'i1', nome: 'Ceci', categoria: 'alimentare' as const, unita: 'g', gruppo: '', confezione: null };
+    const r = preparaAcquistoManuale({ data: '2026-11-01', fornitore: 'Contadino', quantita: 1000, totale: 3 }, ing, '2026-11-07');
+    await salvaAcquistoManuale(db('matteo'), r.articolo, r.acquisto);
+    expect((await getDoc(doc(db('matteo'), 'acquisti', r.acquisto.id))).data()).toMatchObject({ origine: 'manuale', quantita: 1000 });
+    await assertFails(salvaAcquistoManuale(db('luca'), r.articolo, r.acquisto));
   });
 });

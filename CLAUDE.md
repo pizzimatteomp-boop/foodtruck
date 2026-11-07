@@ -98,7 +98,7 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
    - 4b. In sotto-passi:
      - 4b-1. [x] Motore del food cost (`app/src/foodcost/`) e import da Planner (`app/src/importazione/`, pagina «Importa»): verificato identico a Planner su 200 archivi inventati e sui 13 prodotti veri (6/11/2026). Unica differenza voluta: righe di fattura a quantità 0 non danno prezzo 0 €
      - 4b-2. [x] Pagina Ingredienti (`app/src/ui/Ingredienti.tsx`, `SchedaIngrediente.tsx`, `app/src/ingredienti/`): elenco alimentare/packaging con €/kg, €/L o €/pz e stato del prezzo; scheda con fonti e prezzo per fonte, collegamento articoli con conversione proposta dal nome (es. «CECI 5 KG» → 5000 g), unione dei doppioni (sposta fonti e ricette), nuovo ingrediente
-     - 4b-3. Fatture XML/ZIP, tre categorie, collegamento articoli, acquisti manuali
+     - 4b-3. [x] Fatture (`app/src/fatture/`, pagina «Fatture»): lettori scritti da zero e senza librerie per XML FatturaPA, buste firmate .p7m (anche spezzate e in base64) e ZIP; fattura riconosciuta da fornitore+tipo+numero+data (niente doppioni, salta quelle già in Planner); articolo = partita IVA + codice (o descrizione), collegato una volta poi automatico; note di credito archiviate senza toccare i prezzi; coda «Da controllare» con le 3 categorie; acquisti senza fattura. Fixture inventate in `app/tests/fatture/` (firmate con un certificato finto)
      - 4b-4. Ricette e prodotti con food cost mentre si scrive
      - 4b-5. Storico mensile, grafici, avvisi
 5. [ ] Modulo fiscale di rete: accesso Fisconline, emissione, annullo, PDF, gestione errori, simulatore; con lo stesso accesso download mensile delle fatture ricevute e promemoria il 5 del mese

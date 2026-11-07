@@ -173,3 +173,11 @@ optgroup { font-style: normal; }
   .menu a { flex-direction: column; gap: 2px; padding: 6px 2px; font-size: 0.75rem; min-width: 0; }
   .menu a .icona { font-size: 1.25rem; line-height: 1; }
 }
+
+/* Fatture */
+.scelte { display: flex; flex-wrap: wrap; gap: 6px; }
+.scelta { min-height: 40px; padding: 0 12px; font-size: 0.9rem; background: transparent; color: var(--accento); border-width: 1.5px; }
+.scelta.attiva { background: var(--selezione); color: var(--su-selezione); border-color: var(--selezione); font-weight: 600; }
+.anteprima { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--sfondo); }
+.elenco li a:not([href]) { cursor: default; }
+.elenco li a:not([href]):hover { background: none; }
