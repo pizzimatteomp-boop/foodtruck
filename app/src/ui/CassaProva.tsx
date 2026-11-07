@@ -3,7 +3,7 @@
  * annullo e la regola anti-doppioni con guasti a comando. Più la cassaforte delle credenziali Fisconline
  * (solo nell'app Android, solo per il titolare): qui si salvano e si cancellano, non si mostrano mai.
  */
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import type { Firestore } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { useRaccolta } from '../dati/useRaccolta.db';
@@ -15,6 +15,11 @@ import { accessoBloccato, AccessoNonPossibile, apriSessione, deposito, nuovaTrac
 import { CassaProva as Cassa, totaleRighe, type Pagamento, type RigaCassa } from '../fiscal/prova';
 import type { Guasto } from '../fiscal/simulatore';
 import { RifiutoAgenzia, SessioneScaduta } from '../fiscal/trasporto';
+import { documentoAnnullo, documentoVendita, type Cedente } from '../fiscal/dco';
+import { emettiVendita, inviaAnnulloReso, verificaSospeso } from '../fiscal/emissione';
+import { BASE_DCO, trasportoNativo, type FunzioneHttp } from '../fiscal/nativo';
+import { ServizioDCO } from '../fiscal/servizio';
+import { cedenteDaAgenzia, descriviCedente, trasportoRegistrato, VENDITA_DI_PROVA } from '../fiscal/vero';
 import { euro } from './formato';
 
 const NATIVA = Capacitor.isNativePlatform();
@@ -105,6 +110,123 @@ function ProvaAccesso() {
   );
 }
 
+const ULTIMA_VERA = 'vegman-dco-prova-vera';
+interface ScontrinoVero { idtrx: string; progressivo: string; quando: string; annullo?: string }
+
+/**
+ * Passo 8: vendita di prova VERA col documento commerciale online, e suo annullo.
+ * Parte solo se Matteo scrive EMETTI / ANNULLA: è il suo via libera esplicito in quel momento.
+ */
+function AgenziaVera() {
+  const [collegato, setCollegato] = useState<{ servizio: ServizioDCO; cedente: Cedente } | null>(null);
+  const [ultimo, setUltimo] = useState<ScontrinoVero | null>(null);
+  const [esito, setEsito] = useState<Esito>(null);
+  const [occupato, setOccupato] = useState(false);
+  const [resoconto, setResoconto] = useState('');
+  const registro = useMemo<string[]>(() => [], []);
+
+  useEffect(() => {
+    void import('@capacitor/preferences').then(async ({ Preferences }) => {
+      const v = (await Preferences.get({ key: ULTIMA_VERA })).value;
+      if (v) setUltimo(JSON.parse(v) as ScontrinoVero);
+    });
+  }, []);
+
+  async function salvaUltimo(x: ScontrinoVero) {
+    const { Preferences } = await import('@capacitor/preferences');
+    await Preferences.set({ key: ULTIMA_VERA, value: JSON.stringify(x) });
+    setUltimo(x);
+  }
+  async function archivioVero() {
+    const { Preferences } = await import('@capacitor/preferences');
+    return archivioSuDispositivo(Preferences, 'vegman-dco');
+  }
+
+  async function passo(f: () => Promise<string>) {
+    setOccupato(true);
+    setEsito(null);
+    try { setEsito({ testo: await f(), errore: false }); } catch (e) {
+      setEsito({ testo: e instanceof SessioneScaduta ? 'Sessione scaduta: premi di nuovo «Collegati».' : spiega(e), errore: true });
+      if (e instanceof SessioneScaduta) setCollegato(null);
+    }
+    setResoconto(`Agenzia vera · ${new Date().toLocaleString('it-IT')}\n${registro.join('\n')}`);
+    setOccupato(false);
+  }
+
+  const collega = () => passo(async () => {
+    const t = nuovaTraccia();
+    await apriSessione(t);
+    registro.push(...t.testo().split('\n'));
+    const servizio = new ServizioDCO(trasportoRegistrato(trasportoNativo(CapacitorHttp.request as unknown as FunzioneHttp, BASE_DCO, 20000), registro));
+    const cedente = cedenteDaAgenzia(await servizio.datiFiscali());
+    // Un invio rimasto in sospeso (es. app chiusa a metà) si chiarisce prima di tutto.
+    const recuperato = await verificaSospeso(servizio, await archivioVero());
+    if (recuperato) await salvaUltimo({ idtrx: recuperato.idtrx, progressivo: recuperato.progressivo, quando: new Date().toISOString() });
+    setCollegato({ servizio, cedente });
+    return `Collegato. Esercente: ${descriviCedente(cedente)}.${recuperato ? ` Recuperato uno scontrino rimasto in sospeso: ${recuperato.progressivo}.` : ''}`;
+  });
+
+  const emetti = () => {
+    if (!collegato) return;
+    if (prompt('Stai per emettere uno scontrino VERO all\'Agenzia delle Entrate:\nAcqua 1,50 €, IVA 22%, contanti.\n\nScrivi EMETTI per confermare.')?.trim().toUpperCase() !== 'EMETTI') return;
+    void passo(async () => {
+      const quando = new Date();
+      const doc = documentoVendita({ cedente: collegato.cedente, righe: [VENDITA_DI_PROVA], pagamenti: { contanti: 1.5 }, quando });
+      const r = await emettiVendita(collegato.servizio, await archivioVero(), doc, quando);
+      await salvaUltimo({ idtrx: r.idtrx, progressivo: r.progressivo, quando: quando.toISOString() });
+      return `${r.stato === 'recuperato' ? 'Risposta persa ma scontrino trovato' : 'Scontrino emesso'}: ${r.progressivo} (idtrx ${r.idtrx}).`;
+    });
+  };
+
+  const pdf = () => collegato && ultimo && void passo(async () => `PDF ricevuto: ${(await collegato.servizio.pdf(ultimo.idtrx)).length} byte.`);
+
+  const annulla = () => {
+    if (!collegato || !ultimo || ultimo.annullo) return;
+    if (prompt(`Stai per ANNULLARE davvero lo scontrino ${ultimo.progressivo}.\n\nScrivi ANNULLA per confermare.`)?.trim().toUpperCase() !== 'ANNULLA') return;
+    void passo(async () => {
+      const originale = await collegato.servizio.documento(ultimo.idtrx);
+      const quando = new Date();
+      const r = await inviaAnnulloReso(collegato.servizio, await archivioVero(), documentoAnnullo({ cedente: collegato.cedente, originale, quando }), quando);
+      await salvaUltimo({ ...ultimo, annullo: r.progressivo });
+      return `Annullato con ${r.progressivo}.`;
+    });
+  };
+
+  return (
+    <section aria-label="Agenzia vera">
+      <h2>Agenzia vera (passo 8)</h2>
+      <p class="simulatore" role="note" style="background: var(--lampone); color: #fff"><strong>ATTENZIONE · SCONTRINI VERI</strong>: qui l'app parla con l'Agenzia delle Entrate. Ogni scontrino è fiscale e definitivo (si può solo annullare).</p>
+      {!collegato ? (
+        <button type="button" class="primario" disabled={occupato} onClick={() => void collega()}>{occupato ? 'Collegamento…' : 'Collegati (solo lettura)'}</button>
+      ) : (
+        <div class="nuova">
+          <p>Vendita di prova: <strong>Acqua · 1,50 € · IVA 22% · contanti</strong></p>
+          <button type="button" class="primario" style="background: var(--lampone)" disabled={occupato} onClick={emetti}>Emetti scontrino VERO (1,50 €)</button>
+        </div>
+      )}
+      {ultimo && (
+        <div class="nuova">
+          <p>Ultimo scontrino vero: <strong>{ultimo.progressivo}</strong> · {new Date(ultimo.quando).toLocaleString('it-IT')}{ultimo.annullo ? ` · annullato con ${ultimo.annullo}` : ''}</p>
+          {collegato && (
+            <div class="comandi">
+              <button type="button" class="secondario piccolo" disabled={occupato} onClick={pdf}>Verifica PDF</button>
+              {!ultimo.annullo && <button type="button" class="secondario pericolo piccolo" disabled={occupato} onClick={annulla}>Annulla questo scontrino (VERO)</button>}
+            </div>
+          )}
+        </div>
+      )}
+      <p role="status" class={esito?.errore ? 'esito errore' : 'esito'}>{esito?.testo ?? ''}</p>
+      {resoconto && (
+        <details>
+          <summary>Resoconto tecnico (per Claude)</summary>
+          <pre class="resoconto">{resoconto}</pre>
+          <button type="button" class="secondario piccolo" onClick={() => void navigator.clipboard.writeText(resoconto).then(() => alert('Copiato.'))}>Copia resoconto</button>
+        </details>
+      )}
+    </section>
+  );
+}
+
 function Credenziali() {
   const [presenti, setPresenti] = useState<boolean | null>(null);
   const [modulo, setModulo] = useState({ codiceFiscale: '', password: '', pin: '' });
@@ -140,6 +262,7 @@ function Credenziali() {
             <button type="button" class="secondario pericolo piccolo" onClick={() => void cancella()}>Cancella</button>
           </div>
           <ProvaAccesso />
+          <AgenziaVera />
         </>
       ) : (
         <form class="nuova" onSubmit={salva} autocomplete="off">
