@@ -44,6 +44,11 @@ Documento completo: «Super app VegMan · Fatture, ingredienti e food cost» (Cl
 - Logo nell'app: monogramma «V» (`app/src/ui/LogoV.tsx`); icone dell'app = V crema su glaucous. Altre versioni (circolare con la carota mascotte, scritta VEGMAN, lettering World Savior) solo nel manuale.
 - Il manuale PDF è riservato: non va nel repository (che è pubblico).
 
+## Cassa: desideri di Matteo (7/11/2026, per la fase «comande e cassa»)
+- Interfaccia simile a **Billy** (con cui Matteo si è trovato bene); prodotti come pulsanti (già così nella Cassa · prova).
+- **Tastierino per importi liberi** (riga a prezzo diverso), come Billy.
+- **Fatture elettroniche** ai clienti che le chiedono (Billy lo fa): da studiare (invio allo SdI dal portale Fatture e Corrispettivi con lo stesso accesso Fisconline).
+
 ## Vendite e movimenti di prodotto (deciso il 6/11/2026)
 - **In Italia ogni vendita pagata ha il suo scontrino DCO**, emesso in automatico dalla comanda. Nessuna funzione per vendere senza scontrino e nessun archivio nascosto di vendite.
 - Movimenti **senza incasso**, tutti tracciati con motivo, persona, evento e ora, e scaricati dal magazzino:
@@ -129,7 +134,7 @@ Solo consultazione, nessun valore personale annotato. Base `https://ivaservizi.a
      - 4b-7. [x] Storico e avvisi (`app/src/storico/`, pagina «Avvisi», grafici in `app/src/ui/Grafico.tsx` e `Andamenti.tsx`): prezzo pagato mese per mese dagli acquisti (totale e per fonte, variazioni 1/3/12 mesi); fotografia mensile salvata da sola al primo accesso del titolare nel mese nuovo (`/storico/aaaa-mm`, non modificabile); andamento del food cost con soglia (mesi senza fotografia ricalcolati e segnati); avvisi: soglia superata, rincari oltre la % impostata (iniziale 10%), ingredienti in menu senza prezzo o con prezzo vecchio, articoli da controllare, menu da sistemare o ripubblicare. Data «oggi» sul fuso di Roma; nelle prove nel browser fissata al 7/11/2026
 5. [ ] Modulo fiscale di rete: accesso Fisconline, emissione, annullo, PDF, gestione errori, simulatore; con lo stesso accesso download mensile delle fatture ricevute e promemoria il 5 del mese
    - 5a. [x] Motore di emissione sicura (`app/src/fiscal/emissione.ts`, `servizio.ts`, `trasporto.ts`) e simulatore dell'Agenzia (`simulatore.ts`, guasti a comando). Regola anti-doppioni: prima di inviare si annota «invio in sospeso» sul dispositivo; risposta persa → si confronta con «ultima vendita» (stesse righe e data, idtrx diverso dall'ultima emessa da questo dispositivo): se c'è è «recuperato», altrimenti «non emesso» e si può riprovare; se non si riesce a verificare, nessuno scontrino nuovo parte. Annulli/resi persi restano in sospeso e si verificano a mano sul portale. Sessione scaduta e rifiuti dell'Agenzia = niente emesso. Prova a raffica: 300 vendite con guasti casuali → 300 scontrini esatti
-   - 5b. [ ] Accesso Fisconline (login, scelta utenza «Me stesso»), da studiare nei dettagli dopo il login e provare solo sul telefono
+   - 5b. [ ] Accesso Fisconline (login, scelta utenza «Me stesso»): motore pronto (`app/src/fiscal/portale.ts`: legge da solo il modulo OpenAM con i campi nascosti, invia le credenziali dalla cassaforte, sceglie «Me stesso», provato su un portale finto) e pulsante «Prova accesso (solo lettura)» nella Cassa · prova (dati esercente DCO, adesione, numero di fatture ricevute in 30 giorni). Resoconto copiabile senza valori; dopo un rifiuto l'app si blocca e non riprova. Da eseguire da Matteo sul telefono
    - 5c. [ ] Download fatture ricevute dal portale Fatture e Corrispettivi: indirizzi da studiare con Matteo (brief in chat del 7/11/2026)
 6. [ ] App Android di prova (Capacitor) installata sullo smartphone di Matteo
    - 6a. [x] Trasporto HTTP nativo (`app/src/fiscal/nativo.ts`) e archivio invii sul telefono (`archivioSuDispositivo`)

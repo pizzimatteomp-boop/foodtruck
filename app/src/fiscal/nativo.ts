@@ -3,6 +3,7 @@
  * sessione del portale gestiti dal telefono). La funzione HTTP si passa da fuori, così qui non
  * dipendiamo da Capacitor e la logica si prova senza telefono.
  */
+import type { RichiestaWeb, RispostaWeb, Web } from './portale';
 import { ErroreRete, type Richiesta, type Risposta, type Trasporto } from './trasporto';
 
 export const BASE_DCO = 'https://ivaservizi.agenziaentrate.gov.it/ser/api/documenti/v1/';
@@ -13,7 +14,7 @@ export interface OpzioniHttp {
   method: 'GET' | 'POST';
   headers: Record<string, string>;
   data?: unknown;
-  responseType: 'json' | 'arraybuffer';
+  responseType: 'json' | 'arraybuffer' | 'text';
   connectTimeout: number;
   readTimeout: number;
 }
@@ -72,5 +73,26 @@ export function trasportoNativo(http: FunzioneHttp, base = BASE_DCO, attesaMs = 
       const tipo = intestazione(x.headers ?? {}, 'content-type');
       return { stato: x.status, tipo, corpo: leggiCorpo(tipo, x.data), ...(x.url ? { urlFinale: x.url } : {}) };
     },
+  };
+}
+
+/**
+ * «Browser» per l'accesso al portale: segue i rimandi, i cookie li tiene il telefono.
+ * Si presenta con lo stesso User-Agent della WebView (Chrome per Android).
+ */
+export function webNativo(http: FunzioneHttp, userAgent: string, attesaMs = 30000): Web {
+  return async (r: RichiestaWeb): Promise<RispostaWeb> => {
+    const headers: Record<string, string> = { 'User-Agent': userAgent, Accept: r.json !== undefined ? 'application/json, text/plain, */*' : 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8', ...r.intestazioni };
+    let data: unknown;
+    if (r.modulo) { headers['Content-Type'] = 'application/x-www-form-urlencoded'; data = r.modulo; }
+    else if (r.json !== undefined) { headers['Content-Type'] = 'application/json'; data = r.json; }
+    let x: RispostaWeb | undefined;
+    try {
+      const y = await http({ url: r.url, method: r.metodo, headers, ...(data === undefined ? {} : { data }), responseType: 'text', connectTimeout: attesaMs, readTimeout: attesaMs });
+      x = { stato: y.status, url: y.url || r.url, intestazioni: y.headers ?? {}, testo: typeof y.data === 'string' ? y.data : JSON.stringify(y.data ?? '') };
+    } catch (e) {
+      throw new ErroreRete(`Rete: ${(e as Error)?.message ?? 'errore sconosciuto'}`);
+    }
+    return x;
   };
 }

@@ -304,3 +304,4 @@ input.corto { width: 80px; }
 
 /* Cassa di prova: sempre ben visibile che è il simulatore */
 .simulatore { background: var(--menta, #B9DED3); color: #000; border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+.resoconto { white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--sfondo); padding: 8px; border-radius: 8px; max-height: 40vh; overflow: auto; }

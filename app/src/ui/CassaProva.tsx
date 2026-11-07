@@ -3,13 +3,15 @@
  * annullo e la regola anti-doppioni con guasti a comando. Più la cassaforte delle credenziali Fisconline
  * (solo nell'app Android, solo per il titolare): qui si salvano e si cancellano, non si mostrano mai.
  */
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import type { Firestore } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { useRaccolta } from '../dati/useRaccolta.db';
 import type { Prodotto } from '../foodcost/modello';
 import { cassaforte, ErroreCredenziali } from '../fiscal/cassaforte';
 import { archivioInMemoria, archivioSuDispositivo, InvioInSospeso, NonEmesso, type ArchivioInvii, type InvioSospeso } from '../fiscal/emissione';
+import { webNativo, type FunzioneHttp } from '../fiscal/nativo';
+import { AccessoRifiutato, accediPortale, letturaDiProva, PortaleCambiato, Traccia, type EsitoProva } from '../fiscal/portale';
 import { CassaProva as Cassa, totaleRighe, type Pagamento, type RigaCassa } from '../fiscal/prova';
 import type { Guasto } from '../fiscal/simulatore';
 import { RifiutoAgenzia, SessioneScaduta } from '../fiscal/trasporto';
@@ -47,6 +49,73 @@ function spiega(e: unknown): string {
   return (e as Error)?.message || 'Errore imprevisto.';
 }
 
+const BLOCCO = 'vegman-accesso-bloccato';
+
+/** Prova di accesso al portale vero, in sola lettura: nessuno scontrino, nessun download. */
+function ProvaAccesso() {
+  const [stato, setStato] = useState<'pronto' | 'in corso' | 'fatto'>('pronto');
+  const [bloccato, setBloccato] = useState(false);
+  const [esito, setEsito] = useState<{ testo: string; errore: boolean; dati?: EsitoProva } | null>(null);
+  const [resoconto, setResoconto] = useState('');
+  useEffect(() => { void import('@capacitor/preferences').then(({ Preferences }) => Preferences.get({ key: BLOCCO })).then((v) => setBloccato(v.value === '1')); }, []);
+
+  async function prova() {
+    if (!confirm('L\'app entra nel portale dell\'Agenzia con le tue credenziali Fisconline e legge soltanto: dati dell\'esercente, adesione e quante fatture hai ricevuto negli ultimi 30 giorni. Nessuno scontrino, nessun download. Procedo?')) return;
+    setStato('in corso');
+    setEsito(null);
+    const { Preferences } = await import('@capacitor/preferences');
+    const t = new Traccia(webNativo(CapacitorHttp.request as unknown as FunzioneHttp, navigator.userAgent));
+    try {
+      const cred = await (await deposito()).leggi();
+      if (!cred) throw new Error('Credenziali non trovate.');
+      await accediPortale(t, cred);
+      const dati = await letturaDiProva(t);
+      setEsito({ testo: 'Accesso riuscito.', errore: false, dati });
+    } catch (e) {
+      if (e instanceof AccessoRifiutato) { await Preferences.set({ key: BLOCCO, value: '1' }); setBloccato(true); }
+      setEsito({ testo: e instanceof AccessoRifiutato || e instanceof PortaleCambiato ? e.message : `Interrotto: ${(e as Error)?.name ?? 'errore'}.`, errore: true });
+    }
+    setResoconto(`Prova accesso portale · ${new Date().toLocaleString('it-IT')}\n${t.testo()}`);
+    setStato('fatto');
+  }
+
+  async function sblocca() {
+    if (!confirm('Hai controllato le credenziali sul portale (anche dal computer) e le hai salvate di nuovo qui? Un altro tentativo sbagliato può bloccare l\'utenza Fisconline.')) return;
+    const { Preferences } = await import('@capacitor/preferences');
+    await Preferences.remove({ key: BLOCCO });
+    setBloccato(false);
+  }
+
+  return (
+    <div class="nuova">
+      <h3>Prova accesso al portale</h3>
+      {bloccato ? (
+        <>
+          <p class="nota" role="alert">L'ultimo accesso è stato rifiutato: l'app non riprova da sola. Controlla le credenziali (accedendo dal computer), salvale di nuovo, poi sblocca.</p>
+          <button type="button" class="secondario" onClick={() => void sblocca()}>Sblocca</button>
+        </>
+      ) : (
+        <button type="button" class="primario" disabled={stato === 'in corso'} onClick={() => void prova()}>
+          {stato === 'in corso' ? 'Accesso in corso…' : 'Prova accesso (solo lettura)'}
+        </button>
+      )}
+      {esito && (
+        <p role="status" class={esito.errore ? 'esito errore' : 'esito'}>
+          {esito.testo}
+          {esito.dati && <> Dati esercente {esito.dati.datiEsercente ? '✅' : '❌'} · adesione {esito.dati.adesione ? '✅' : '❌'} · fatture ultimi 30 giorni: {esito.dati.fattureUltimi30Giorni ?? '❌'}</>}
+        </p>
+      )}
+      {resoconto && (
+        <>
+          <p class="nota">Resoconto per Claude: contiene solo passi, indirizzi e codici, nessuna credenziale né valore.</p>
+          <pre class="resoconto">{resoconto}</pre>
+          <button type="button" class="secondario piccolo" onClick={() => void navigator.clipboard.writeText(resoconto).then(() => alert('Copiato.'))}>Copia resoconto</button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Credenziali() {
   const [presenti, setPresenti] = useState<boolean | null>(null);
   const [modulo, setModulo] = useState({ codiceFiscale: '', password: '', pin: '' });
@@ -74,12 +143,15 @@ function Credenziali() {
   return (
     <section aria-label="Credenziali Fisconline">
       <h2>Credenziali Fisconline</h2>
-      <p class="nota">Restano solo su questo telefono, cifrate (Keystore di Android). Non vanno nel database né su internet; servono all'app per entrare nel portale dell'Agenzia. Per ora nessuna funzione le usa.</p>
+      <p class="nota">Restano solo su questo telefono, cifrate (Keystore di Android). Non vanno nel database né su internet; servono all'app per entrare nel portale dell'Agenzia. Le usa solo la «Prova accesso», quando la premi tu.</p>
       {presenti === null ? <p class="nota">Controllo…</p> : presenti ? (
-        <div class="comandi">
-          <p>✅ Salvate su questo telefono.</p>
-          <button type="button" class="secondario pericolo piccolo" onClick={() => void cancella()}>Cancella</button>
-        </div>
+        <>
+          <div class="comandi">
+            <p>✅ Salvate su questo telefono.</p>
+            <button type="button" class="secondario pericolo piccolo" onClick={() => void cancella()}>Cancella</button>
+          </div>
+          <ProvaAccesso />
+        </>
       ) : (
         <form class="nuova" onSubmit={salva} autocomplete="off">
           <input aria-label="Codice fiscale" placeholder="Codice fiscale" autocomplete="off" autocapitalize="characters" spellcheck={false}
