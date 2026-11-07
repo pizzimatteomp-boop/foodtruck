@@ -125,6 +125,12 @@ function chiaviJson(testo: string): string | undefined {
   return undefined;
 }
 
+/** Messaggio d'errore tecnico senza parametri degli indirizzi (che potrebbero contenere valori). */
+export function messaggioSicuro(e: unknown): string {
+  const m = e instanceof Error ? e.message : String(e);
+  return m.replace(/\?[^\s'"]*/g, '?…').replace(/\s+/g, ' ').slice(0, 200) || 'nessun messaggio';
+}
+
 export class Traccia {
   readonly passi: PassoTraccia[] = [];
   constructor(private readonly web: Web) {}
@@ -132,7 +138,7 @@ export class Traccia {
   async chiama(passo: string, r: RichiestaWeb, nota?: (x: RispostaWeb) => string | undefined): Promise<RispostaWeb> {
     let x: RispostaWeb;
     try { x = await this.web(r); } catch (e) {
-      this.passi.push({ passo, metodo: r.metodo, indirizzo: senzaParametri(r.url), stato: 'rete' });
+      this.passi.push({ passo, metodo: r.metodo, indirizzo: senzaParametri(r.url), stato: 'rete', nota: `errore: ${messaggioSicuro(e)}` });
       throw e;
     }
     const tipo = (intestazione(x.intestazioni, 'content-type') ?? '').split(';')[0]!.trim();
@@ -169,11 +175,17 @@ export function destinazione(urlAccesso: string): string {
   return `${PORTALE}/PortaleWeb/home?to=FATBTB`;
 }
 
+/** Accesso Fisconline e scelta «Me stesso». */
+export async function accediPortale(t: Traccia, c: Credenziali): Promise<void> {
+  await entraNelPortale(t, c);
+  await scegliMeStesso(t, c);
+}
+
 /**
- * Accesso Fisconline (come la pagina dell'Agenzia: JSON a /api/login/telematico) e scelta «Me stesso».
+ * Accesso Fisconline (come la pagina dell'Agenzia: JSON a /api/login/telematico) e apertura di Fatture e Corrispettivi.
  * Lancia AccessoRifiutato (non ripetere!) o PortaleCambiato.
  */
-export async function accediPortale(t: Traccia, c: Credenziali): Promise<void> {
+export async function entraNelPortale(t: Traccia, c: Credenziali): Promise<void> {
   const pagina = await t.chiama('Pagina di accesso', { url: `${IVASERVIZI}/portale/`, metodo: 'GET' });
   if (!eLogin(pagina.url)) {
     t.passi[t.passi.length - 1]!.nota = strutturaPagina(pagina.testo, pagina.url);
@@ -189,7 +201,10 @@ export async function accediPortale(t: Traccia, c: Credenziali): Promise<void> {
   const home = await t.chiama('Fatture e Corrispettivi', { url: destinazione(pagina.url), metodo: 'GET' });
   if (eLogin(home.url)) throw new PortaleCambiato('Dopo l\'accesso il portale chiede di nuovo le credenziali (sessione non tenuta).');
   if (!/to=FATBTB/.test(destinazione(pagina.url))) await t.chiama('Fatture e Corrispettivi', { url: `${PORTALE}/PortaleWeb/home?to=FATBTB`, metodo: 'GET' });
+}
 
+/** Scelta dell'utenza «Me stesso» in Fatture e Corrispettivi. */
+export async function scegliMeStesso(t: Traccia, c: Credenziali): Promise<void> {
   const R = `${IVASERVIZI}/instr/instradamento-fatture-rest/rs`;
   await t.chiama('Avvio', { url: `${R}/initLight?${ts()}`, metodo: 'GET' }, (x) => chiaviJson(x.testo));
   const info = await t.chiama('Utente', { url: `${R}/infouser-fc?${ts()}`, metodo: 'GET' }, (x) => chiaviJson(x.testo));
@@ -230,23 +245,27 @@ export interface EsitoProva {
 
 /** Letture di prova dopo l'accesso: niente si modifica, niente si scarica. */
 export async function letturaDiProva(t: Traccia, oggi = new Date()): Promise<EsitoProva> {
-  const dco = await t.chiama('DCO: dati esercente', { url: `${IVASERVIZI}/ser/api/documenti/v1/doc/documenti/dati/fiscali`, metodo: 'GET' }, (x) => chiaviJson(x.testo));
-  const ad = await t.chiama('Adesione consultazione', { url: `${IVASERVIZI}/ser/api/fatture/v1/ul/me/adesione/stato`, metodo: 'GET' }, (x) => chiaviJson(x.testo));
-  const tok = await t.chiama('Codici per le fatture', { url: `${IVASERVIZI}/cons/cons-services/sc/tokenB2BCookie/get?${ts()}`, metodo: 'GET' },
-    (x) => `x-b2bcookie ${intestazione(x.intestazioni, 'x-b2bcookie') ? 'presente' : 'assente'}, x-token ${intestazione(x.intestazioni, 'x-token') ? 'presente' : 'assente'}`);
-  const b2b = intestazione(tok.intestazioni, 'x-b2bcookie');
-  const token = intestazione(tok.intestazioni, 'x-token');
+  // Ogni lettura per conto suo: se una non riesce (già annotata nella traccia) si prova la successiva.
+  const prova = async (f: () => Promise<RispostaWeb>) => { try { return await f(); } catch { return null; } };
+  const json = (x: RispostaWeb | null) => { if (!x || x.stato !== 200 || eLogin(x.url)) return false; try { JSON.parse(x.testo); return true; } catch { return false; } };
+  const dco = await prova(() => t.chiama('DCO: dati esercente', { url: `${IVASERVIZI}/ser/api/documenti/v1/doc/documenti/dati/fiscali`, metodo: 'GET' }, (x) => chiaviJson(x.testo)));
+  const ad = await prova(() => t.chiama('Adesione consultazione', { url: `${IVASERVIZI}/ser/api/fatture/v1/ul/me/adesione/stato`, metodo: 'GET' }, (x) => chiaviJson(x.testo)));
+  const tok = await prova(() => t.chiama('Codici per le fatture', { url: `${IVASERVIZI}/cons/cons-services/sc/tokenB2BCookie/get?${ts()}`, metodo: 'GET' },
+    (x) => `x-b2bcookie ${intestazione(x.intestazioni, 'x-b2bcookie') ? 'presente' : 'assente'}, x-token ${intestazione(x.intestazioni, 'x-token') ? 'presente' : 'assente'}`));
+  const b2b = tok && intestazione(tok.intestazioni, 'x-b2bcookie');
+  const token = tok && intestazione(tok.intestazioni, 'x-token');
   let fatture: number | null = null;
   if (b2b && token) {
     const dal = ggmmaaaa(new Date(oggi.getTime() - 30 * 86400000));
-    const el = await t.chiama('Elenco fatture ricevute (30 giorni)', {
+    const el = await prova(() => t.chiama('Elenco fatture ricevute (30 giorni)', {
       url: `${IVASERVIZI}/cons/cons-services/rs/fe/ricevute/dal/${dal}/al/${ggmmaaaa(oggi)}/ricerca/ricezione?${ts()}`,
       metodo: 'GET', intestazioni: { 'x-b2bcookie': b2b, 'x-token': token },
-    }, (x) => {
-      try { const j = JSON.parse(x.testo) as { fatture?: unknown[] }; return Array.isArray(j.fatture) ? `${j.fatture.length} fatture` : chiaviJson(x.testo); } catch { return undefined; }
-    });
-    try { const j = JSON.parse(el.testo) as { fatture?: unknown[] }; if (el.stato === 200 && Array.isArray(j.fatture)) fatture = j.fatture.length; } catch { /* resta null */ }
+    }, (x) => numeroFatture(x) === null ? chiaviJson(x.testo) : `${numeroFatture(x)} fatture`));
+    fatture = el ? numeroFatture(el) : null;
   }
-  const json = (x: RispostaWeb) => { try { JSON.parse(x.testo); return x.stato === 200; } catch { return false; } };
-  return { datiEsercente: json(dco) && !eLogin(dco.url), fattureUltimi30Giorni: fatture, adesione: json(ad) };
+  return { datiEsercente: json(dco), fattureUltimi30Giorni: fatture, adesione: json(ad) };
+}
+
+function numeroFatture(x: RispostaWeb): number | null {
+  try { const j = JSON.parse(x.testo) as { fatture?: unknown[] }; return x.stato === 200 && Array.isArray(j.fatture) ? j.fatture.length : null; } catch { return null; }
 }

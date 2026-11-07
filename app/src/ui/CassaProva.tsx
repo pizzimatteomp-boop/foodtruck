@@ -11,7 +11,7 @@ import type { Prodotto } from '../foodcost/modello';
 import { cassaforte, ErroreCredenziali } from '../fiscal/cassaforte';
 import { archivioInMemoria, archivioSuDispositivo, InvioInSospeso, NonEmesso, type ArchivioInvii, type InvioSospeso } from '../fiscal/emissione';
 import { webNativo, type FunzioneHttp } from '../fiscal/nativo';
-import { AccessoRifiutato, accediPortale, letturaDiProva, PortaleCambiato, Traccia, type EsitoProva } from '../fiscal/portale';
+import { AccessoRifiutato, entraNelPortale, letturaDiProva, PortaleCambiato, scegliMeStesso, Traccia, type EsitoProva } from '../fiscal/portale';
 import { CassaProva as Cassa, totaleRighe, type Pagamento, type RigaCassa } from '../fiscal/prova';
 import type { Guasto } from '../fiscal/simulatore';
 import { RifiutoAgenzia, SessioneScaduta } from '../fiscal/trasporto';
@@ -68,9 +68,11 @@ function ProvaAccesso() {
     try {
       const cred = await (await deposito()).leggi();
       if (!cred) throw new Error('Credenziali non trovate.');
-      await accediPortale(t, cred);
+      await entraNelPortale(t, cred);
+      // Dopo l'accesso si prova tutto, anche se un passo non riesce: il resoconto dice dove.
+      const scelta = await scegliMeStesso(t, cred).then(() => true, () => false);
       const dati = await letturaDiProva(t);
-      setEsito({ testo: 'Accesso riuscito.', errore: false, dati });
+      setEsito({ testo: `Accesso riuscito.${scelta ? '' : ' Scelta «Me stesso» non riuscita.'}`, errore: false, dati });
     } catch (e) {
       if (e instanceof AccessoRifiutato) { await Preferences.set({ key: BLOCCO, value: '1' }); setBloccato(true); }
       setEsito({ testo: e instanceof AccessoRifiutato || e instanceof PortaleCambiato ? e.message : `Interrotto: ${(e as Error)?.name ?? 'errore'}.`, errore: true });

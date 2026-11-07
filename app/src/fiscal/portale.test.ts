@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { webNativo, type OpzioniHttp } from './nativo';
 import {
   AccessoRifiutato, accediPortale, codiceErrore, destinazione, eLogin, ggmmaaaa, IVASERVIZI, letturaDiProva, partitaIvaDa,
-  PortaleCambiato, PORTALE, senzaParametri, strutturaPagina, Traccia, type RichiestaWeb, type RispostaWeb,
+  messaggioSicuro, PortaleCambiato, PORTALE, senzaParametri, strutturaPagina, Traccia, type RichiestaWeb, type RispostaWeb,
 } from './portale';
 import { ErroreRete } from './trasporto';
 
@@ -185,7 +185,25 @@ describe('accesso al portale (finto) e letture di prova', () => {
   it('rete giù: il passo è segnato e l\'errore risale', async () => {
     const t = new Traccia(async () => { throw new ErroreRete('giù'); });
     await expect(accediPortale(t, CRED)).rejects.toBeInstanceOf(ErroreRete);
-    expect(t.passi).toEqual([{ passo: 'Pagina di accesso', metodo: 'GET', indirizzo: 'ivaservizi.agenziaentrate.gov.it/portale/', stato: 'rete' }]);
+    expect(t.passi).toEqual([{ passo: 'Pagina di accesso', metodo: 'GET', indirizzo: 'ivaservizi.agenziaentrate.gov.it/portale/', stato: 'rete', nota: 'errore: giù' }]);
+  });
+
+  it('messaggi d\'errore senza parametri; letture che continuano dopo un errore', async () => {
+    expect(messaggioSicuro(new Error('Too many follow-up requests: https://a.it/x?cf=SEGRETO&p=1 fine'))).toBe('Too many follow-up requests: https://a.it/x?… fine');
+    expect(messaggioSicuro('testo')).toBe('testo');
+    expect(messaggioSicuro(new Error(''))).toBe('nessun messaggio');
+    const base = portaleFinto();
+    const web = async (q: RichiestaWeb) => {
+      if (q.url.includes('/dati/fiscali') || q.url.includes('/tokenB2BCookie/')) throw new ErroreRete('Rete: Too many follow-up requests: 21');
+      return base.web(q);
+    };
+    const t = new Traccia(web);
+    await accediPortale(t, CRED);
+    expect(await letturaDiProva(t)).toEqual({ datiEsercente: false, fattureUltimi30Giorni: null, adesione: true });
+    expect(t.testo()).toContain('DCO: dati esercente · GET ivaservizi.agenziaentrate.gov.it/ser/api/documenti/v1/doc/documenti/dati/fiscali → rete · errore: Rete: Too many follow-up requests: 21');
+    const altro = new Traccia(async (q) => (q.url.includes('/tokenB2BCookie/') ? base.web(q) : q.url.includes('/rs/fe/') ? (() => { throw new ErroreRete('x'); })() : base.web(q)));
+    await accediPortale(altro, CRED);
+    expect((await letturaDiProva(altro)).fattureUltimi30Giorni).toBeNull();
   });
 });
 
