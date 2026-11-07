@@ -96,7 +96,8 @@ test('persona nuova → abilitata dal titolare → entra con il ruolo cassa', as
   await expect(giulia.getByRole('heading', { name: 'Ciao Giulia' })).toBeVisible();
   await expect(giulia.getByText('Ruolo: Cassa')).toBeVisible();
   await expect(giulia.getByRole('region', { name: 'Persone' })).toHaveCount(0);
-  await expect(giulia.getByRole('navigation', { name: 'Menu' })).toHaveCount(0);
+  // La cassa vede solo Home e la cassa di prova, niente pagine del titolare.
+  await expect(giulia.getByRole('navigation', { name: 'Pagine' }).getByRole('link')).toHaveText([/Cassa · prova/]);
   // Anche scrivendo l'indirizzo a mano, la cassa non entra nella pagina Persone.
   await giulia.goto('/#/persone');
   await expect(giulia.getByRole('heading', { name: 'Ciao Giulia' })).toBeVisible();
@@ -469,4 +470,36 @@ test('storico, grafici e avvisi: fotografia di ottobre, rincari, soglie', async 
   await expect(numeri.getByRole('row', { name: /ott 26/ })).toContainText('0,80 €');
   await expect(numeri.getByRole('row', { name: /nov 26/ })).toContainText('2,00 €');
   await andamento.screenshot({ path: 'test-results/andamento-prezzo.png' });
+});
+
+test('cassa di prova: scontrini sul simulatore, risposta persa recuperata, annullo; credenziali solo su Android', async ({ page }) => {
+  await accedi(page, MATTEO);
+  await apri(page, 'Cassa · prova');
+  const cassa = page.getByRole('region', { name: 'Cassa di prova' });
+  await expect(cassa.getByRole('note').first()).toContainText('SIMULATORE');
+  await cassa.getByRole('button', { name: /^Pane e olio/ }).click();
+  await cassa.getByRole('button', { name: /^Pane e olio/ }).click();
+  await expect(cassa).toContainText('2 × Pane e olio');
+  await expect(cassa).toContainText('Totale 8,00 €');
+  await cassa.getByRole('button', { name: 'Emetti scontrino di prova' }).click();
+  await expect(cassa.getByRole('status').first()).toHaveText(/^Emesso DCW2026\/9999-\d+\.$/);
+
+  // Risposta persa: lo scontrino c'è, si recupera senza doppioni.
+  await cassa.getByRole('button', { name: /^Pane e olio/ }).click();
+  await cassa.getByLabel('Guasto da simulare').selectOption('rete-dopo');
+  await cassa.getByRole('button', { name: 'Emetti scontrino di prova' }).click();
+  await expect(cassa.getByRole('status').first()).toContainText('recuperato');
+  await expect(cassa.getByRole('heading', { name: /Emessi in questa prova/ })).toContainText('(2)');
+
+  // Rete assente: non emesso.
+  await cassa.getByRole('button', { name: /^Pane e olio/ }).click();
+  await cassa.getByLabel('Guasto da simulare').selectOption('rete-prima');
+  await cassa.getByRole('button', { name: 'Emetti scontrino di prova' }).click();
+  await expect(cassa.getByRole('status').first()).toContainText('Non emesso');
+
+  await cassa.getByRole('button', { name: 'Annulla' }).last().click();
+  await expect(cassa.getByRole('status').first()).toContainText('Annullato con');
+  await expect(cassa).toContainText('Si inseriscono solo nell\'app Android');
+  await expect(cassa.getByLabel('Password Fisconline')).toHaveCount(0);
+  await cassa.screenshot({ path: 'test-results/cassa-prova.png' });
 });

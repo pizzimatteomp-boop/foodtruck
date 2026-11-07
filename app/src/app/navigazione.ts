@@ -5,7 +5,7 @@
 import { puo, type Ruolo } from '../firebase/ruoli';
 
 export interface Pagina {
-  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa';
+  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa' | 'cassa';
   titolo: string;
   icona: string;
   /** Una riga per il pannello della Home. */
@@ -23,6 +23,7 @@ export const PAGINE: readonly Pagina[] = [
   { id: 'avvisi', titolo: 'Avvisi', icona: '🔔', descrizione: 'Soglie, rincari e cose da fare', principale: true, visibile: (r) => puo(r, 'acquisti') },
   { id: 'pubblica', titolo: 'Menu e QR', icona: '📱', descrizione: 'Menu pubblico, QR code e cartello da stampare', principale: false, visibile: (r) => puo(r, 'acquisti') },
   { id: 'allergeni', titolo: 'Allergeni', icona: '🌾', descrizione: 'Liste ingredienti e tabella allergeni', principale: false, visibile: (r) => puo(r, 'acquisti') },
+  { id: 'cassa', titolo: 'Cassa · prova', icona: '🧪', descrizione: 'Scontrini sul simulatore e credenziali Fisconline', principale: false, visibile: (r) => puo(r, 'scontrini') },
   { id: 'persone', titolo: 'Persone', icona: '👥', descrizione: 'Chi può entrare e con quale ruolo', principale: false, visibile: (r) => puo(r, 'utenti') },
   { id: 'importa', titolo: 'Importa', icona: '⬆', descrizione: 'Dati da VegMan Planner', principale: false, visibile: (r) => puo(r, 'acquisti') },
 ];

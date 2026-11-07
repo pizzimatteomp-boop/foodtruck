@@ -301,3 +301,6 @@ input.corto { width: 80px; }
 .riquadro-menu input { width: 26px; height: 26px; min-height: 0; accent-color: var(--pulsante); flex: none; }
 .riquadro-menu strong { display: block; font-size: 1.05rem; }
 .riquadro-menu small { color: var(--tenue); }
+
+/* Cassa di prova: sempre ben visibile che è il simulatore */
+.simulatore { background: var(--menta, #B9DED3); color: #000; border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
