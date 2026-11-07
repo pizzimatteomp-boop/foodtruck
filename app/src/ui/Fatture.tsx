@@ -1,8 +1,12 @@
 /** Pagina «Fatture» (solo titolare): caricamento, righe nuove da controllare, acquisti a mano, elenco. */
+import { Capacitor } from '@capacitor/core';
 import type { Firestore } from 'firebase/firestore';
 import { useMemo, useState } from 'preact/hooks';
 import { useRaccolta } from '../dati/useRaccolta.db';
 import { leggiFatturaPA, type Fattura } from '../fatture/fatturapa';
+import { elencoRicevute, giaPresente, scaricaFattura } from '../fiscal/cassetto';
+import { AccessoRifiutato, PortaleCambiato } from '../fiscal/portale';
+import { AccessoNonPossibile, apriSessione, nuovaTraccia } from './portaleTelefono';
 import { leggiFileFatture } from '../fatture/file';
 import { ErroreAcquisto, preparaAcquistoManuale } from '../fatture/manuale';
 import { pianoFatture, type DocFattura, type PianoFatture } from '../fatture/piano';
@@ -113,6 +117,76 @@ function AcquistoManuale({ db, ingredienti }: { db: Firestore; ingredienti: Ingr
   );
 }
 
+const MASSIMO_PER_VOLTA = 150;
+
+/** Scarica dal cassetto fiscale (solo app Android): accesso, elenco, solo le fatture nuove. */
+function DalCassetto({ esistenti, disabilitato, onScaricate }: {
+  esistenti: readonly DocFattura[]; disabilitato: boolean;
+  onScaricate: (file: { nome: string; byte: Uint8Array }[], scartati: { nome: string; motivo: string }[]) => void;
+}) {
+  const ultima = esistenti.reduce((m, f) => (f.data > m ? f.data : m), '');
+  const giorni = (d: string, n: number) => new Date(new Date(`${d}T12:00:00Z`).getTime() + n * 86400000).toISOString().slice(0, 10);
+  const [dal, setDal] = useState(ultima ? giorni(ultima, -10) : giorni(oggi(), -90));
+  const [al, setAl] = useState(oggi());
+  const [avanzamento, setAvanzamento] = useState('');
+  const [errore, setErrore] = useState('');
+  const [resoconto, setResoconto] = useState('');
+  const [inCorso, setInCorso] = useState(false);
+
+  async function scarica() {
+    if (dal > al) { setErrore('La data iniziale è dopo quella finale.'); return; }
+    setInCorso(true);
+    setErrore('');
+    const t = nuovaTraccia();
+    try {
+      setAvanzamento('Accesso al portale…');
+      await apriSessione(t);
+      setAvanzamento('Elenco delle fatture ricevute…');
+      const elenco = await elencoRicevute(t, dal, al);
+      const nuove = elenco.filter((f) => !giaPresente(f, esistenti));
+      const daFare = nuove.slice(0, MASSIMO_PER_VOLTA);
+      const file: { nome: string; byte: Uint8Array }[] = [];
+      const scartati: { nome: string; motivo: string }[] = [];
+      for (const [i, f] of daFare.entries()) {
+        setAvanzamento(`Scarico ${i + 1} di ${daFare.length} (${elenco.length - nuove.length} già presenti)…`);
+        try { file.push(await scaricaFattura(t, f)); } catch (e) { scartati.push({ nome: `${f.fornitore} n. ${f.numero}`, motivo: (e as Error).message }); }
+      }
+      if (nuove.length > daFare.length) scartati.push({ nome: 'Altre fatture', motivo: `${nuove.length - daFare.length} non scaricate: ripeti lo scaricamento dopo aver caricato queste.` });
+      setAvanzamento(`${elenco.length} fatture nel periodo, ${nuove.length} nuove, ${file.length} scaricate.`);
+      onScaricate(file, scartati);
+    } catch (e) {
+      setAvanzamento('');
+      setErrore(e instanceof AccessoRifiutato || e instanceof PortaleCambiato || e instanceof AccessoNonPossibile || (e as Error).name === 'ErroreCassetto'
+        ? (e as Error).message : `Interrotto: ${(e as Error)?.name ?? 'errore'}.`);
+    }
+    setResoconto(`Scarico fatture · ${new Date().toLocaleString('it-IT')}\n${t.testo()}`);
+    setInCorso(false);
+  }
+
+  return (
+    <div class="nuova" aria-label="Dal cassetto fiscale">
+      <h2>Dal cassetto fiscale</h2>
+      <p class="nota">L'app entra nel portale con le tue credenziali Fisconline e scarica solo le fatture ricevute che non sono ancora qui. Solo lettura: sul portale non cambia nulla.</p>
+      <div class="due">
+        <label class="campo"><span>Dal</span><input type="date" value={dal} max={al} onInput={(e) => setDal(e.currentTarget.value)} /></label>
+        <label class="campo"><span>Al</span><input type="date" value={al} max={oggi()} onInput={(e) => setAl(e.currentTarget.value)} /></label>
+      </div>
+      <button type="button" class="primario" disabled={disabilitato || inCorso || !dal || !al} onClick={() => void scarica()}>
+        {inCorso ? 'Scaricamento…' : 'Scarica dal cassetto fiscale'}
+      </button>
+      {avanzamento && <p role="status">{avanzamento}</p>}
+      {errore && <p class="errore" role="alert">{errore}</p>}
+      {resoconto && (
+        <details>
+          <summary>Resoconto tecnico (per Claude)</summary>
+          <pre class="resoconto">{resoconto}</pre>
+          <button type="button" class="secondario piccolo" onClick={() => void navigator.clipboard.writeText(resoconto).then(() => alert('Copiato.'))}>Copia resoconto</button>
+        </details>
+      )}
+    </div>
+  );
+}
+
 export function Fatture({ db, uid }: { db: Firestore; uid: string }) {
   const fat = useRaccolta<DocFattura & { id: string }>(db, 'fatture');
   const art = useRaccolta<Articolo>(db, 'articoli');
@@ -127,12 +201,16 @@ export function Fatture({ db, uid }: { db: Firestore; uid: string }) {
 
   async function leggi(elenco: FileList | null) {
     if (!elenco?.length) return;
+    await leggiByte(await Promise.all(Array.from(elenco).map(async (f) => ({ nome: f.name, byte: new Uint8Array(await f.arrayBuffer()) }))));
+  }
+
+  async function leggiByte(elenco: { nome: string; byte: Uint8Array }[], scartatiPrima: { nome: string; motivo: string }[] = []) {
     setStato('lettura');
     setEsito(null);
     const lette: { file: string; fattura: Fattura }[] = [];
-    const scartati: { nome: string; motivo: string }[] = [];
-    for (const f of Array.from(elenco)) {
-      const r = await leggiFileFatture(f.name, new Uint8Array(await f.arrayBuffer()));
+    const scartati: { nome: string; motivo: string }[] = [...scartatiPrima];
+    for (const f of elenco) {
+      const r = await leggiFileFatture(f.nome, f.byte);
       scartati.push(...r.scartati);
       for (const x of r.fatture) {
         try { lette.push(...leggiFatturaPA(x.xml).map((fattura) => ({ file: x.nome, fattura }))); }
@@ -160,6 +238,7 @@ export function Fatture({ db, uid }: { db: Firestore; uid: string }) {
   return (
     <section class="scheda" aria-label="Fatture">
       <h1>Fatture</h1>
+      {Capacitor.isNativePlatform() && <DalCassetto esistenti={fat.dati} disabilitato={caricamento || stato === 'lettura'} onScaricate={(f, s) => void leggiByte(f, s)} />}
       <h2>Carica fatture</h2>
       <p class="nota">File scaricati dal cassetto fiscale: XML, firmati .p7m o uno ZIP con più fatture. Le fatture già caricate vengono riconosciute.</p>
       <label class="campo">

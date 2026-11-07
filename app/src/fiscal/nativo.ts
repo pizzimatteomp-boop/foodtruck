@@ -88,8 +88,10 @@ export function webNativo(http: FunzioneHttp, userAgent: string, attesaMs = 3000
     else if (r.json !== undefined) { headers['Content-Type'] = 'application/json'; data = r.json; }
     let x: RispostaWeb | undefined;
     try {
-      const y = await http({ url: r.url, method: r.metodo, headers, ...(data === undefined ? {} : { data }), responseType: 'text', connectTimeout: attesaMs, readTimeout: attesaMs });
+      const y = await http({ url: r.url, method: r.metodo, headers, ...(data === undefined ? {} : { data }), responseType: r.binario ? 'arraybuffer' : 'text', connectTimeout: attesaMs, readTimeout: attesaMs });
       x = { stato: y.status, url: y.url || r.url, intestazioni: y.headers ?? {}, testo: typeof y.data === 'string' ? y.data : JSON.stringify(y.data ?? '') };
+      // Con «arraybuffer» l'HTTP nativo restituisce i byte in base64.
+      if (r.binario) x = { ...x, testo: '', byte: y.data instanceof Uint8Array ? y.data : typeof y.data === 'string' ? byteDaBase64(y.data) : new Uint8Array() };
     } catch (e) {
       throw new ErroreRete(`Rete: ${(e as Error)?.message ?? 'errore sconosciuto'}`);
     }

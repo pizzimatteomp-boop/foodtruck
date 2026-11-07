@@ -23,6 +23,8 @@ export interface RichiestaWeb {
   modulo?: Record<string, string>;
   /** Corpo JSON. */
   json?: unknown;
+  /** Risposta in byte (file), invece che testo. */
+  binario?: boolean;
 }
 export interface RispostaWeb {
   stato: number;
@@ -30,6 +32,8 @@ export interface RispostaWeb {
   url: string;
   intestazioni: Record<string, string>;
   testo: string;
+  /** Solo con «binario». */
+  byte?: Uint8Array;
 }
 /** Una richiesta HTTP «come un browser»: segue i rimandi e conserva i cookie (sul telefono: HTTP nativo). */
 export type Web = (r: RichiestaWeb) => Promise<RispostaWeb>;
@@ -67,7 +71,7 @@ export function senzaParametri(url: string): string {
   try { const u = new URL(url); return `${u.host}${u.pathname}`; } catch { return '?'; }
 }
 
-function intestazione(h: Record<string, string>, nome: string): string | undefined {
+export function intestazione(h: Record<string, string>, nome: string): string | undefined {
   const k = Object.keys(h).find((x) => x.toLowerCase() === nome);
   return k === undefined ? undefined : h[k];
 }
@@ -204,7 +208,7 @@ export class Traccia {
   }
 }
 
-const ts = () => `v=${Date.now()}`;
+export const ts = () => `v=${Date.now()}`;
 
 const LOGIN_API = 'https://iampe.agenziaentrate.gov.it/api/login/telematico';
 

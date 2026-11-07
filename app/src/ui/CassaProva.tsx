@@ -3,15 +3,15 @@
  * annullo e la regola anti-doppioni con guasti a comando. Più la cassaforte delle credenziali Fisconline
  * (solo nell'app Android, solo per il titolare): qui si salvano e si cancellano, non si mostrano mai.
  */
-import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
 import type { Firestore } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { useRaccolta } from '../dati/useRaccolta.db';
 import type { Prodotto } from '../foodcost/modello';
-import { cassaforte, ErroreCredenziali } from '../fiscal/cassaforte';
+import { ErroreCredenziali } from '../fiscal/cassaforte';
 import { archivioInMemoria, archivioSuDispositivo, InvioInSospeso, NonEmesso, type ArchivioInvii, type InvioSospeso } from '../fiscal/emissione';
-import { webNativo, type FunzioneHttp } from '../fiscal/nativo';
-import { AccessoRifiutato, entraNelPortale, letturaDiProva, PortaleCambiato, scegliMeStesso, Traccia, type EsitoProva } from '../fiscal/portale';
+import { AccessoRifiutato, letturaDiProva, PortaleCambiato, type EsitoProva } from '../fiscal/portale';
+import { accessoBloccato, AccessoNonPossibile, apriSessione, deposito, nuovaTraccia, sbloccaAccesso } from './portaleTelefono';
 import { CassaProva as Cassa, totaleRighe, type Pagamento, type RigaCassa } from '../fiscal/prova';
 import type { Guasto } from '../fiscal/simulatore';
 import { RifiutoAgenzia, SessioneScaduta } from '../fiscal/trasporto';
@@ -35,12 +35,6 @@ async function archivio(): Promise<ArchivioInvii> {
   return archivioSuDispositivo(Preferences, 'vegman-dco-simulatore');
 }
 
-async function deposito() {
-  const { SecureStorage } = await import('@aparajita/capacitor-secure-storage');
-  await SecureStorage.setKeyPrefix('vegman_');
-  return cassaforte({ get: (k) => SecureStorage.get(k), set: (k, v) => SecureStorage.set(k, v), remove: (k) => SecureStorage.remove(k) });
-}
-
 function spiega(e: unknown): string {
   if (e instanceof InvioInSospeso) return 'C\'è uno scontrino in sospeso: premi «Verifica» prima di emetterne altri.';
   if (e instanceof NonEmesso) return 'Non emesso (non è arrivato all\'Agenzia): si può riprovare.';
@@ -49,33 +43,27 @@ function spiega(e: unknown): string {
   return (e as Error)?.message || 'Errore imprevisto.';
 }
 
-const BLOCCO = 'vegman-accesso-bloccato';
-
 /** Prova di accesso al portale vero, in sola lettura: nessuno scontrino, nessun download. */
 function ProvaAccesso() {
   const [stato, setStato] = useState<'pronto' | 'in corso' | 'fatto'>('pronto');
   const [bloccato, setBloccato] = useState(false);
   const [esito, setEsito] = useState<{ testo: string; errore: boolean; dati?: EsitoProva } | null>(null);
   const [resoconto, setResoconto] = useState('');
-  useEffect(() => { void import('@capacitor/preferences').then(({ Preferences }) => Preferences.get({ key: BLOCCO })).then((v) => setBloccato(v.value === '1')); }, []);
+  useEffect(() => { void accessoBloccato().then(setBloccato); }, []);
 
   async function prova() {
     if (!confirm('L\'app entra nel portale dell\'Agenzia con le tue credenziali Fisconline e legge soltanto: dati dell\'esercente, adesione e quante fatture hai ricevuto negli ultimi 30 giorni. Nessuno scontrino, nessun download. Procedo?')) return;
     setStato('in corso');
     setEsito(null);
-    const { Preferences } = await import('@capacitor/preferences');
-    const t = new Traccia(webNativo(CapacitorHttp.request as unknown as FunzioneHttp, navigator.userAgent));
+    const t = nuovaTraccia();
     try {
-      const cred = await (await deposito()).leggi();
-      if (!cred) throw new Error('Credenziali non trovate.');
-      await entraNelPortale(t, cred);
       // Dopo l'accesso si prova tutto, anche se un passo non riesce: il resoconto dice dove.
-      const scelta = await scegliMeStesso(t, cred).then(() => true, () => false);
+      const scelta = await apriSessione(t);
       const dati = await letturaDiProva(t);
       setEsito({ testo: `Accesso riuscito.${scelta ? '' : ' Scelta «Me stesso» non riuscita.'}`, errore: false, dati });
     } catch (e) {
-      if (e instanceof AccessoRifiutato) { await Preferences.set({ key: BLOCCO, value: '1' }); setBloccato(true); }
-      setEsito({ testo: e instanceof AccessoRifiutato || e instanceof PortaleCambiato ? e.message : `Interrotto: ${(e as Error)?.name ?? 'errore'}.`, errore: true });
+      if (e instanceof AccessoRifiutato) setBloccato(true);
+      setEsito({ testo: e instanceof AccessoRifiutato || e instanceof PortaleCambiato || e instanceof AccessoNonPossibile ? e.message : `Interrotto: ${(e as Error)?.name ?? 'errore'}.`, errore: true });
     }
     setResoconto(`Prova accesso portale · ${new Date().toLocaleString('it-IT')}\n${t.testo()}`);
     setStato('fatto');
@@ -83,8 +71,7 @@ function ProvaAccesso() {
 
   async function sblocca() {
     if (!confirm('Hai controllato le credenziali sul portale (anche dal computer) e le hai salvate di nuovo qui? Un altro tentativo sbagliato può bloccare l\'utenza Fisconline.')) return;
-    const { Preferences } = await import('@capacitor/preferences');
-    await Preferences.remove({ key: BLOCCO });
+    await sbloccaAccesso();
     setBloccato(false);
   }
 
