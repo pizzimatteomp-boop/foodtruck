@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { webNativo, type OpzioniHttp } from './nativo';
 import {
   AccessoRifiutato, accediPortale, compilaModulo, eLogin, ggmmaaaa, IVASERVIZI, leggiModulo, letturaDiProva, partitaIvaDa,
-  PortaleCambiato, PORTALE, senzaParametri, Traccia, type RichiestaWeb, type RispostaWeb,
+  PortaleCambiato, PORTALE, senzaParametri, strutturaPagina, Traccia, type RichiestaWeb, type RispostaWeb,
 } from './portale';
 import { ErroreRete } from './trasporto';
 
@@ -97,6 +97,27 @@ describe('modulo di accesso', () => {
   });
 });
 
+describe('descrizione della pagina senza modulo', () => {
+  it('struttura senza valori', () => {
+    const html = `<html><head><title> Accesso
+      ai servizi </title><script src="/sam/XUI/main.js"></script><script src="https://cdn.x.it/lib.js?v=1"></script><script>var a='SEGRETO';</script></head>
+      <body><form id="f1" method="post" action="/sam/json/authenticate?x=1"><input type="hidden" name="authId" value="SEGRETO"><button id="vai">Vai</button></form>
+      <form action="javascript:void(0)"></form><form action="http://[rotto"></form><form></form>
+      <iframe src="/fisconline/login.jsp"></iframe><a href="/sam/UI/Login?service=fisconline&k=SEGRETO">Fisconline</a><a href="https://spid.it/x">SPID</a><a href="/altro">x</a>
+      <input value="senza nome"><noscript>js</noscript> callbacks SPID</body></html>`;
+    const d = strutturaPagina(html, 'https://iampe.agenziaentrate.gov.it/sam/UI/Login?realm=x');
+    expect(d).not.toContain('SEGRETO');
+    expect(d).toContain('titolo «Accesso ai servizi»');
+    expect(d).toContain('moduli: POST /sam/json/authenticate (f1) | GET javascript | GET ? | GET -');
+    expect(d).toContain('campi: authId(hidden), #vai(button)');
+    expect(d).toContain('script: /sam/XUI/main.js, cdn.x.it/lib.js + 1 interni');
+    expect(d).toContain('cornici: /fisconline/login.jsp');
+    expect(d).toContain('collegamenti di accesso: /sam/UI/Login, spid.it/x');
+    expect(d).toContain('contiene: Fisconline, SPID, XUI, json/authenticate, authId, callbacks, noscript');
+    expect(strutturaPagina('', 'https://a.it/')).toBe('pagina 0 caratteri, titolo «-»; moduli: nessuno; campi: nessuno; script: nessuno + 0 interni; collegamenti di accesso: nessuno; contiene: nessuna parola chiave');
+  });
+});
+
 describe('accesso al portale (finto) e letture di prova', () => {
   it('accede, sceglie «Me stesso», legge: la traccia non contiene nessun valore', async () => {
     const { web, viste } = portaleFinto();
@@ -129,7 +150,9 @@ describe('accesso al portale (finto) e letture di prova', () => {
   });
 
   it('portale cambiato: modulo assente, errore all\'invio, sessione non tenuta, scelta fallita', async () => {
-    await expect(accediPortale(new Traccia(portaleFinto({ senzaModulo: true }).web), CRED)).rejects.toBeInstanceOf(PortaleCambiato);
+    const senza = new Traccia(portaleFinto({ senzaModulo: true }).web);
+    await expect(accediPortale(senza, CRED)).rejects.toBeInstanceOf(PortaleCambiato);
+    expect(senza.testo()).toContain('moduli: nessuno');
     await expect(accediPortale(new Traccia(portaleFinto({ erroreAccesso: 500 }).web), CRED)).rejects.toThrow(/500/);
     await expect(accediPortale(new Traccia(portaleFinto({ sessionePersa: true }).web), CRED)).rejects.toThrow(/di nuovo le credenziali/);
     await expect(accediPortale(new Traccia(portaleFinto({ erroreScelta: true }).web), CRED)).rejects.toThrow(/Me stesso/);

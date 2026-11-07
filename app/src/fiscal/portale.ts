@@ -100,6 +100,37 @@ export function leggiModulo(html: string, base: string): Modulo | null {
   return null;
 }
 
+/**
+ * Descrizione della pagina di accesso (pubblica, prima di entrare) quando il modulo non si trova:
+ * solo struttura (titolo, moduli, NOMI dei campi, script, collegamenti di accesso), mai valori.
+ */
+export function strutturaPagina(html: string, base: string): string {
+  const percorso = (u: string | undefined) => {
+    if (!u) return '-';
+    if (/^javascript:/i.test(u)) return 'javascript';
+    try { const x = new URL(u, base); return x.host === new URL(base).host ? x.pathname : `${x.host}${x.pathname}`; } catch { return '?'; }
+  };
+  const titolo = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.replace(/\s+/g, ' ').trim().slice(0, 60) ?? '-';
+  const moduli = [...html.matchAll(/<form\b([^>]*)>/gi)].map((f) => { const a = attributi(f[1]!); return `${(a.method ?? 'get').toUpperCase()} ${percorso(a.action)}${a.name || a.id ? ` (${a.name || a.id})` : ''}`; });
+  const campi = [...html.matchAll(/<(input|select|textarea|button)\b([^>]*)>/gi)].map((m) => { const a = attributi(m[2]!); return a.name || a.id ? `${a.name || `#${a.id}`}(${(a.type ?? m[1]!).toLowerCase()})` : ''; }).filter(Boolean);
+  const script = [...html.matchAll(/<script\b([^>]*)>/gi)].map((m) => attributi(m[1]!).src).filter(Boolean).map((x) => percorso(x));
+  const inline = [...html.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].length;
+  const cornici = [...html.matchAll(/<i?frame\b([^>]*)>/gi)].map((m) => percorso(attributi(m[1]!).src));
+  const accessi = [...new Set([...html.matchAll(/<a\b([^>]*)>/gi)].map((m) => attributi(m[1]!).href)
+    .filter((h): h is string => !!h && /login|fisconline|entratel|spid|cie|sam\/|auth/i.test(h)).map((h) => percorso(h)))].slice(0, 12);
+  const parole = ['IDToken', 'Fisconline', 'SPID', 'CIE', 'XUI', 'json/authenticate', 'authId', 'callbacks', 'noscript', 'location.href', 'submit()']
+    .filter((k) => html.includes(k));
+  return [
+    `pagina ${html.length} caratteri, titolo «${titolo}»`,
+    `moduli: ${moduli.join(' | ') || 'nessuno'}`,
+    `campi: ${campi.slice(0, 30).join(', ') || 'nessuno'}`,
+    `script: ${script.slice(0, 15).join(', ') || 'nessuno'} + ${inline} interni`,
+    ...(cornici.length ? [`cornici: ${cornici.join(', ')}`] : []),
+    `collegamenti di accesso: ${accessi.join(', ') || 'nessuno'}`,
+    `contiene: ${parole.join(', ') || 'nessuna parola chiave'}`,
+  ].join('; ');
+}
+
 /** Il modulo compilato: campi nascosti come sono, credenziali al loro posto, pulsanti esclusi. */
 export function compilaModulo(m: Modulo, c: Credenziali): Record<string, string> {
   const dati: Record<string, string> = {};
@@ -159,7 +190,10 @@ const ts = () => `v=${Date.now()}`;
 export async function accediPortale(t: Traccia, c: Credenziali): Promise<void> {
   const pagina = await t.chiama('Pagina di accesso', { url: `${IVASERVIZI}/portale/`, metodo: 'GET' });
   const m = leggiModulo(pagina.testo, pagina.url);
-  if (!m) throw new PortaleCambiato('Non trovo il modulo di accesso Fisconline nella pagina.');
+  if (!m) {
+    t.passi[t.passi.length - 1]!.nota = strutturaPagina(pagina.testo, pagina.url);
+    throw new PortaleCambiato('Non trovo il modulo di accesso Fisconline nella pagina.');
+  }
   const nascosti = m.campi.filter((x) => !/^IDToken[123]$/.test(x.nome)).map((x) => `${x.nome}(${x.tipo})`);
   t.passi[t.passi.length - 1]!.nota = `modulo ${m.metodo} → ${senzaParametri(m.azione)}; campi: ${nascosti.join(', ') || 'nessuno'}`;
 
