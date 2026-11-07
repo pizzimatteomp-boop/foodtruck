@@ -32,6 +32,12 @@ Documento completo: «Super app VegMan · Fatture, ingredienti e food cost» (Cl
 - **Scelte tecniche**: schermate con Preact; app installabile e apribile senza rete; fatture (XML e .p7m) lette sul dispositivo; dati veri mai nel repository (è pubblico), nei test solo dati inventati.
 - **VegMan Planner**: l'attività è ferma, il passaggio è semplice: un import una tantum delle cose utili (ingredienti, prodotti, ricette, fatture, articoli); le 89 comande storiche non si importano.
 
+## Ingredienti, allergeni e menu pubblico (deciso da Matteo il 7/11/2026)
+- Ogni ingrediente ha, **inseriti a mano** dall'etichetta (nessun suggerimento automatico, per avere dati certi): composizione in italiano e inglese, i 14 allergeni del Reg. UE 1169/2011 (allegato II), le tracce («può contenere»), il peso per pezzo se si conta a pezzi, e la spunta «etichetta controllata».
+- La lista ingredienti di ogni prodotto si calcola dalla ricetta (semilavorati compresi): ordine di peso decrescente, ingredienti composti con il contenuto tra parentesi, allergeni in evidenza, riepilogo «Contiene» e «Può contenere»; il packaging è escluso. Se un ingrediente non è controllato o manca un dato, il prodotto lo segnala.
+- Menu pubblico **con i prezzi**, in **italiano e inglese**, aperto a tutti via QR code e stampabile (cartello prodotti × allergeni); si aggiorna solo quando il titolare preme «Pubblica». Contiene solo nomi, prezzi, ingredienti e allergeni.
+- Da far vedere al consulente HACCP: il QR affianca il cartello stampato, non lo sostituisce.
+
 ## Marchio (Brand Guidelines Manodopera 2024)
 - Colori: bianco `#FFFFFF`, nero `#000000`, arancio `#F08A39`, menta `#B9DED3`, lampone `#B7426F`, glaucous `#6B77B7`; crema della «V» `#F3E9D0`. Per il testo piccolo si usano tonalità più scure del glaucous (`#5560A3`, `#4E5899`) per un contrasto ≥ 4,5:1. Combinazioni del manuale: nero su arancio, glaucous su menta, bianco su glaucous, nero su menta.
 - Font dei titoli: Luckiest Guy (Apache 2.0), sempre in maiuscolo; in `app/public/font/` (sottoinsieme WOFF2, 16 KB).
@@ -99,8 +105,10 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
      - 4b-1. [x] Motore del food cost (`app/src/foodcost/`) e import da Planner (`app/src/importazione/`, pagina «Importa»): verificato identico a Planner su 200 archivi inventati e sui 13 prodotti veri (6/11/2026). Unica differenza voluta: righe di fattura a quantità 0 non danno prezzo 0 €
      - 4b-2. [x] Pagina Ingredienti (`app/src/ui/Ingredienti.tsx`, `SchedaIngrediente.tsx`, `app/src/ingredienti/`): elenco alimentare/packaging con €/kg, €/L o €/pz e stato del prezzo; scheda con fonti e prezzo per fonte, collegamento articoli con conversione proposta dal nome (es. «CECI 5 KG» → 5000 g), unione dei doppioni (sposta fonti e ricette), nuovo ingrediente
      - 4b-3. [x] Fatture (`app/src/fatture/`, pagina «Fatture»): lettori scritti da zero e senza librerie per XML FatturaPA, buste firmate .p7m (anche spezzate e in base64) e ZIP; fattura riconosciuta da fornitore+tipo+numero+data (niente doppioni, salta quelle già in Planner); articolo = partita IVA + codice (o descrizione), collegato una volta poi automatico; note di credito archiviate senza toccare i prezzi; coda «Da controllare» con le 3 categorie; acquisti senza fattura. Fixture inventate in `app/tests/fatture/` (firmate con un certificato finto)
-     - 4b-4. Ricette e prodotti con food cost mentre si scrive
-     - 4b-5. Storico mensile, grafici, avvisi
+     - 4b-4. Composizione e allergeni negli ingredienti (IT/EN), peso per pezzo; lista ingredienti e allergeni dei prodotti
+     - 4b-5. Editor di ricette e prodotti: food cost, lista ingredienti e allergeni mentre si scrive; prodotti in menu
+     - 4b-6. Menu pubblico con QR code (IT/EN, con prezzi) e versione stampabile
+     - 4b-7. Storico mensile, grafici, avvisi
 5. [ ] Modulo fiscale di rete: accesso Fisconline, emissione, annullo, PDF, gestione errori, simulatore; con lo stesso accesso download mensile delle fatture ricevute e promemoria il 5 del mese
 6. [ ] App Android di prova (Capacitor) installata sullo smartphone di Matteo
 7. [ ] Matteo inserisce le credenziali sul telefono
