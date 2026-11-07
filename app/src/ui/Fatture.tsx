@@ -134,13 +134,17 @@ function DalCassetto({ esistenti, disabilitato, onScaricate }: {
   const [inCorso, setInCorso] = useState(false);
   const [ultimi, setUltimi] = useState<string[]>([]);
   const [secondi, setSecondi] = useState(0);
-  const traccia = useRef<Traccia | null>(null);
+  const [attesa, setAttesa] = useState<{ passo: string; da: number } | null>(null);
+  const attesaRef = useRef<{ passo: string; da: number } | null>(null);
+  const ferma = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!inCorso) return undefined;
     const inizio = Date.now();
     const id = setInterval(() => setSecondi(Math.round((Date.now() - inizio) / 1000)), 1000);
     return () => clearInterval(id);
   }, [inCorso]);
+
+  function inAttesa(x: { passo: string; da: number } | null) { attesaRef.current = x; setAttesa(x); }
 
   async function scarica() {
     if (dal > al) { setErrore('La data iniziale è dopo quella finale.'); return; }
@@ -150,34 +154,44 @@ function DalCassetto({ esistenti, disabilitato, onScaricate }: {
     setUltimi([]);
     setSecondi(0);
     const t = nuovaTraccia();
-    traccia.current = t;
-    t.alPasso = (p) => setUltimi((u) => [...u.slice(-2), `${p.passo} → ${p.stato}`]);
+    t.alPasso = (p) => { inAttesa(null); setUltimi((u) => [...u.slice(-2), `${p.passo} → ${p.stato}`]); };
+    t.allInizio = (passo) => inAttesa({ passo, da: Date.now() });
+    // «Interrompi» chiude subito, senza aspettare la chiamata in corso.
+    const interruzione = new Promise<never>((_, rifiuta) => { ferma.current = () => { t.interrotta = true; rifiuta(new Interrotta()); }; });
     try {
-      setAvanzamento('Accesso al portale…');
-      await apriSessione(t);
-      setAvanzamento('Elenco delle fatture ricevute…');
-      const elenco = await elencoRicevute(t, dal, al);
-      const nuove = elenco.filter((f) => !giaPresente(f, esistenti));
-      const daFare = nuove.slice(0, MASSIMO_PER_VOLTA);
-      const file: { nome: string; byte: Uint8Array }[] = [];
-      const scartati: { nome: string; motivo: string }[] = [];
-      for (const [i, f] of daFare.entries()) {
-        setAvanzamento(`Scarico ${i + 1} di ${daFare.length} (${elenco.length - nuove.length} già presenti)…`);
-        try { file.push(await scaricaFattura(t, f)); } catch (e) {
-          if (e instanceof Interrotta) throw e;
-          scartati.push({ nome: `${f.fornitore} n. ${f.numero}`, motivo: (e as Error).message });
-        }
-      }
-      if (nuove.length > daFare.length) scartati.push({ nome: 'Altre fatture', motivo: `${nuove.length - daFare.length} non scaricate: ripeti lo scaricamento dopo aver caricato queste.` });
-      setAvanzamento(`${elenco.length} fatture nel periodo, ${nuove.length} nuove, ${file.length} scaricate.`);
-      onScaricate(file, scartati);
+      await Promise.race([lavora(t), interruzione]);
     } catch (e) {
       setAvanzamento('');
       setErrore(e instanceof AccessoRifiutato || e instanceof PortaleCambiato || e instanceof AccessoNonPossibile || e instanceof Interrotta || (e as Error).name === 'ErroreCassetto'
-        ? (e as Error).message : `Interrotto: ${(e as Error)?.name ?? 'errore'}.`);
+        ? (e as Error).message : `Interrotto: ${(e as Error)?.name ?? 'errore'} ${(e as Error)?.message ?? ''}`.trim());
     }
+    const sospesa = attesaRef.current;
+    if (sospesa) t.annota('Rimasto in attesa', `${sospesa.passo} da ${Math.round((Date.now() - sospesa.da) / 1000)} s`);
     setResoconto(`Scarico fatture · ${new Date().toLocaleString('it-IT')}\n${t.testo()}`);
+    inAttesa(null);
+    ferma.current = null;
     setInCorso(false);
+  }
+
+  async function lavora(t: Traccia) {
+    setAvanzamento('Accesso al portale…');
+    await apriSessione(t);
+    setAvanzamento('Elenco delle fatture ricevute…');
+    const elenco = await elencoRicevute(t, dal, al);
+    const nuove = elenco.filter((f) => !giaPresente(f, esistenti));
+    const daFare = nuove.slice(0, MASSIMO_PER_VOLTA);
+    const file: { nome: string; byte: Uint8Array }[] = [];
+    const scartati: { nome: string; motivo: string }[] = [];
+    for (const [i, f] of daFare.entries()) {
+      setAvanzamento(`Scarico ${i + 1} di ${daFare.length} (${elenco.length - nuove.length} già presenti)…`);
+      try { file.push(await scaricaFattura(t, f)); } catch (e) {
+        if (e instanceof Interrotta) throw e;
+        scartati.push({ nome: `${f.fornitore} n. ${f.numero}`, motivo: (e as Error).message });
+      }
+    }
+    if (nuove.length > daFare.length) scartati.push({ nome: 'Altre fatture', motivo: `${nuove.length - daFare.length} non scaricate: ripeti lo scaricamento dopo aver caricato queste.` });
+    setAvanzamento(`${elenco.length} fatture nel periodo, ${nuove.length} nuove, ${file.length} scaricate.`);
+    onScaricate(file, scartati);
   }
 
   return (
@@ -191,9 +205,9 @@ function DalCassetto({ esistenti, disabilitato, onScaricate }: {
       <button type="button" class="primario" disabled={disabilitato || inCorso || !dal || !al} onClick={() => void scarica()}>
         {inCorso ? 'Scaricamento…' : 'Scarica dal cassetto fiscale'}
       </button>
-      {inCorso && <button type="button" class="secondario piccolo" onClick={() => { if (traccia.current) traccia.current.interrotta = true; }}>Interrompi</button>}
+      {inCorso && <button type="button" class="secondario piccolo" onClick={() => ferma.current?.()}>Interrompi</button>}
       {avanzamento && <p role="status">{avanzamento}{inCorso ? ` · ${secondi} s` : ''}</p>}
-      {inCorso && ultimi.length > 0 && <pre class="resoconto">{ultimi.join('\n')}</pre>}
+      {inCorso && (ultimi.length > 0 || attesa) && <pre class="resoconto">{[...ultimi, ...(attesa ? [`In corso: ${attesa.passo} · ${Math.round((Date.now() - attesa.da) / 1000)} s`] : [])].join('\n')}</pre>}
       {errore && <p class="errore" role="alert">{errore}</p>}
       {resoconto && (
         <details>

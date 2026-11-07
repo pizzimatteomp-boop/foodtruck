@@ -253,6 +253,14 @@ describe('accesso al portale (finto) e letture di prova', () => {
     t.alPasso = (p) => { visti.push(`${p.passo}:${p.stato}`); if (visti.length === 2) t.interrotta = true; };
     await expect(accediPortale(t, CRED)).rejects.toBeInstanceOf(Interrotta);
     expect(visti).toEqual(['Pagina di accesso:200', 'Invio credenziali:200']);
+    const inizi: string[] = [];
+    const n = new Traccia(portaleFinto().web);
+    n.allInizio = (p) => inizi.push(p);
+    n.annota('Lettura credenziali', 'presenti');
+    n.annota('Controllo');
+    await n.chiama('Uno', { url: 'https://ivaservizi.agenziaentrate.gov.it/portale/', metodo: 'GET' });
+    expect(inizi).toEqual(['Uno']);
+    expect(n.testo()).toContain('1. Lettura credenziali · GET telefono → 200 · presenti');
     const r = new Traccia(async () => { throw new ErroreRete('giù'); });
     const v: string[] = [];
     r.alPasso = (p) => v.push(String(p.stato));

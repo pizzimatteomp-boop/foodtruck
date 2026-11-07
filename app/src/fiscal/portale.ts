@@ -186,6 +186,8 @@ export class Traccia {
   private readonly appl = new Map<string, string>();
   /** Chiamato a ogni passo (per mostrare l'avanzamento); interrotta = la prossima chiamata si ferma. */
   alPasso?: (p: PassoTraccia) => void;
+  /** Chiamato quando una chiamata parte (per mostrare cosa si sta aspettando). */
+  allInizio?: (passo: string) => void;
   interrotta = false;
   constructor(private readonly web: Web) {}
 
@@ -195,6 +197,7 @@ export class Traccia {
     const gettone = this.appl.get(host);
     if (gettone && !r.intestazioni?.['x-appl']) r = { ...r, intestazioni: { ...r.intestazioni, 'x-appl': gettone } };
     if (this.interrotta) throw new Interrotta();
+    this.allInizio?.(passo);
     try { x = await this.web(r); } catch (e) {
       this.passi.push({ passo, metodo: r.metodo, indirizzo: senzaParametri(r.url), stato: 'rete', nota: `errore: ${messaggioSicuro(e)}` });
       this.alPasso?.(this.passi.at(-1)!);
@@ -211,6 +214,12 @@ export class Traccia {
     });
     this.alPasso?.(this.passi.at(-1)!);
     return x;
+  }
+
+  /** Passo interno al telefono (senza rete), per sapere dove ci si ferma. */
+  annota(passo: string, nota?: string): void {
+    this.passi.push({ passo, metodo: 'GET', indirizzo: 'telefono', stato: 200, ...(nota ? { nota } : {}) });
+    this.alPasso?.(this.passi.at(-1)!);
   }
 
   /** Testo da incollare in chat: nessun valore. */

@@ -34,8 +34,12 @@ export function nuovaTraccia(): Traccia {
 
 /** Entra nel portale. Restituisce se la scelta «Me stesso» è riuscita (dopo l'accesso si va avanti comunque). */
 export async function apriSessione(t: Traccia): Promise<boolean> {
+  t.allInizio?.('Controllo blocco');
   if (await accessoBloccato()) throw new AccessoNonPossibile('L\'ultimo accesso è stato rifiutato: controlla le credenziali e sblocca da «Cassa · prova».');
+  t.annota('Controllo blocco');
+  t.allInizio?.('Lettura credenziali dalla cassaforte');
   const cred = await (await deposito()).leggi();
+  t.annota('Lettura credenziali dalla cassaforte', cred ? 'presenti' : 'assenti');
   if (!cred) throw new AccessoNonPossibile('Credenziali Fisconline non salvate su questo telefono (si inseriscono in «Cassa · prova»).');
   try {
     await entraNelPortale(t, cred);
