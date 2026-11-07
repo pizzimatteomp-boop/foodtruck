@@ -16,7 +16,8 @@ export async function salvaImportPlanner(db: Firestore, r: RisultatoImport, uid:
   ];
   for (let i = 0; i < scritture.length; i += PER_BLOCCO) {
     const blocco = writeBatch(db);
-    for (const [raccolta, { id, ...dati }] of scritture.slice(i, i + PER_BLOCCO)) blocco.set(doc(db, raccolta, id), dati);
+    // merge: rifare l'import aggiorna i dati di Planner ma non cancella quelli aggiunti dopo (es. le etichette)
+    for (const [raccolta, { id, ...dati }] of scritture.slice(i, i + PER_BLOCCO)) blocco.set(doc(db, raccolta, id), dati, { merge: true });
     await blocco.commit();
   }
   const registro = writeBatch(db);

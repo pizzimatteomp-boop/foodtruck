@@ -52,7 +52,12 @@ service cloud.firestore {
     match /ingredienti/{id} {
       allow read: if team();
       allow create, update: if titolare()
-        && nuovo().keys().hasOnly(['nome', 'categoria', 'unita', 'gruppo', 'confezione'])
+        && nuovo().keys().hasOnly(['nome', 'categoria', 'unita', 'gruppo', 'confezione', 'etichetta'])
+        && (!('etichetta' in nuovo()) || (
+          nuovo().etichetta.keys().hasOnly(['nomeEn', 'composizione', 'allergeni', 'tracce', 'pesoUnitario', 'controllata'])
+          && nuovo().etichetta.allergeni is list && nuovo().etichetta.allergeni.size() <= 14
+          && nuovo().etichetta.tracce is list && nuovo().etichetta.tracce.size() <= 14
+          && nuovo().etichetta.controllata is bool))
         && testo(nuovo().nome) && nuovo().nome.size() <= 80
         && nuovo().categoria in ['alimentare', 'packaging']
         && testo(nuovo().unita)

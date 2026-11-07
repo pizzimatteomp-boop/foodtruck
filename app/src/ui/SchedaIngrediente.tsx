@@ -7,6 +7,7 @@ import { suggerimenti } from '../foodcost/somiglianza';
 import { fattoreSuggerito } from '../foodcost/unita';
 import { CATEGORIE, ErroreIngrediente, preparaFattore, preparaIngrediente } from '../ingredienti/operazioni';
 import { collegaArticolo, salvaIngrediente, unisciIngredienti } from '../ingredienti/operazioni.db';
+import { EtichettaIngrediente } from './EtichettaIngrediente';
 import { dataItaliana, FINESTRA_GIORNI, oggi, TestoPrezzo, type DatiFoodCost } from './Ingredienti';
 
 type Esito = { testo: string; errore: boolean } | null;
@@ -139,6 +140,8 @@ export function SchedaIngrediente({ db, id, dati }: { db: Firestore; id: string 
         <button type="submit" class="primario">{id ? 'Salva' : 'Crea ingrediente'}</button>
       </form>
       <p role="status" class={esito?.errore ? 'esito errore' : 'esito'}>{esito?.testo ?? ''}</p>
+
+      {id && esistente && esistente.categoria === 'alimentare' && <EtichettaIngrediente db={db} ingrediente={esistente} />}
 
       {id && (
         <>

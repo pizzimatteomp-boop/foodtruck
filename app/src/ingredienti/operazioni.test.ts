@@ -38,3 +38,26 @@ describe('unione di due ingredienti doppi', () => {
     expect(() => pianoUnione('a', 'a', [], [])).toThrow('diverso');
   });
 });
+
+import { preparaEtichetta } from './operazioni';
+
+describe('etichetta inserita a mano', () => {
+  const base = { nomeEn: ' Soy  sauce ', composizioneIt: 'acqua,  *soia*, *frumento*, sale', composizioneEn: 'water, *soy*, *wheat*, salt', allergeni: ['soia', 'glutine', 'cioccolato'], tracce: ['sesamo', 'soia'], pesoUnitario: null, controllata: true };
+  it('ripulisce, ordina gli allergeni, toglie dalle tracce quelli già presenti', () => {
+    expect(preparaEtichetta(base, 'ml')).toEqual({
+      nomeEn: 'Soy sauce', composizione: { it: 'acqua, *soia*, *frumento*, sale', en: 'water, *soy*, *wheat*, salt' },
+      allergeni: ['glutine', 'soia'], tracce: ['sesamo'], pesoUnitario: null, controllata: true,
+    });
+  });
+  it('peso per pezzo: obbligatorio per gli ingredienti a pezzi quando l\'etichetta è controllata', () => {
+    expect(preparaEtichetta({ ...base, pesoUnitario: '100,5' }, 'pz').pesoUnitario).toBe(100.5);
+    expect(() => preparaEtichetta(base, 'pz')).toThrow('grammi pesa 1 pz');
+    expect(preparaEtichetta({ ...base, controllata: false }, 'pz').pesoUnitario).toBeNull();
+    expect(preparaEtichetta({ ...base, pesoUnitario: 50 }, 'g').pesoUnitario).toBeNull();
+    expect(() => preparaEtichetta({ ...base, pesoUnitario: '-1' }, 'pz')).toThrow('maggiore di zero');
+  });
+  it('asterischi spaiati e testi troppo lunghi', () => {
+    expect(() => preparaEtichetta({ ...base, composizioneIt: 'acqua, *soia, sale' }, 'g')).toThrow('Asterischi');
+    expect(() => preparaEtichetta({ ...base, composizioneEn: 'x'.repeat(1001) }, 'g')).toThrow('lunga');
+  });
+});

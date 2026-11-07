@@ -1,14 +1,15 @@
 /** Scrittura nel database di ingredienti e collegamenti (provata sull'emulatore: tests/regole). */
 import { collection, doc, writeBatch, type Firestore } from 'firebase/firestore';
-import type { Articolo, CategoriaArticolo, Ingrediente, Prodotto } from '../foodcost/modello';
+import type { Articolo, CategoriaArticolo, Etichetta, Ingrediente, Prodotto } from '../foodcost/modello';
 import { pianoUnione } from './operazioni';
 
 const senzaId = <T extends { id: string }>({ id: _id, ...resto }: T) => resto;
 
-export async function salvaIngrediente(db: Firestore, id: string | null, dati: Omit<Ingrediente, 'id'>): Promise<string> {
+/** Salva i dati base; l'etichetta già compilata resta com'è. */
+export async function salvaIngrediente(db: Firestore, id: string | null, dati: Omit<Ingrediente, 'id' | 'etichetta'>): Promise<string> {
   const ref = id ? doc(db, 'ingredienti', id) : doc(collection(db, 'ingredienti'));
   const b = writeBatch(db);
-  b.set(ref, dati);
+  b.set(ref, dati, { merge: true });
   await b.commit();
   return ref.id;
 }
@@ -33,4 +34,10 @@ export async function unisciIngredienti(db: Firestore, da: string, verso: string
   b.delete(doc(db, 'ingredienti', da));
   await b.commit();
   return piano;
+}
+
+export async function salvaEtichetta(db: Firestore, id: string, etichetta: Etichetta): Promise<void> {
+  const b = writeBatch(db);
+  b.set(doc(db, 'ingredienti', id), { etichetta }, { merge: true });
+  await b.commit();
 }

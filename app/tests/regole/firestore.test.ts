@@ -15,7 +15,7 @@ import { preparaPersona } from '../../src/persone/persone';
 import { elencaPersone, salvaPersona } from '../../src/persone/persone.db';
 import { leggiPlanner } from '../../src/importazione/planner';
 import { salvaImportPlanner } from '../../src/importazione/salva.db';
-import { collegaArticolo, salvaIngrediente, unisciIngredienti } from '../../src/ingredienti/operazioni.db';
+import { collegaArticolo, salvaEtichetta, salvaIngrediente, unisciIngredienti } from '../../src/ingredienti/operazioni.db';
 import type { Articolo, Prodotto } from '../../src/foodcost/modello';
 import { readFileSync as leggiFile } from 'node:fs';
 import { leggiFatturaPA } from '../../src/fatture/fatturapa';
@@ -351,5 +351,21 @@ describe('fatture nel database', () => {
     await salvaAcquistoManuale(db('matteo'), r.articolo, r.acquisto);
     expect((await getDoc(doc(db('matteo'), 'acquisti', r.acquisto.id))).data()).toMatchObject({ origine: 'manuale', quantita: 1000 });
     await assertFails(salvaAcquistoManuale(db('luca'), r.articolo, r.acquisto));
+  });
+});
+
+describe('etichette degli ingredienti', () => {
+  it('si salvano, restano quando si modificano i dati base o si rifà l\'import, e il team le legge', async () => {
+    const m = db('matteo');
+    const id = await salvaIngrediente(m, 'i-pan', { nome: 'Panino', categoria: 'alimentare', unita: 'pz', gruppo: '', confezione: null });
+    const etichetta = { nomeEn: 'Bun', composizione: { it: 'farina di *frumento*', en: '*wheat* flour' }, allergeni: ['glutine' as const], tracce: [], pesoUnitario: 100, controllata: true };
+    await salvaEtichetta(m, id, etichetta);
+    await salvaIngrediente(m, id, { nome: 'Panino 100 g', categoria: 'alimentare', unita: 'pz', gruppo: 'Burger', confezione: 15 });
+    await salvaImportPlanner(m, leggiPlanner({ ingredients: [{ id: 'i-pan', name: 'Panino', unit: 'pz' }], products: [] }), 'matteo');
+    const d = (await getDoc(doc(m, 'ingredienti', id))).data()!;
+    expect(d.etichetta).toEqual(etichetta);
+    expect(d.nome).toBe('Panino');
+    await assertSucceeds(getDoc(doc(db('luca'), 'ingredienti', id)));
+    await assertFails(setDoc(doc(m, 'ingredienti', 'x'), { nome: 'X', categoria: 'alimentare', unita: 'g', gruppo: '', confezione: null, etichetta: { ...etichetta, prezzo: 3 } }));
   });
 });

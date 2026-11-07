@@ -2,7 +2,8 @@
  * Modifiche a ingredienti e collegamenti con gli articoli dei fornitori (solo titolare).
  * Parte pura e testata: controlli e piano delle modifiche. La scrittura nel database è in operazioni.db.ts.
  */
-import type { Articolo, CategoriaIngrediente, Ingrediente, Prodotto } from '../foodcost/modello';
+import { eAllergene, ordinaAllergeni } from '../etichette/allergeni';
+import type { Articolo, CategoriaIngrediente, Etichetta, Ingrediente, Prodotto } from '../foodcost/modello';
 
 export class ErroreIngrediente extends Error {
   override name = 'ErroreIngrediente';
@@ -42,3 +43,28 @@ export function pianoUnione(da: string, verso: string, prodotti: readonly Prodot
   };
 }
 
+
+/** Dati dell'etichetta inseriti a mano: ripuliti e controllati. */
+export function preparaEtichetta(x: {
+  nomeEn: string; composizioneIt: string; composizioneEn: string; allergeni: string[]; tracce: string[];
+  pesoUnitario: string | number | null; controllata: boolean;
+}, unita: string): Etichetta {
+  const pulisci = (t: string) => t.replace(/\s+/g, ' ').trim();
+  if (x.composizioneIt.length > 1000 || x.composizioneEn.length > 1000) throw new ErroreIngrediente('Composizione troppo lunga.');
+  if ((x.composizioneIt.match(/\*/g)?.length ?? 0) % 2 || (x.composizioneEn.match(/\*/g)?.length ?? 0) % 2) {
+    throw new ErroreIngrediente('Asterischi spaiati: ogni allergene va tra due asterischi, es. *soia*.');
+  }
+  const p = x.pesoUnitario === null || x.pesoUnitario === '' ? null : Number(String(x.pesoUnitario).replace(',', '.'));
+  if (p !== null && !(p > 0)) throw new ErroreIngrediente('Il peso per pezzo deve essere un numero maggiore di zero.');
+  const contaPezzi = !['g', 'gr', 'kg', 'ml', 'cl', 'l', 'lt'].includes(unita.trim().toLowerCase());
+  if (contaPezzi && p === null && x.controllata) throw new ErroreIngrediente(`Scrivi quanti grammi pesa 1 ${unita || 'pezzo'}: serve per l'ordine della lista ingredienti.`);
+  const allergeni = ordinaAllergeni(x.allergeni.filter(eAllergene));
+  return {
+    nomeEn: pulisci(x.nomeEn).slice(0, 80),
+    composizione: { it: pulisci(x.composizioneIt), en: pulisci(x.composizioneEn) },
+    allergeni,
+    tracce: ordinaAllergeni(x.tracce.filter(eAllergene).filter((t) => !allergeni.includes(t))),
+    pesoUnitario: contaPezzi ? p : null,
+    controllata: x.controllata,
+  };
+}

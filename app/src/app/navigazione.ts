@@ -5,7 +5,7 @@
 import { puo, type Ruolo } from '../firebase/ruoli';
 
 export interface Pagina {
-  id: 'home' | 'fatture' | 'ingredienti' | 'persone' | 'importa';
+  id: 'home' | 'fatture' | 'ingredienti' | 'allergeni' | 'persone' | 'importa';
   titolo: string;
   icona: string;
   visibile: (ruolo: Ruolo) => boolean;
@@ -15,6 +15,7 @@ export const PAGINE: readonly Pagina[] = [
   { id: 'home', titolo: 'Home', icona: '🏠', visibile: () => true },
   { id: 'fatture', titolo: 'Fatture', icona: '🧾', visibile: (r) => puo(r, 'acquisti') },
   { id: 'ingredienti', titolo: 'Ingredienti', icona: '🥕', visibile: (r) => puo(r, 'acquisti') },
+  { id: 'allergeni', titolo: 'Allergeni', icona: '🌾', visibile: (r) => puo(r, 'acquisti') },
   { id: 'persone', titolo: 'Persone', icona: '👥', visibile: (r) => puo(r, 'utenti') },
   { id: 'importa', titolo: 'Importa', icona: '⬆', visibile: (r) => puo(r, 'acquisti') },
 ];

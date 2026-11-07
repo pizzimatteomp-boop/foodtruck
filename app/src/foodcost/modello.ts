@@ -2,7 +2,23 @@
  * Dati di ingredienti, prodotti, articoli e acquisti (vedi CLAUDE.md, «Fatture, ingredienti e food cost»).
  * Le quantità sono sempre nell'unità dell'ingrediente (g, ml, pz…).
  */
+import type { Allergene } from '../etichette/allergeni';
+
 export type CategoriaIngrediente = 'alimentare' | 'packaging';
+
+/** Dati dell'etichetta, inseriti a mano dal titolare (vedi CLAUDE.md, «Ingredienti, allergeni e menu pubblico»). */
+export interface Etichetta {
+  nomeEn: string;
+  /** Ingredienti dell'etichetta, nell'ordine dell'etichetta; gli allergeni tra asterischi: «acqua, *soia*, *frumento*, sale». */
+  composizione: { it: string; en: string };
+  allergeni: Allergene[];
+  /** «Può contenere tracce di». */
+  tracce: Allergene[];
+  /** Grammi di un pezzo, per gli ingredienti contati a pezzi (serve per l'ordine di peso). */
+  pesoUnitario: number | null;
+  /** Il titolare ha controllato l'etichetta: senza, il prodotto segnala dati da verificare. */
+  controllata: boolean;
+}
 export type CategoriaArticolo = CategoriaIngrediente | 'non_alimentare';
 
 export interface Ingrediente {
@@ -15,6 +31,7 @@ export interface Ingrediente {
   gruppo: string;
   /** Quantità di una confezione tipica, nell'unità dell'ingrediente (facoltativa). */
   confezione: number | null;
+  etichetta?: Etichetta;
 }
 
 export interface RigaRicetta {
@@ -36,6 +53,8 @@ export interface Prodotto {
   ricetta: RigaRicetta[];
   /** Quota storica sulle vendite in % (da VegMan Planner), per pianificare gli eventi. */
   quotaVendite: number;
+  /** Nome in inglese (menu pubblico e liste ingredienti). */
+  nomeEn?: string;
 }
 
 /** Un articolo comprato da un fornitore (es. «Ceci secchi 5 kg» da Metro). */

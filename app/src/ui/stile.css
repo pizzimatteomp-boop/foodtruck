@@ -181,3 +181,24 @@ optgroup { font-style: normal; }
 .anteprima { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--sfondo); }
 .elenco li a:not([href]) { cursor: default; }
 .elenco li a:not([href]):hover { background: none; }
+
+/* Etichetta e allergeni */
+.caselle { border: 1px solid var(--bordo); border-radius: 12px; padding: 8px 12px 12px; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; }
+.caselle legend { font-weight: 600; padding: 0 4px; }
+.caselle label, .spunta { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 0.95rem; }
+.caselle label.spento { opacity: 0.45; }
+.caselle input, .spunta input { width: 20px; height: 20px; min-height: 0; accent-color: var(--pulsante); flex: none; }
+.spunta { font-weight: 600; }
+code { font-size: 0.9em; background: var(--sfondo); padding: 1px 4px; border-radius: 4px; }
+
+/* Allergeni */
+.matrice th, .matrice td { text-align: center; padding: 6px 4px; }
+.matrice th[scope='row'] { text-align: left; min-width: 120px; }
+.matrice thead th { vertical-align: bottom; height: 110px; }
+.matrice thead th span { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; font-size: 0.8rem; }
+.matrice td { color: var(--lampone); font-size: 1rem; }
+.prodotto-etichetta { border-top: 1px solid var(--bordo); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.lista-ingredienti { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--sfondo); }
+.avvisi.errore { color: var(--errore); }
+
+.pallino { color: var(--lampone); }

@@ -239,3 +239,49 @@ test('fatture: caricare uno ZIP, classificare le righe nuove, acquisto a mano', 
   await expect(elenco.getByRole('link', { name: /Sale/ })).toContainText('1,20 €/kg');
   await expect(elenco.getByRole('link', { name: /Sale/ })).toContainText('2 fonti');
 });
+
+test('allergeni: etichette compilate a mano → lista ingredienti e tabella allergeni dei prodotti', async ({ page }) => {
+  await accedi(page, MATTEO);
+  const compila = async (nome: RegExp, dati: { en: string; it?: string; enComp?: string; allergeni?: string[]; peso?: string }) => {
+    await page.goto('/#/ingredienti');
+    await page.getByRole('region', { name: 'Ingredienti' }).getByRole('link', { name: nome }).click();
+    const f = page.getByRole('form', { name: 'Etichetta e allergeni' });
+    await f.getByLabel('Nome in inglese').fill(dati.en);
+    if (dati.it) await f.getByLabel('Composizione in italiano').fill(dati.it);
+    if (dati.enComp) await f.getByLabel('Composizione in inglese').fill(dati.enComp);
+    for (const a of dati.allergeni ?? []) await f.getByRole('group', { name: 'Allergeni contenuti' }).getByLabel(a).check();
+    if (dati.peso) await f.getByLabel('Peso per pezzo').fill(dati.peso);
+    await f.getByLabel("Ho controllato l'etichetta").check();
+    await f.getByRole('button', { name: 'Salva etichetta' }).click();
+    await expect(f.getByRole('status')).toHaveText('Etichetta salvata.');
+    return f;
+  };
+  // Panino a pezzi: senza peso per pezzo non si salva
+  await page.goto('/#/ingredienti');
+  await page.getByRole('region', { name: 'Ingredienti' }).getByRole('link', { name: /Panino/ }).click();
+  const fp = page.getByRole('form', { name: 'Etichetta e allergeni' });
+  await fp.getByLabel("Ho controllato l'etichetta").check();
+  await fp.getByRole('button', { name: 'Salva etichetta' }).click();
+  await expect(fp.getByRole('status')).toContainText('grammi pesa 1 pz');
+
+  const panino = await compila(/Panino/, { en: 'Bun', it: 'farina di *frumento*, acqua, sale', enComp: '*wheat* flour, water, salt', allergeni: ['cereali contenenti glutine'], peso: '80' });
+  await expect(panino).toContainText('Anteprima: farina di frumento, acqua, sale');
+  await expect(panino.locator('strong', { hasText: 'frumento' })).toBeVisible();
+  await panino.screenshot({ path: 'test-results/etichetta.png' });
+  await compila(/Olio di semi/, { en: 'Seed oil' });
+  await compila(/^Sale/, { en: 'Salt' });
+
+  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Allergeni' }).click();
+  const pagina = page.getByRole('region', { name: 'Allergeni' });
+  const burger = pagina.getByRole('article', { name: 'Etichetta Burger di prova' });
+  // Panino 80 g, poi 40 g di Mayo (32 g di olio, 0,4 g di sale)
+  await expect(burger.locator('[lang=it]')).toContainText('Ingredienti: Panino (farina di frumento, acqua, sale), Mayo di prova (Olio di semi, Sale).');
+  await expect(burger.locator('[lang=it]')).toContainText('Contiene: cereali contenenti glutine.');
+  await expect(burger.locator('[lang=en]')).toContainText('Ingredients: Bun (wheat flour, water, salt), Mayo di prova (Seed oil, Salt).');
+  await expect(burger.locator('[lang=en] strong', { hasText: 'wheat' })).toBeVisible();
+  await expect(burger).toContainText('Inglese: «Mayo di prova»: manca il nome in inglese');
+  const riga = pagina.getByRole('table', { name: 'Tabella allergeni' }).getByRole('row', { name: /Burger di prova/ });
+  await expect(riga.getByRole('cell', { name: 'cereali contenenti glutine' })).toHaveText('●');
+  await expect(riga.getByRole('cell', { name: 'soia' })).toHaveText('');
+  await pagina.screenshot({ path: 'test-results/allergeni.png' });
+});
