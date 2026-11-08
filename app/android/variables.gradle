@@ -1,6 +1,8 @@
 ext {
     // Accesso con Google nativo (@capacitor-firebase/authentication)
     rgcfaIncludeGoogle = true
+    // Kotlin per @capacitor/local-notifications (la 2.0.21 predefinita a volte non si scarica da Maven Central)
+    kotlin_version = '2.1.21'
     minSdkVersion = 24
     compileSdkVersion = 36
     targetSdkVersion = 36
