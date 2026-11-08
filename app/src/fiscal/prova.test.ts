@@ -32,9 +32,10 @@ describe('cassa di prova (solo simulatore)', () => {
 
   it('rete assente → non emesso; sessione scaduta → niente emesso', async () => {
     const c = new CassaProva(archivioInMemoria(), QUANDO);
+    await c.vendi([PATATE], 'contanti');
     await expect(c.vendi([KEBAB], 'contanti', 'rete-prima')).rejects.toBeInstanceOf(NonEmesso);
     await expect(c.vendi([KEBAB], 'contanti', 'sessione')).rejects.toBeInstanceOf(SessioneScaduta);
-    expect(c.simulatore.documenti).toHaveLength(0);
+    expect(c.simulatore.documenti).toHaveLength(1);
     expect(await c.sospeso()).toBeNull();
   });
 

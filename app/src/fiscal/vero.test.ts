@@ -64,5 +64,6 @@ describe('vendita vera: preparazione', () => {
     expect(riconosceUltima(ultima, { idtrx: r.idtrx, quando }, c)).toEqual({ stessa: true, riconosciuta: true });
     expect(riconosceUltima(ultima, { idtrx: 'altro', quando: '2026-11-09T10:00:00Z' }, c)).toEqual({ stessa: false, riconosciuta: false });
     expect(riconosceUltima(null, { idtrx: r.idtrx, quando }, c)).toEqual({ stessa: false, riconosciuta: false });
+    expect(strutturaDati(await s.ultimoGrezzo())).toBe('{idtrx, datiTrasmissione{numeroProgressivo}, documentoCommerciale{dataOra, elementiContabili[1 × {idElementoContabile, descrizioneProdotto, quantita, prezzoLordo, aliquotaIVA, omaggio}]}}');
   });
 });

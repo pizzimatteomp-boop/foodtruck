@@ -6,7 +6,8 @@
  *  1. prima di inviare, si annota «invio in sospeso» (con l'impronta dello scontrino) sul dispositivo;
  *  2. risposta chiara (emesso o rifiutato) → si toglie l'annotazione;
  *  3. risposta persa → si chiede all'Agenzia l'ultima vendita: se è questa, è emessa (si recupera);
- *     se non lo è, non è stata emessa e si può riprovare;
+ *     se è ancora la vendita precedente di questo dispositivo, non è stata emessa e si può riprovare;
+ *     in ogni altro caso (nessuna vendita indicata, vendita diversa) resta in sospeso e si verifica a mano;
  *  4. se non si riesce a verificare, l'annotazione resta e NESSUNO scontrino nuovo parte finché non si chiarisce.
  * Annulli e resi non hanno «ultimo»: se la risposta si perde si resta in sospeso e si verifica a mano sul portale.
  */
@@ -92,8 +93,13 @@ export async function verificaSospeso(s: ServizioDCO, a: ArchivioInvii): Promise
     await a.togliSospeso();
     return { stato: 'recuperato', idtrx: ultima.idtrx, progressivo: ultima.datiTrasmissione.numeroProgressivo };
   }
-  await a.togliSospeso();
-  return null;
+  // «Non emesso» solo se l'Agenzia indica come ultima vendita proprio quella precedente di questo dispositivo.
+  // Nessuna vendita indicata, o una vendita diversa: non si può dedurre nulla → resta in sospeso (verifica a mano).
+  if (ultima && x.idtrxPrecedente !== null && ultima.idtrx === x.idtrxPrecedente) {
+    await a.togliSospeso();
+    return null;
+  }
+  throw new InvioInSospeso(x);
 }
 
 export async function emettiVendita(s: ServizioDCO, a: ArchivioInvii, documento: DocumentoVendita, quando = new Date()): Promise<EsitoEmissione> {

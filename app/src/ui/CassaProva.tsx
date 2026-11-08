@@ -184,9 +184,11 @@ function AgenziaVera() {
 
   // Passo 9 (solo lettura): la regola anti-doppioni riconosce l'ultima vendita registrata dall'Agenzia?
   const controllaUltima = () => collegato && ultimo && void passo(async () => {
+    const grezzo = await collegato.servizio.ultimoGrezzo();
+    registro.push(`Forma di «ultimo»: ${strutturaDati(grezzo)}`);
     const u = await collegato.servizio.ultimaVendita();
     const r = riconosceUltima(u, ultimo, collegato.cedente);
-    if (!u) return 'L\'Agenzia non indica nessuna ultima vendita.';
+    if (!u) return `L'Agenzia non indica un'ultima vendita nella forma attesa (forma ricevuta: ${strutturaDati(grezzo)}).`;
     return `Ultima vendita per l'Agenzia: ${u.datiTrasmissione.numeroProgressivo}. ${r.stessa ? 'È la vendita di prova dell\'app' : 'Non è la vendita di prova dell\'app (ce n\'è una più recente)'}; controllo anti-doppioni: ${r.riconosciuta ? 'la riconosce ✅' : 'NON la riconosce ❌'}.`;
   });
 

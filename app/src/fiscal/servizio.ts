@@ -42,6 +42,11 @@ export class ServizioDCO {
     return c && typeof c === 'object' && 'idtrx' in c ? c : null;
   }
 
+  /** Risposta di «ultimo» così com'è (per capirne la forma). */
+  async ultimoGrezzo(): Promise<unknown> {
+    return (await this.chiama({ metodo: 'GET', percorso: 'doc/documenti/ultimo/' })).corpo;
+  }
+
   async pdf(idtrx: string): Promise<Uint8Array> {
     const c = (await this.chiama({ metodo: 'GET', percorso: `doc/documenti/${encodeURIComponent(idtrx)}/stampa/?regalo=false` })).corpo;
     if (!(c instanceof Uint8Array)) throw new ErroreServizio(200);

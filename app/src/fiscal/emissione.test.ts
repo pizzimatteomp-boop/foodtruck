@@ -48,13 +48,28 @@ describe('emissione normale', () => {
 });
 
 describe('rete che cade: mai scontrini doppi', () => {
-  it('cade prima dell\'invio: «non emesso», riprovando se ne emette uno solo', async () => {
+  it('cade prima dell\'invio: «non emesso» (l\'Agenzia indica ancora la vendita precedente), riprovando se ne emette uno solo', async () => {
     const { sim, s, a } = prepara();
+    await emettiVendita(s, a, vendita(5, 'Patate'), QUANDO);
     sim.guasta('rete-prima');
     await expect(emettiVendita(s, a, vendita(), QUANDO)).rejects.toThrow(NonEmesso);
-    expect(sim.documenti).toHaveLength(0);
-    await emettiVendita(s, a, vendita(), QUANDO);
     expect(sim.documenti).toHaveLength(1);
+    await emettiVendita(s, a, vendita(), QUANDO);
+    expect(sim.documenti).toHaveLength(2);
+  });
+
+  it('prudenza: se l\'Agenzia non indica nessuna ultima vendita, o una diversa, resta in sospeso (verifica a mano)', async () => {
+    const { sim, s, a } = prepara();
+    sim.guasta('rete-prima');
+    await expect(emettiVendita(s, a, vendita(), QUANDO)).rejects.toThrow(InvioInSospeso);
+    expect(a.stato.sospeso).not.toBeNull();
+    await chiudiSospesoAMano(a);
+    // un'altra cassa (o il portale) ha emesso una vendita diversa
+    await new ServizioDCO(sim).invia(vendita(99, 'Altro'));
+    await emettiVendita(s, a, vendita(5, 'Patate'), QUANDO);
+    await new ServizioDCO(sim).invia(vendita(98, 'Altro'));
+    sim.guasta('rete-prima');
+    await expect(emettiVendita(s, a, vendita(), QUANDO)).rejects.toThrow(InvioInSospeso);
   });
 
   it('cade dopo che l\'Agenzia ha emesso: lo scontrino viene recuperato, non riemesso', async () => {
@@ -69,9 +84,10 @@ describe('rete che cade: mai scontrini doppi', () => {
 
   it('errore 500: si verifica e risulta non emesso', async () => {
     const { sim, s, a } = prepara();
+    await emettiVendita(s, a, vendita(5, 'Patate'), QUANDO);
     sim.guasta('errore-500');
     await expect(emettiVendita(s, a, vendita(), QUANDO)).rejects.toThrow(NonEmesso);
-    expect(sim.documenti).toHaveLength(0);
+    expect(sim.documenti).toHaveLength(1);
   });
 
   it('non si riesce nemmeno a verificare: tutto bloccato finché non si chiarisce, poi recuperato', async () => {
@@ -177,11 +193,12 @@ describe('confronto con l\'ultimo scontrino', () => {
 describe('casi rari', () => {
   it('errore sconosciuto del trasporto: l\'invio resta in sospeso (prudenza) finché non si verifica', async () => {
     const { sim, a } = prepara();
+    await emettiVendita(new ServizioDCO(sim), a, vendita(5, 'Patate'), QUANDO);
     const rotto: Trasporto = { invia: async (r) => { if (r.metodo === 'POST') throw new TypeError('guasto imprevisto'); return sim.invia(r); } };
     const s = new ServizioDCO(rotto);
     await expect(emettiVendita(s, a, vendita(), QUANDO)).rejects.toThrow('guasto imprevisto');
     await expect(emettiVendita(s, a, vendita(), QUANDO)).rejects.toThrow(InvioInSospeso);
-    expect(await verificaSospeso(s, a)).toBeNull(); // l'Agenzia non ha niente: si può riprovare
+    expect(await verificaSospeso(s, a)).toBeNull(); // l'Agenzia indica ancora la vendita precedente: si può riprovare
     expect(a.stato.sospeso).toBeNull();
     const v = await emettiVendita(new ServizioDCO(sim), a, vendita(), QUANDO);
     const letto = await new ServizioDCO(sim).documento(v.idtrx);
