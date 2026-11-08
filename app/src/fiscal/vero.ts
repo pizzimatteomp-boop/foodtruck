@@ -2,7 +2,8 @@
  * Passo 8 della fase 0: vendita di prova VERA (e suo annullo) col documento commerciale online.
  * Si usa solo col via libera esplicito di Matteo (vedi CLAUDE.md, «Regole di sicurezza»).
  */
-import type { Cedente, Riga } from './dco';
+import { documentoVendita, type Cedente, type DocumentoLetto, type Riga } from './dco';
+import { corrisponde, improntaDocumento } from './emissione';
 import { senzaParametri } from './portale';
 import type { Richiesta, Risposta, Trasporto } from './trasporto';
 
@@ -65,4 +66,14 @@ export function trasportoRegistrato(t: Trasporto, registro: string[]): Trasporto
       }
     },
   };
+}
+
+/**
+ * Passo 9: la regola anti-doppioni riconosce davvero l'ultima vendita registrata dall'Agenzia?
+ * Si confronta «ultima vendita» (GET ultimo) con la vendita di prova emessa dall'app.
+ */
+export function riconosceUltima(ultima: DocumentoLetto | null, salvata: { idtrx: string; quando: string }, cedente: Cedente) {
+  if (!ultima) return { stessa: false, riconosciuta: false };
+  const doc = documentoVendita({ cedente, righe: [VENDITA_DI_PROVA], pagamenti: { contanti: 1.5 }, quando: new Date(salvata.quando) });
+  return { stessa: ultima.idtrx === salvata.idtrx, riconosciuta: corrisponde(ultima, improntaDocumento(doc)) };
 }

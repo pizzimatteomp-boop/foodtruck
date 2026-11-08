@@ -23,4 +23,7 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator && !Capacitor.isNativeP
   window.addEventListener('load', () => void navigator.serviceWorker.register('/sw.js'));
 }
 
+// App Android: toccando un promemoria si apre la pagina giusta.
+if (Capacitor.isNativePlatform()) void import('./ui/promemoriaTelefono').then((m) => m.ascoltaNotifiche()).catch(() => undefined);
+
 render(<App servizi={servizi} ambiente={ambiente} />, document.getElementById('app')!);

@@ -7,6 +7,7 @@ import { leggiFatturaPA, type Fattura } from '../fatture/fatturapa';
 import { elencoRicevute, giaPresente, scaricaFattura } from '../fiscal/cassetto';
 import { AccessoRifiutato, Interrotta, PortaleCambiato, type Traccia } from '../fiscal/portale';
 import { AccessoNonPossibile, apriSessione, nuovaTraccia } from './portaleTelefono';
+import { attivaPromemoria, promemoriaAttivo } from './promemoriaTelefono';
 import { leggiFileFatture } from '../fatture/file';
 import { ErroreAcquisto, preparaAcquistoManuale } from '../fatture/manuale';
 import { pianoFatture, type DocFattura, type PianoFatture } from '../fatture/piano';
@@ -119,6 +120,22 @@ function AcquistoManuale({ db, ingredienti }: { db: Firestore; ingredienti: Ingr
 
 const MASSIMO_PER_VOLTA = 150;
 
+function Promemoria() {
+  const [attivo, setAttivo] = useState<boolean | null>(null);
+  useEffect(() => { void promemoriaAttivo().then(setAttivo).catch(() => setAttivo(false)); }, []);
+  if (attivo === null) return null;
+  return attivo
+    ? <p class="nota">🔔 Promemoria attivo: il 5 di ogni mese alle 9:07 arriva una notifica che apre questa pagina.</p>
+    : (
+      <div class="comandi">
+        <p class="nota">Promemoria mensile non attivo.</p>
+        <button type="button" class="secondario piccolo" onClick={() => void attivaPromemoria().then((ok) => { setAttivo(ok); if (!ok) alert('Permesso per le notifiche negato: si può dare da Impostazioni → App → VegMan → Notifiche.'); })}>
+          Attiva il promemoria del 5
+        </button>
+      </div>
+    );
+}
+
 /** Scarica dal cassetto fiscale (solo app Android): accesso, elenco, solo le fatture nuove. */
 function DalCassetto({ esistenti, disabilitato, onScaricate }: {
   esistenti: readonly DocFattura[]; disabilitato: boolean;
@@ -198,6 +215,7 @@ function DalCassetto({ esistenti, disabilitato, onScaricate }: {
     <div class="nuova" aria-label="Dal cassetto fiscale">
       <h2>Dal cassetto fiscale</h2>
       <p class="nota">L'app entra nel portale con le tue credenziali Fisconline e scarica solo le fatture ricevute che non sono ancora qui. Solo lettura: sul portale non cambia nulla.</p>
+      <Promemoria />
       <div class="due">
         <label class="campo"><span>Dal</span><input type="date" value={dal} max={al} onInput={(e) => setDal(e.currentTarget.value)} /></label>
         <label class="campo"><span>Al</span><input type="date" value={al} max={oggi()} onInput={(e) => setAl(e.currentTarget.value)} /></label>

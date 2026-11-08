@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { documentoVendita } from './dco';
 import { SimulatoreAgenzia } from './simulatore';
 import { ErroreRete } from './trasporto';
-import { cedenteDaAgenzia, DatiEsercenteIncompleti, descriviCedente, strutturaDati, trasportoRegistrato, VENDITA_DI_PROVA } from './vero';
+import { cedenteDaAgenzia, DatiEsercenteIncompleti, descriviCedente, riconosceUltima, strutturaDati, trasportoRegistrato, VENDITA_DI_PROVA } from './vero';
+import { ServizioDCO } from './servizio';
 
 // Dati inventati, nella forma restituita da dati/fiscali.
 const DATI = {
@@ -51,5 +52,17 @@ describe('vendita vera: preparazione', () => {
       'GET x → rete ()',
     ]);
     expect(reg.join()).not.toContain('NON-DEVE');
+  });
+
+  it('passo 9: l\'ultima vendita letta dall\'Agenzia (numeri «grezzi») è riconosciuta come la vendita di prova', async () => {
+    const sim = new SimulatoreAgenzia();
+    const s = new ServizioDCO(sim);
+    const c = cedenteDaAgenzia(DATI);
+    const quando = '2026-11-07T23:00:26.000Z'; // 8/11 00:00:26 a Roma
+    const r = await s.invia(documentoVendita({ cedente: c, righe: [VENDITA_DI_PROVA], pagamenti: { contanti: 1.5 }, quando: new Date(quando) }));
+    const ultima = await s.ultimaVendita();
+    expect(riconosceUltima(ultima, { idtrx: r.idtrx, quando }, c)).toEqual({ stessa: true, riconosciuta: true });
+    expect(riconosceUltima(ultima, { idtrx: 'altro', quando: '2026-11-09T10:00:00Z' }, c)).toEqual({ stessa: false, riconosciuta: false });
+    expect(riconosceUltima(null, { idtrx: r.idtrx, quando }, c)).toEqual({ stessa: false, riconosciuta: false });
   });
 });

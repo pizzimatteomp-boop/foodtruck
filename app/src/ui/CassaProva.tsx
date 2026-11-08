@@ -19,7 +19,7 @@ import { documentoAnnullo, documentoVendita, type Cedente } from '../fiscal/dco'
 import { emettiVendita, inviaAnnulloReso, verificaSospeso } from '../fiscal/emissione';
 import { BASE_DCO, trasportoNativo, type FunzioneHttp } from '../fiscal/nativo';
 import { ServizioDCO } from '../fiscal/servizio';
-import { cedenteDaAgenzia, descriviCedente, strutturaDati, trasportoRegistrato, VENDITA_DI_PROVA } from '../fiscal/vero';
+import { cedenteDaAgenzia, descriviCedente, riconosceUltima, strutturaDati, trasportoRegistrato, VENDITA_DI_PROVA } from '../fiscal/vero';
 import { euro } from './formato';
 
 const NATIVA = Capacitor.isNativePlatform();
@@ -182,6 +182,34 @@ function AgenziaVera() {
 
   const pdf = () => collegato && ultimo && void passo(async () => `PDF ricevuto: ${(await collegato.servizio.pdf(ultimo.idtrx)).length} byte.`);
 
+  // Passo 9 (solo lettura): la regola anti-doppioni riconosce l'ultima vendita registrata dall'Agenzia?
+  const controllaUltima = () => collegato && ultimo && void passo(async () => {
+    const u = await collegato.servizio.ultimaVendita();
+    const r = riconosceUltima(u, ultimo, collegato.cedente);
+    if (!u) return 'L\'Agenzia non indica nessuna ultima vendita.';
+    return `Ultima vendita per l'Agenzia: ${u.datiTrasmissione.numeroProgressivo}. ${r.stessa ? 'È la vendita di prova dell\'app' : 'Non è la vendita di prova dell\'app (ce n\'è una più recente)'}; controllo anti-doppioni: ${r.riconosciuta ? 'la riconosce ✅' : 'NON la riconosce ❌'}.`;
+  });
+
+  // Passo 9: durata della sessione col portale, controllata ogni 5 minuti in sola lettura.
+  const [misura, setMisura] = useState<{ inizio: number; righe: string[]; finita: boolean } | null>(null);
+  useEffect(() => {
+    if (!misura || misura.finita || !collegato) return undefined;
+    let blocco: { release(): Promise<void> } | null = null;
+    void (navigator as unknown as { wakeLock?: { request(t: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock?.request('screen').then((b) => { blocco = b; }).catch(() => undefined);
+    const id = setInterval(() => {
+      const min = Math.round((Date.now() - misura.inizio) / 60000);
+      void collegato.servizio.datiFiscali().then(
+        () => setMisura((m) => m && { ...m, righe: [...m.righe, `${min} min: sessione valida`] }),
+        (e: unknown) => {
+          const scaduta = e instanceof SessioneScaduta;
+          setMisura((m) => m && { ...m, finita: scaduta, righe: [...m.righe, `${min} min: ${scaduta ? 'SESSIONE SCADUTA' : `errore (${(e as Error)?.name ?? '?'}), riprovo`}`] });
+          if (scaduta) setResoconto(`Agenzia vera · ${new Date().toLocaleString('it-IT')}\n${registro.join('\n')}`);
+        },
+      );
+    }, 5 * 60000);
+    return () => { clearInterval(id); void blocco?.release().catch(() => undefined); };
+  }, [misura?.finita, collegato, misura?.inizio]);
+
   const annulla = () => {
     if (!collegato || !ultimo || ultimo.annullo) return;
     if (prompt(`Stai per ANNULLARE davvero lo scontrino ${ultimo.progressivo}.\n\nScrivi ANNULLA per confermare.`)?.trim().toUpperCase() !== 'ANNULLA') return;
@@ -193,6 +221,8 @@ function AgenziaVera() {
       return `Annullato con ${r.progressivo}.`;
     });
   };
+
+  const testoResoconto = misura ? `${resoconto}\nDurata sessione (inizio ${new Date(misura.inizio).toLocaleTimeString('it-IT')}):\n${misura.righe.join('\n')}` : resoconto;
 
   return (
     <section aria-label="Agenzia vera">
@@ -212,17 +242,29 @@ function AgenziaVera() {
           {collegato && (
             <div class="comandi">
               <button type="button" class="secondario piccolo" disabled={occupato} onClick={pdf}>Verifica PDF</button>
+              <button type="button" class="secondario piccolo" disabled={occupato} onClick={controllaUltima}>Ultima vendita (anti-doppioni)</button>
               {!ultimo.annullo && <button type="button" class="secondario pericolo piccolo" disabled={occupato} onClick={annulla}>Annulla questo scontrino (VERO)</button>}
             </div>
           )}
         </div>
       )}
       <p role="status" class={esito?.errore ? 'esito errore' : 'esito'}>{esito?.testo ?? ''}</p>
+      {collegato && (
+        <div class="nuova">
+          <h3>Durata della sessione (passo 9)</h3>
+          <p class="nota">Solo lettura: ogni 5 minuti l'app controlla se il portale la riconosce ancora. Tieni l'app aperta in primo piano (lo schermo resta acceso).</p>
+          {!misura ? <button type="button" class="secondario" onClick={() => setMisura({ inizio: Date.now(), righe: [], finita: false })}>Misura durata sessione</button>
+            : <>
+              <pre class="resoconto">{[`Inizio: ${new Date(misura.inizio).toLocaleTimeString('it-IT')}`, ...misura.righe, misura.finita ? 'Misura finita.' : 'In corso…'].join('\n')}</pre>
+              {!misura.finita && <button type="button" class="secondario piccolo" onClick={() => setMisura({ ...misura, finita: true, righe: [...misura.righe, 'Fermata a mano.'] })}>Ferma</button>}
+            </>}
+        </div>
+      )}
       {resoconto && (
         <details>
           <summary>Resoconto tecnico (per Claude)</summary>
-          <pre class="resoconto">{resoconto}</pre>
-          <button type="button" class="secondario piccolo" onClick={() => void navigator.clipboard.writeText(resoconto).then(() => alert('Copiato.'))}>Copia resoconto</button>
+          <pre class="resoconto">{testoResoconto}</pre>
+          <button type="button" class="secondario piccolo" onClick={() => void navigator.clipboard.writeText(testoResoconto).then(() => alert('Copiato.'))}>Copia resoconto</button>
         </details>
       )}
     </section>
