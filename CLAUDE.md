@@ -54,6 +54,8 @@ Documento completo: «Super app VegMan · Fatture, ingredienti e food cost» (Cl
   - riga di tasti di pagamento CONT / ELET / N.R. (non riscosso) / INT;
   - due pagine scorrevoli: (1) tastierino 0–9, «.», «×» (quantità) con una colonna di 4 prodotti preferiti; (2) ricerca, schede per gruppo (Tutte, Vegman, …) e griglia di prodotti a 4 colonne, colori per gruppo.
   - Nella nostra: colori del marchio, prodotti e gruppi dalla pagina Prodotti, in più i movimenti senza incasso (omaggio, pasto staff, scarto…) e la quadratura.
+- Decisioni del 10/11/2026: **niente tasto INT**; scontrino al cliente **preferibilmente per email o WhatsApp** (PDF dell'Agenzia), stampa sulla stampante Bluetooth delle comande **opzionale**; **comande per la cucina** stampate in automatico se attivo un interruttore all'apertura della cassa; **più casse nello stesso evento** (ogni dispositivo è una cassa con nome).
+- Piano della fase «Cassa» (proposto il 10/11/2026): C1 schermata di cassa sul simulatore · C2 archivio scontrini (immutabile), PDF, invio WhatsApp/email, annullo e reso · C3 evento e più casse · C4 movimenti senza incasso (omaggio, pasto staff, prova, scarto, non riscosso) · C5 Agenzia vera con accesso automatico · C6 chiusura e quadratura · C7 registro di emergenza senza rete; stampa Bluetooth (scontrino e comande) opzionale.
 - **Fatture elettroniche** ai clienti che le chiedono (Billy lo fa): da studiare (invio allo SdI dal portale Fatture e Corrispettivi con lo stesso accesso Fisconline).
 
 ## Vendite e movimenti di prodotto (deciso il 6/11/2026)
