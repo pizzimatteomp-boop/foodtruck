@@ -36,10 +36,19 @@ export class ServizioDCO {
     return (await this.chiama({ metodo: 'GET', percorso: `doc/documenti/${encodeURIComponent(idtrx)}/` })).corpo as DocumentoLetto;
   }
 
-  /** Ultima vendita confermata (null se non ce n'è nessuna). */
+  /**
+   * Ultima vendita confermata (null se non ce n'è nessuna o non si riconosce).
+   * L'Agenzia risponde con un numero, l'idtrx (visto l'8/11/2026): lo scontrino si legge poi con documento().
+   * Si accetta anche un oggetto già completo (forma del simulatore precedente).
+   */
   async ultimaVendita(): Promise<DocumentoLetto | null> {
-    const c = (await this.chiama({ metodo: 'GET', percorso: 'doc/documenti/ultimo/' })).corpo as DocumentoLetto | null;
-    return c && typeof c === 'object' && 'idtrx' in c ? c : null;
+    const c = (await this.chiama({ metodo: 'GET', percorso: 'doc/documenti/ultimo/' })).corpo;
+    if (c && typeof c === 'object' && 'idtrx' in c) return c as DocumentoLetto;
+    const id = typeof c === 'number' ? String(c) : typeof c === 'string' ? c.trim() : '';
+    if (!/^\d+$/.test(id) || /^0+$/.test(id)) return null;
+    let d: DocumentoLetto;
+    try { d = await this.documento(id); } catch (e) { if (e instanceof ErroreServizio && e.stato === 404) return null; throw e; }
+    return { ...d, idtrx: d.idtrx ? String(d.idtrx) : id };
   }
 
   /** Risposta di «ultimo» così com'è (per capirne la forma). */

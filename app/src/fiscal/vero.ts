@@ -73,7 +73,14 @@ export function trasportoRegistrato(t: Trasporto, registro: string[]): Trasporto
  * Si confronta «ultima vendita» (GET ultimo) con la vendita di prova emessa dall'app.
  */
 export function riconosceUltima(ultima: DocumentoLetto | null, salvata: { idtrx: string; quando: string }, cedente: Cedente) {
-  if (!ultima) return { stessa: false, riconosciuta: false };
+  if (!ultima) return { stessa: false, riconosciuta: false, dettaglio: 'nessuna ultima vendita' };
   const doc = documentoVendita({ cedente, righe: [VENDITA_DI_PROVA], pagamenti: { contanti: 1.5 }, quando: new Date(salvata.quando) });
-  return { stessa: ultima.idtrx === salvata.idtrx, riconosciuta: corrisponde(ultima, improntaDocumento(doc)) };
+  const imp = improntaDocumento(doc);
+  const dataAgenzia = (ultima.documentoCommerciale as { dataOra?: string }).dataOra ?? '-';
+  const righe = ultima.documentoCommerciale.elementiContabili.map((e) => `${e.descrizioneProdotto} ${e.quantita}×${e.prezzoLordo} IVA ${e.aliquotaIVA}`).join(' + ');
+  return {
+    stessa: ultima.idtrx === salvata.idtrx,
+    riconosciuta: corrisponde(ultima, imp),
+    dettaglio: `idtrx ${ultima.idtrx} (nostro ${salvata.idtrx}); data Agenzia «${dataAgenzia}», nostra «${imp.data}»; righe: ${righe}`,
+  };
 }

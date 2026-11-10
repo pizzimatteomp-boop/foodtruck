@@ -88,7 +88,7 @@ Studiato sul portale il 6/11/2026; prova reale autorizzata: vendita «Acqua» 1,
   - `POST doc/documenti/` → vendita (V), annullo (A) o reso (R) di un DCO; risposta `{esito, idtrx, progressivo, errori}`
   - `POST doc/documenti_manuale/` → annullo/reso (AX/RX) di documenti non emessi col DCO
   - `GET doc/documenti/{idtrx}/` → documento; `GET doc/documenti/{idtrx}/stampa/?regalo=false` → PDF
-  - `GET doc/documenti/ultimo/` → ultima **vendita** confermata (serve a capire se un invio interrotto è andato a buon fine, per non emettere due volte)
+  - `GET doc/documenti/ultimo/` → **un numero** (l'idtrx dell'ultima vendita, visto il 10/11/2026), lo scontrino si legge poi con `GET doc/documenti/{idtrx}/`; ultima **vendita** confermata (serve a capire se un invio interrotto è andato a buon fine, per non emettere due volte)
   - `GET doc/documenti/?dataDal=MM/gg/aaaa&dataInvioAl=MM/gg/aaaa&start&perPage` → ricerca; massimo 31 giorni; oltre ~900 risultati la lista torna vuota (spezzare per giorni)
   - `doc/posrt/...` → collegamento POS
 - Regole del formato DCW10 (implementate e testate in `app/src/fiscal/dco.ts`):

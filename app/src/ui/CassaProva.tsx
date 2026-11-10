@@ -188,8 +188,8 @@ function AgenziaVera() {
     registro.push(`Forma di «ultimo»: ${strutturaDati(grezzo)}`);
     const u = await collegato.servizio.ultimaVendita();
     const r = riconosceUltima(u, ultimo, collegato.cedente);
-    if (!u) return `L'Agenzia non indica un'ultima vendita nella forma attesa (forma ricevuta: ${strutturaDati(grezzo)}).`;
-    return `Ultima vendita per l'Agenzia: ${u.datiTrasmissione.numeroProgressivo}. ${r.stessa ? 'È la vendita di prova dell\'app' : 'Non è la vendita di prova dell\'app (ce n\'è una più recente)'}; controllo anti-doppioni: ${r.riconosciuta ? 'la riconosce ✅' : 'NON la riconosce ❌'}.`;
+    if (!u) return `L'Agenzia non indica un'ultima vendita riconoscibile (risposta: ${strutturaDati(grezzo)}).`;
+    return `Ultima vendita per l'Agenzia: ${u.datiTrasmissione?.numeroProgressivo ?? '?'}. ${r.stessa ? 'È la vendita di prova dell\'app' : 'Non è la vendita di prova dell\'app'}; controllo anti-doppioni: ${r.riconosciuta ? 'la riconosce ✅' : 'NON la riconosce ❌'}. Dettaglio: ${r.dettaglio}.`;
   });
 
   // Passo 9: durata della sessione col portale, controllata ogni 5 minuti in sola lettura.

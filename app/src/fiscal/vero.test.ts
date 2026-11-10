@@ -61,9 +61,21 @@ describe('vendita vera: preparazione', () => {
     const quando = '2026-11-07T23:00:26.000Z'; // 8/11 00:00:26 a Roma
     const r = await s.invia(documentoVendita({ cedente: c, righe: [VENDITA_DI_PROVA], pagamenti: { contanti: 1.5 }, quando: new Date(quando) }));
     const ultima = await s.ultimaVendita();
-    expect(riconosceUltima(ultima, { idtrx: r.idtrx, quando }, c)).toEqual({ stessa: true, riconosciuta: true });
-    expect(riconosceUltima(ultima, { idtrx: 'altro', quando: '2026-11-09T10:00:00Z' }, c)).toEqual({ stessa: false, riconosciuta: false });
-    expect(riconosceUltima(null, { idtrx: r.idtrx, quando }, c)).toEqual({ stessa: false, riconosciuta: false });
-    expect(strutturaDati(await s.ultimoGrezzo())).toBe('{idtrx, datiTrasmissione{numeroProgressivo}, documentoCommerciale{dataOra, elementiContabili[1 × {idElementoContabile, descrizioneProdotto, quantita, prezzoLordo, aliquotaIVA, omaggio}]}}');
+    expect(riconosceUltima(ultima, { idtrx: r.idtrx, quando }, c)).toMatchObject({ stessa: true, riconosciuta: true, dettaglio: expect.stringContaining('data Agenzia «08/11/2026», nostra «08/11/2026»') });
+    expect(riconosceUltima(ultima, { idtrx: 'altro', quando: '2026-11-09T10:00:00Z' }, c)).toMatchObject({ stessa: false, riconosciuta: false });
+    expect(riconosceUltima(null, { idtrx: r.idtrx, quando }, c)).toEqual({ stessa: false, riconosciuta: false, dettaglio: 'nessuna ultima vendita' });
+    expect(strutturaDati(await s.ultimoGrezzo())).toBe('number');
+    // «ultimo» come lo dà l'Agenzia: numero, testo, 0, idtrx inesistente, oggetto completo; errori diversi da 404 risalgono
+    const finto = (corpo: unknown, doc = true) => new ServizioDCO({ invia: async (q) => (q.percorso === 'doc/documenti/ultimo/' ? { stato: 200, tipo: 'application/json', corpo }
+      : doc ? sim.invia(q) : { stato: 500, tipo: 'text/html', corpo: '' }) });
+    expect((await finto(r.idtrx).ultimaVendita())?.idtrx).toBe(r.idtrx);
+    expect(await finto(0).ultimaVendita()).toBeNull();
+    expect(await finto(null).ultimaVendita()).toBeNull();
+    expect(await finto('999').ultimaVendita()).toBeNull();
+    expect((await finto({ idtrx: 'X', datiTrasmissione: {}, documentoCommerciale: { elementiContabili: [] } }).ultimaVendita())?.idtrx).toBe('X');
+    await expect(finto(5, false).ultimaVendita()).rejects.toThrow();
+    const senzaId = new ServizioDCO({ invia: async (q) => (q.percorso === 'doc/documenti/ultimo/' ? { stato: 200, tipo: 'application/json', corpo: 77 }
+      : { stato: 200, tipo: 'application/json', corpo: { datiTrasmissione: { numeroProgressivo: 'P' }, documentoCommerciale: { elementiContabili: [] } } }) });
+    expect((await senzaId.ultimaVendita())?.idtrx).toBe('77');
   });
 });

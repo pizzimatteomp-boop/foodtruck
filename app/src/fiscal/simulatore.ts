@@ -47,7 +47,8 @@ export class SimulatoreAgenzia implements Trasporto {
     if (r.metodo === 'GET' && r.percorso === 'doc/documenti/dati/fiscali') return json(200, { partitaIva: '00000000000', denominazione: 'SIMULATORE' });
     if (r.metodo === 'GET' && r.percorso === 'doc/documenti/ultimo/') {
       const u = [...this.documenti].reverse().find((d) => d.tipo === 'V');
-      return json(200, u ? this.letto(u) : {});
+      // Come l'Agenzia vera: solo il numero (idtrx) dell'ultima vendita; 0 se non ce n'è.
+      return json(200, u ? Number(u.idtrx) : 0);
     }
     const pdf = /^doc\/documenti\/([^/]+)\/stampa\/\?regalo=false$/.exec(r.percorso);
     if (r.metodo === 'GET' && pdf) {
