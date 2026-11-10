@@ -45,6 +45,7 @@
 
     <!-- Android 11+: per poter aprire l'app SumUp (pagamenti con carta) -->
     <queries>
+        <package android:name="com.kaching.merchant" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="sumupmerchant" />

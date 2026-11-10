@@ -67,8 +67,8 @@ export async function apriSumUp(righe: Riga[], centesimi: number, titolo: string
   await scrivi(ESITO, null);
   await scrivi(IN_CORSO, JSON.stringify(p));
   const { AppLauncher } = await import('@capacitor/app-launcher');
-  const { value } = await AppLauncher.canOpenUrl({ url: 'sumupmerchant://pay/1.0' });
-  if (!value) { await scrivi(IN_CORSO, null); throw new Error('App SumUp non trovata su questo telefono.'); }
-  await AppLauncher.openUrl({ url });
+  // Niente controllo preventivo (canOpenUrl è troppo severo con l'app SumUp): si prova ad aprirla direttamente.
+  const { completed } = await AppLauncher.openUrl({ url });
+  if (!completed) { await scrivi(IN_CORSO, null); throw new Error('Non riesco ad aprire l\'app SumUp: è installata e aggiornata su questo telefono?'); }
   return p;
 }
