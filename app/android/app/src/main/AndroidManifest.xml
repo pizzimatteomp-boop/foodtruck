@@ -22,6 +22,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Ritorno da SumUp dopo un pagamento (vegman://sumup?smp-status=…) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="vegman" android:host="sumup" />
+            </intent-filter>
+
         </activity>
 
         <provider
@@ -35,7 +43,15 @@
         </provider>
     </application>
 
-    <!-- Permissions -->
+    <!-- Android 11+: per poter aprire l'app SumUp (pagamenti con carta) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="sumupmerchant" />
+        </intent>
+    </queries>
+
+        <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
 </manifest>

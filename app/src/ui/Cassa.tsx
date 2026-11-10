@@ -18,6 +18,10 @@ import { CassaProva, type Pagamento } from '../fiscal/prova';
 import { RifiutoAgenzia, SessioneScaduta } from '../fiscal/trasporto';
 import type { Prodotto } from '../foodcost/modello';
 import { euro } from './formato';
+import { spiegaCausa, type EsitoSumUp } from '../cassa/sumup';
+import { apriSumUp, chiaveSumUp, chiudiPagamento, esitoSalvato, pagamentoInCorso, quandoTornaSumUp, type PagamentoInCorso } from './sumupTelefono';
+
+const NATIVA = Capacitor.isNativePlatform();
 
 async function archivio(): Promise<ArchivioInvii> {
   if (!Capacitor.isNativePlatform()) return archivioInMemoria();
@@ -53,6 +57,58 @@ export function Cassa({ db }: { db: Firestore }) {
 
   useEffect(() => { void archivio().then((a) => setCassa(new CassaProva(a, () => new Date()))); }, []);
 
+  // SumUp (solo app Android, se la chiave è impostata): ELET apre SumUp, al ritorno si emette lo scontrino.
+  const [conSumUp, setConSumUp] = useState(false);
+  const [attesa, setAttesa] = useState<PagamentoInCorso | null>(null);
+  const attesaRef = useRef<PagamentoInCorso | null>(null);
+  attesaRef.current = attesa;
+  useEffect(() => {
+    if (!NATIVA) return undefined;
+    void chiaveSumUp().then((k) => setConSumUp(!!k));
+    void pagamentoInCorso().then(async (p) => { if (p) { setAttesa(p); const e = await esitoSalvato(); if (e) setEsitoSumUp(e); } });
+    return quandoTornaSumUp((e) => setEsitoSumUp(e));
+  }, []);
+  const [esitoSumUp, setEsitoSumUp] = useState<EsitoSumUp | null>(null);
+  useEffect(() => {
+    const p = attesaRef.current;
+    if (!esitoSumUp || !p || !cassa || (esitoSumUp.idTransazione && esitoSumUp.idTransazione !== p.id)) return;
+    if (esitoSumUp.esito === 'pagato') void emettiDopoCarta(p, esitoSumUp.codice);
+    else {
+      setAvviso({ testo: `Carta: ${spiegaCausa(esitoSumUp.causa)}. Nessuno scontrino emesso.`, errore: true });
+      if (!righe.length) setRighe(p.righe);
+      void chiudiPagamento();
+      setAttesa(null);
+      setEsitoSumUp(null);
+    }
+  }, [esitoSumUp, cassa]);
+
+  async function emettiDopoCarta(p: PagamentoInCorso, codice: string) {
+    if (!cassa) return;
+    setOccupato(true);
+    try {
+      const r = await cassa.vendi(righePerScontrino(p.righe), 'elettronico');
+      await chiudiPagamento();
+      setAttesa(null);
+      setEsitoSumUp(null);
+      setAvviso({ testo: `✅ ${r.progressivo} · ${euro(p.centesimi / 100)} · carta${codice ? ` (SumUp ${codice})` : ''}`, errore: false });
+    } catch (e) {
+      // Pagamento incassato ma scontrino non emesso: il pagamento resta in sospeso finché non si emette.
+      setAvviso({ testo: `Carta pagata ma scontrino NON emesso (${messaggio(e)}): premi «Emetti scontrino».`, errore: true });
+    }
+    setOccupato(false);
+  }
+
+  async function avviaSumUp(daEmettere: Riga[]) {
+    try {
+      const p = await apriSumUp(daEmettere, totaleCentesimi(daEmettere), 'VegMan');
+      setAttesa(p);
+      setRighe([]);
+      setT(TASTIERINO_VUOTO);
+      setDescrizione('');
+      setAvviso(null);
+    } catch (e) { setAvviso({ testo: messaggio(e), errore: true }); }
+  }
+
   const vendibili = useMemo(() => pro.dati.filter((p) => p.tipo === 'vendibile' && p.prezzo > 0)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'it')), [pro.dati]);
   const gruppi = useMemo(() => [...new Set(vendibili.map((p) => p.gruppo || 'Altro'))].sort((a, b) => a.localeCompare(b, 'it')), [vendibili]);
@@ -77,6 +133,8 @@ export function Cassa({ db }: { db: Firestore }) {
       try { daEmettere = aggiungiLibera([], t, descrizione, iva); } catch (e) { setAvviso({ testo: messaggio(e), errore: true }); return; }
     }
     if (!daEmettere.length) { setAvviso({ testo: 'Lo scontrino è vuoto.', errore: true }); return; }
+    if (attesa) { setAvviso({ testo: 'C\'è un pagamento con carta in corso: chiudilo prima.', errore: true }); return; }
+    if (pagamento === 'elettronico' && NATIVA && conSumUp) { await avviaSumUp(daEmettere); return; }
     setOccupato(true);
     const totale = totaleCentesimi(daEmettere);
     try {
@@ -117,6 +175,22 @@ export function Cassa({ db }: { db: Firestore }) {
         <span>Totale ({pezzi(righe)} pz)</span>
         <strong>{euro(totale / 100)}</strong>
       </div>
+      {attesa && (
+        <div class="simulatore" role="alert" aria-label="Pagamento con carta">
+          <p><strong>Pagamento con carta in corso · {euro(attesa.centesimi / 100)}</strong><br />
+            In attesa del ritorno da SumUp. Se SumUp si è chiuso senza tornare qui, controlla lì l'esito:</p>
+          <div class="comandi">
+            <button type="button" class="primario piccolo" disabled={occupato} onClick={() => {
+              if (confirm(`SumUp dice che il pagamento di ${euro(attesa.centesimi / 100)} è RIUSCITO? Verrà emesso lo scontrino.`)) void emettiDopoCarta(attesa, '');
+            }}>Pagato: emetti scontrino</button>
+            <button type="button" class="secondario piccolo" disabled={occupato} onClick={() => {
+              if (!confirm('Il pagamento NON è andato a buon fine? Le righe tornano in cassa, nessuno scontrino.')) return;
+              if (!righe.length) setRighe(attesa.righe);
+              void chiudiPagamento(); setAttesa(null); setEsitoSumUp(null);
+            }}>Non pagato</button>
+          </div>
+        </div>
+      )}
       {avviso && <p role={avviso.errore ? 'alert' : 'status'} class={avviso.errore ? 'esito errore' : 'esito'}>{avviso.testo}</p>}
 
       <div class="cassa-descrizione">
@@ -132,7 +206,7 @@ export function Cassa({ db }: { db: Firestore }) {
 
       <div class="cassa-pagamenti">
         <button type="button" class="cont" disabled={occupato} onClick={() => void paga('contanti')}>CONT</button>
-        <button type="button" class="elet" disabled={occupato} onClick={() => void paga('elettronico')}>ELET</button>
+        <button type="button" class="elet" disabled={occupato} onClick={() => void paga('elettronico')}>{conSumUp ? 'ELET · SumUp' : 'ELET'}</button>
       </div>
 
       <div class="cassa-pagine" ref={pagine} onScroll={(e) => setPagina(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}>

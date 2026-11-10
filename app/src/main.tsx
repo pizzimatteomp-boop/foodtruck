@@ -25,5 +25,7 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator && !Capacitor.isNativeP
 
 // App Android: toccando un promemoria si apre la pagina giusta.
 if (Capacitor.isNativePlatform()) void import('./ui/promemoriaTelefono').then((m) => m.ascoltaNotifiche()).catch(() => undefined);
+// App Android: ritorno dall'app SumUp dopo un pagamento con carta.
+if (Capacitor.isNativePlatform()) void import('./ui/sumupTelefono').then((m) => m.ascoltaSumUp()).catch(() => undefined);
 
 render(<App servizi={servizi} ambiente={ambiente} />, document.getElementById('app')!);

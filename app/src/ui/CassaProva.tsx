@@ -11,6 +11,7 @@ import type { Prodotto } from '../foodcost/modello';
 import { ErroreCredenziali } from '../fiscal/cassaforte';
 import { archivioInMemoria, archivioSuDispositivo, InvioInSospeso, NonEmesso, type ArchivioInvii, type InvioSospeso } from '../fiscal/emissione';
 import { AccessoRifiutato, letturaDiProva, PortaleCambiato, type EsitoProva } from '../fiscal/portale';
+import { chiaveSumUp, salvaChiaveSumUp } from './sumupTelefono';
 import { accessoBloccato, AccessoNonPossibile, apriSessione, deposito, nuovaTraccia, sbloccaAccesso } from './portaleTelefono';
 import { CassaProva as Cassa, totaleRighe, type Pagamento, type RigaCassa } from '../fiscal/prova';
 import type { Guasto } from '../fiscal/simulatore';
@@ -273,6 +274,31 @@ function AgenziaVera() {
   );
 }
 
+/** Chiave SumUp (affiliate key) di questo telefono: con la chiave, ELET in cassa apre l'app SumUp. */
+function ChiaveSumUp() {
+  const [chiave, setChiave] = useState<string | null | undefined>(undefined);
+  const [nuova, setNuova] = useState('');
+  useEffect(() => { void chiaveSumUp().then(setChiave); }, []);
+  if (chiave === undefined) return null;
+  return (
+    <section aria-label="SumUp">
+      <h2>Pagamento con carta (SumUp)</h2>
+      <p class="nota">Con la chiave SumUp («affiliate key» legata a it.vegman.app), in Cassa il tasto ELET apre l'app SumUp con l'importo e al ritorno emette lo scontrino.</p>
+      {chiave ? (
+        <div class="comandi">
+          <p>✅ Chiave impostata (…{chiave.slice(-4)})</p>
+          <button type="button" class="secondario pericolo piccolo" onClick={() => void salvaChiaveSumUp(null).then(() => setChiave(null))}>Togli</button>
+        </div>
+      ) : (
+        <div class="nuova">
+          <input aria-label="Chiave SumUp" placeholder="Affiliate key SumUp" autocomplete="off" spellcheck={false} value={nuova} onInput={(e) => setNuova(e.currentTarget.value)} />
+          <button type="button" class="primario" disabled={!nuova.trim()} onClick={() => void salvaChiaveSumUp(nuova).then(() => { setChiave(nuova.trim()); setNuova(''); })}>Salva chiave</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Credenziali() {
   const [presenti, setPresenti] = useState<boolean | null>(null);
   const [modulo, setModulo] = useState({ codiceFiscale: '', password: '', pin: '' });
@@ -441,6 +467,7 @@ export function CassaProva({ db, titolare }: { db: Firestore; titolare: boolean 
       </ul>
       <p class="nota">Il simulatore riparte da zero ogni volta che apri la pagina; l'eventuale invio in sospeso invece resta salvato nel telefono, come nella cassa vera.</p>
 
+      {titolare && NATIVA && <ChiaveSumUp />}
       {titolare && (NATIVA ? <Credenziali /> : (
         <section aria-label="Credenziali Fisconline">
           <h2>Credenziali Fisconline</h2>
