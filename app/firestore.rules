@@ -148,12 +148,22 @@ service cloud.firestore {
     // che citano l'originale: l'originale non si tocca.
     match /scontrini/{id} {
       allow read: if cassa();
+      // Id = ambiente + idtrx: lo stesso scontrino non si registra due volte (la creazione di un id esistente è rifiutata).
       allow create: if cassa() && firmato()
+        && nuovo().keys().hasOnly(['tipo', 'idtrx', 'progressivo', 'evento', 'totale', 'creatoDa', 'creatoIl', 'ambiente',
+             'cassa', 'pagamento', 'righe', 'giorno', 'sumup', 'progressivoOriginale', 'idtrxOriginale'])
         && nuovo().tipo in ['V', 'A', 'R']
         && testo(nuovo().idtrx)
         && testo(nuovo().progressivo)
         && testo(nuovo().evento)
         && nuovo().totale is number && nuovo().totale >= 0
+        && nuovo().ambiente in ['simulatore', 'agenzia']
+        && id == nuovo().ambiente + '-' + nuovo().idtrx
+        && testo(nuovo().cassa)
+        && nuovo().pagamento in ['contanti', 'elettronico', 'nessuno']
+        && nuovo().righe is list && nuovo().righe.size() <= 100
+        && nuovo().giorno is string && nuovo().giorno.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && (!('sumup' in nuovo()) || testo(nuovo().sumup))
         && (nuovo().tipo == 'V' || testo(nuovo().progressivoOriginale));
       allow update, delete: if false;
     }

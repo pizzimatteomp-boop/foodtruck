@@ -41,8 +41,14 @@ const anonimo = (): Firestore => env.unauthenticatedContext().firestore() as unk
 
 const firma = (chi: Chi) => ({ creatoDa: chi, creatoIl: serverTimestamp() });
 const scontrino = (chi: Chi, extra: Record<string, unknown> = {}) => ({
-  tipo: 'V', idtrx: '265328092', progressivo: 'DCW2026/6535-7349', evento: 'ev1', totale: 1.5, ...firma(chi), ...extra,
+  tipo: 'V', idtrx: '265328092', progressivo: 'DCW2026/6535-7349', evento: 'ev1', totale: 1.5, ambiente: 'simulatore', cassa: 'Cassa 1',
+  pagamento: 'contanti', righe: [{ descrizione: 'Acqua', quantita: 1, prezzo: 1.5, aliquota: '22' }], giorno: '2026-11-07', ...firma(chi), ...extra,
 });
+/** Registra uno scontrino col suo id (ambiente-idtrx). */
+const registra = (chi: Chi, extra: Record<string, unknown> = {}) => {
+  const d = scontrino(chi, extra) as Record<string, unknown>;
+  return setDoc(doc(db(chi), 'scontrini', `${String(d.ambiente)}-${String(d.idtrx)}`), d);
+};
 const movimento = (chi: Chi, extra: Record<string, unknown> = {}) => ({
   tipo: 'pasto_staff', prodotto: 'Kebab', quantita: 1, motivo: 'pranzo staff', evento: 'ev1', ...firma(chi), ...extra,
 });
@@ -86,7 +92,7 @@ describe('chi non è abilitato non entra', () => {
 
   it('disattivato: niente, anche se il ruolo era cassa', async () => {
     await assertFails(getDoc(doc(db('ex'), 'eventi', 'ev1')));
-    await assertFails(addDoc(collection(db('ex'), 'scontrini'), scontrino('ex')));
+    await assertFails(registra('ex'));
   });
 
   it('non si può creare il proprio profilo da soli', async () => {
@@ -165,8 +171,16 @@ describe('comande', () => {
 });
 
 describe('scontrini: si registrano e basta', () => {
-  it('la cassa registra una vendita firmata', async () => {
-    await assertSucceeds(addDoc(collection(db('anna'), 'scontrini'), scontrino('anna')));
+  it('la cassa registra una vendita firmata, col suo id', async () => {
+    await assertSucceeds(registra('anna'));
+    await assertSucceeds(registra('anna', { idtrx: '1', ambiente: 'agenzia', pagamento: 'elettronico', sumup: 'TX1' }));
+  });
+
+  it('lo stesso scontrino non si registra due volte; id diverso da ambiente-idtrx rifiutato', async () => {
+    await assertSucceeds(registra('anna', { idtrx: '77' }));
+    await assertFails(registra('anna', { idtrx: '77' }));
+    await assertFails(setDoc(doc(db('anna'), 'scontrini', 'altro'), scontrino('anna', { idtrx: '78' })));
+    await assertFails(addDoc(collection(db('anna'), 'scontrini'), scontrino('anna', { idtrx: '79' })));
   });
 
   it('nessuno modifica o cancella uno scontrino, nemmeno il titolare', async () => {
@@ -176,24 +190,30 @@ describe('scontrini: si registrano e basta', () => {
   });
 
   it('firma obbligatoria: non a nome di altri né con l\'ora del telefono', async () => {
-    await assertFails(addDoc(collection(db('anna'), 'scontrini'), scontrino('anna', { creatoDa: 'matteo' })));
-    await assertFails(addDoc(collection(db('anna'), 'scontrini'), scontrino('anna', { creatoIl: new Date() })));
+    await assertFails(registra('anna', { idtrx: '2', creatoDa: 'matteo' }));
+    await assertFails(registra('anna', { idtrx: '3', creatoIl: new Date() }));
   });
 
   it('annullo e reso devono citare lo scontrino originale', async () => {
-    await assertFails(addDoc(collection(db('anna'), 'scontrini'), scontrino('anna', { tipo: 'A' })));
-    await assertSucceeds(addDoc(collection(db('anna'), 'scontrini'),
-      scontrino('anna', { tipo: 'A', progressivoOriginale: 'DCW2026/6535-7349' })));
+    await assertFails(registra('anna', { idtrx: '4', tipo: 'A' }));
+    await assertSucceeds(registra('anna', { idtrx: '5', tipo: 'A', progressivoOriginale: 'DCW2026/6535-7349', idtrxOriginale: '265328092', pagamento: 'nessuno' }));
   });
 
-  it('dati mancanti o tipo sconosciuto: rifiutato', async () => {
-    await assertFails(addDoc(collection(db('anna'), 'scontrini'), scontrino('anna', { tipo: 'X' })));
-    await assertFails(addDoc(collection(db('anna'), 'scontrini'), scontrino('anna', { idtrx: '' })));
-    await assertFails(addDoc(collection(db('anna'), 'scontrini'), scontrino('anna', { totale: -1 })));
+  it('dati mancanti, campi estranei o valori sbagliati: rifiutato', async () => {
+    await assertFails(registra('anna', { idtrx: '6', tipo: 'X' }));
+    await assertFails(registra('anna', { idtrx: '' }));
+    await assertFails(registra('anna', { idtrx: '7', totale: -1 }));
+    await assertFails(registra('anna', { idtrx: '8', ambiente: 'finto' }));
+    await assertFails(registra('anna', { idtrx: '9', pagamento: 'bitcoin' }));
+    await assertFails(registra('anna', { idtrx: '10', giorno: '7/11/2026' }));
+    await assertFails(registra('anna', { idtrx: '11', cassa: '' }));
+    await assertFails(registra('anna', { idtrx: '12', righe: 'tante' }));
+    await assertFails(registra('anna', { idtrx: '13', segreto: 'x' }));
+    await assertFails(registra('anna', { idtrx: '14', sumup: '' }));
   });
 
   it('il team non registra né legge scontrini', async () => {
-    await assertFails(addDoc(collection(db('luca'), 'scontrini'), scontrino('luca')));
+    await assertFails(registra('luca', { idtrx: '15' }));
     await assertFails(getDoc(doc(db('luca'), 'scontrini', 's1')));
   });
 });

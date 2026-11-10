@@ -18,6 +18,9 @@ import { CassaProva, type Pagamento } from '../fiscal/prova';
 import { RifiutoAgenzia, SessioneScaduta } from '../fiscal/trasporto';
 import type { Prodotto } from '../foodcost/modello';
 import { euro } from './formato';
+import { nomeCassa, riepilogo, scontrinoAnnullo, scontrinoVendita, type ScontrinoArchivio } from '../cassa/archivio';
+import { registraScontrino, useScontriniDelGiorno } from '../cassa/archivio.db';
+import { oggi } from '../dati/oggi';
 import { spiegaCausa, type EsitoSumUp } from '../cassa/sumup';
 import { apriSumUp, chiaveSumUp, chiudiPagamento, esitoSalvato, pagamentoInCorso, quandoTornaSumUp, type PagamentoInCorso } from './sumupTelefono';
 
@@ -41,7 +44,12 @@ function messaggio(e: unknown): string {
 const IVA: Aliquota[] = ['10', '22', '4', '5'];
 const TASTI = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['.', '0', '⌫']];
 
-export function Cassa({ db }: { db: Firestore }) {
+const NOME_CASSA = 'vegman-nome-cassa';
+function leggiNomeCassa(): string {
+  try { return nomeCassa(localStorage.getItem(NOME_CASSA)); } catch { return nomeCassa(null); }
+}
+
+export function Cassa({ db, uid }: { db: Firestore; uid: string }) {
   const pro = useRaccolta<Prodotto>(db, 'prodotti');
   const [cassa, setCassa] = useState<CassaProva | null>(null);
   const [righe, setRighe] = useState<Riga[]>([]);
@@ -87,6 +95,7 @@ export function Cassa({ db }: { db: Firestore }) {
     setOccupato(true);
     try {
       const r = await cassa.vendi(righePerScontrino(p.righe), 'elettronico');
+      await archivia(scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: p.righe, pagamento: 'elettronico', ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), ...(codice ? { sumup: codice } : {}) }));
       await chiudiPagamento();
       setAttesa(null);
       setEsitoSumUp(null);
@@ -95,6 +104,23 @@ export function Cassa({ db }: { db: Firestore }) {
       // Pagamento incassato ma scontrino non emesso: il pagamento resta in sospeso finché non si emette.
       setAvviso({ testo: `Carta pagata ma scontrino NON emesso (${messaggio(e)}): premi «Emetti scontrino».`, errore: true });
     }
+    setOccupato(false);
+  }
+
+  /** Registra lo scontrino nell'archivio; se non riesce lo dice, ma lo scontrino resta emesso. */
+  async function archivia(s: ScontrinoArchivio) {
+    try { await registraScontrino(db, uid, s); } catch { setAvviso({ testo: `Scontrino ${s.progressivo} emesso ma non registrato nell'archivio: segnalalo al titolare.`, errore: true }); }
+  }
+
+  async function annulla(s: ScontrinoArchivio) {
+    if (!cassa || occupato) return;
+    if (!confirm(`Annullare lo scontrino ${s.progressivo} di ${euro(s.totale)}?`)) return;
+    setOccupato(true);
+    try {
+      const r = await cassa.annulla(s.idtrx);
+      await archivia(scontrinoAnnullo(s, { idtrx: r.idtrx, progressivo: r.progressivo, cassa: leggiNomeCassa(), giorno: oggi() }));
+      setAvviso({ testo: `Annullato ${s.progressivo} con ${r.progressivo}.`, errore: false });
+    } catch (e) { setAvviso({ testo: messaggio(e), errore: true }); }
     setOccupato(false);
   }
 
@@ -139,6 +165,7 @@ export function Cassa({ db }: { db: Firestore }) {
     const totale = totaleCentesimi(daEmettere);
     try {
       const r = await cassa.vendi(righePerScontrino(daEmettere), pagamento);
+      await archivia(scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: daEmettere, pagamento, ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi() }));
       setRighe([]);
       setT(TASTIERINO_VUOTO);
       setDescrizione('');
@@ -246,6 +273,47 @@ export function Cassa({ db }: { db: Firestore }) {
         <button type="button" role="tab" aria-selected={pagina === 0} aria-label="Tastierino" onClick={() => vaiA(0)} />
         <button type="button" role="tab" aria-selected={pagina === 1} aria-label="Prodotti" onClick={() => vaiA(1)} />
       </div>
+      <ScontriniDiOggi db={db} cassa={cassa} occupato={occupato} onAnnulla={(s) => void annulla(s)} />
     </section>
   );
 }
+
+/** Scontrini di oggi (tutte le casse): totali al netto degli annulli, annullo, nome di questa cassa. */
+function ScontriniDiOggi({ db, cassa, occupato, onAnnulla }: {
+  db: Firestore; cassa: CassaProva | null; occupato: boolean; onAnnulla: (s: ScontrinoArchivio) => void;
+}) {
+  const giorno = oggi();
+  const sc = useScontriniDelGiorno(db, giorno);
+  const [nome, setNome] = useState(leggiNomeCassa());
+  const r = riepilogo(sc.dati);
+  const ora = (x: unknown) => { const t = (x as { creatoIl?: { toDate?: () => Date } }).creatoIl?.toDate?.(); return t ? t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '…'; };
+  const elenco = [...sc.dati].sort((a, b) => b.id.localeCompare(a.id));
+  return (
+    <details class="scontrini-oggi">
+      <summary>Scontrini di oggi · {r.vendite} · {euro(r.totale)}</summary>
+      <p class="nota">Contanti {euro(r.contanti)} · Carta {euro(r.elettronico)}{r.annullati ? ` · ${r.annullati} annullati` : ''}</p>
+      <label class="campo"><span>Nome di questa cassa</span>
+        <input value={nome} maxLength={30} onInput={(e) => setNome(e.currentTarget.value)}
+          onBlur={() => { const n = nomeCassa(nome); setNome(n); try { localStorage.setItem(NOME_CASSA, n); } catch { /* solo comodità */ } }} />
+      </label>
+      <ul class="persone" aria-label="Scontrini di oggi">
+        {elenco.map((s) => {
+          const annullato = s.tipo === 'V' && r.annullatiIdtrx.has(s.idtrx);
+          const annullabile = s.tipo === 'V' && !annullato && !!cassa?.scontrini.some((x) => x.idtrx === s.idtrx && !x.annullato);
+          return (
+            <li key={s.id} class={annullato || s.tipo !== 'V' ? 'disattivo' : ''}>
+              <div class="nome"><strong>{s.progressivo}</strong> <small>{ora(s)} · {s.cassa}{s.ambiente === 'simulatore' ? ' · simulatore' : ''}</small></div>
+              <small class="dettaglio">
+                {s.tipo === 'A' ? `Annullo di ${s.progressivoOriginale}` : `${euro(s.totale)} · ${s.pagamento === 'contanti' ? 'contanti' : 'carta'}${s.sumup ? ` (SumUp ${s.sumup})` : ''}${annullato ? ' · annullato' : ''}`}
+                {' · '}{s.righe.map((x) => `${x.quantita}× ${x.descrizione}`).join(', ')}
+              </small>
+              {annullabile && <div class="comandi"><button type="button" class="secondario pericolo piccolo" disabled={occupato} onClick={() => onAnnulla(s)}>Annulla</button></div>}
+            </li>
+          );
+        })}
+      </ul>
+      {sc.caricato && !elenco.length && <p class="nota">Nessuno scontrino oggi.</p>}
+    </details>
+  );
+}
+

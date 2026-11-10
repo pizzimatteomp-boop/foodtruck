@@ -537,6 +537,17 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   // vuoto: messaggio
   await cassa.getByRole('button', { name: 'CONT' }).click();
   await expect(cassa.getByRole('alert')).toContainText('vuoto');
+  // archivio: scontrini di oggi con totali; annullo del primo
+  await cassa.getByText(/^Scontrini di oggi · 2 · 21,50 €/).click();
+  const oggi = cassa.getByRole('list', { name: 'Scontrini di oggi' });
+  await expect(oggi.getByRole('listitem')).toHaveCount(2);
+  await expect(cassa.getByText('Contanti 16,50 € · Carta 5,00 €')).toBeVisible();
+  page.once('dialog', (d) => void d.accept());
+  await oggi.getByRole('listitem').filter({ hasText: '16,50 €' }).getByRole('button', { name: 'Annulla' }).click();
+  await expect(cassa.getByRole('status')).toContainText('Annullato');
+  await expect(cassa.getByText(/^Scontrini di oggi · 1 · 5,00 €/)).toBeVisible();
+  await expect(oggi.getByRole('listitem')).toHaveCount(3);
+  await expect(oggi).toContainText('Annullo di DCW2026/9999-');
 });
 
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {

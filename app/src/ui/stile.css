@@ -343,3 +343,5 @@ input.corto { width: 80px; }
 .pallini { display: flex; justify-content: center; gap: 10px; }
 .pallini button { width: 12px; height: 12px; min-height: 0; padding: 0; border-radius: 50%; border: 0; background: var(--bordo); }
 .pallini button[aria-selected='true'] { background: var(--testo); }
+.scontrini-oggi { margin-top: 8px; }
+.scontrini-oggi summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
