@@ -21,6 +21,7 @@ import { euro } from './formato';
 import { nomeCassa, riepilogo, scontrinoAnnullo, scontrinoVendita, type ScontrinoArchivio } from '../cassa/archivio';
 import { registraScontrino, useScontriniDelGiorno } from '../cassa/archivio.db';
 import { oggi } from '../dati/oggi';
+import { condividiScontrino } from './condividi';
 import { spiegaCausa, type EsitoSumUp } from '../cassa/sumup';
 import { apriSumUp, chiaveSumUp, chiudiPagamento, esitoSalvato, pagamentoInCorso, quandoTornaSumUp, type PagamentoInCorso } from './sumupTelefono';
 
@@ -107,8 +108,17 @@ export function Cassa({ db, uid }: { db: Firestore; uid: string }) {
     setOccupato(false);
   }
 
+  const [ultimo, setUltimo] = useState<ScontrinoArchivio | null>(null);
+
+  async function invia(s: ScontrinoArchivio, quando: Date) {
+    try { await condividiScontrino(s, quando); } catch (e) {
+      if (!/cancel/i.test((e as Error)?.message ?? '')) setAvviso({ testo: `Invio non riuscito: ${messaggio(e)}`, errore: true });
+    }
+  }
+
   /** Registra lo scontrino nell'archivio; se non riesce lo dice, ma lo scontrino resta emesso. */
   async function archivia(s: ScontrinoArchivio) {
+    setUltimo(s);
     try { await registraScontrino(db, uid, s); } catch { setAvviso({ testo: `Scontrino ${s.progressivo} emesso ma non registrato nell'archivio: segnalalo al titolare.`, errore: true }); }
   }
 
@@ -219,6 +229,9 @@ export function Cassa({ db, uid }: { db: Firestore; uid: string }) {
         </div>
       )}
       {avviso && <p role={avviso.errore ? 'alert' : 'status'} class={avviso.errore ? 'esito errore' : 'esito'}>{avviso.testo}</p>}
+      {ultimo && !avviso?.errore && (
+        <button type="button" class="secondario invia" onClick={() => void invia(ultimo, new Date())}>📤 Invia {ultimo.tipo === 'A' ? 'annullo' : 'scontrino'} {ultimo.progressivo} (WhatsApp, email…)</button>
+      )}
 
       <div class="cassa-descrizione">
         <input aria-label="Descrizione" placeholder="Descrizione" maxLength={60} value={descrizione} onInput={(e) => setDescrizione(e.currentTarget.value)} />
@@ -273,20 +286,21 @@ export function Cassa({ db, uid }: { db: Firestore; uid: string }) {
         <button type="button" role="tab" aria-selected={pagina === 0} aria-label="Tastierino" onClick={() => vaiA(0)} />
         <button type="button" role="tab" aria-selected={pagina === 1} aria-label="Prodotti" onClick={() => vaiA(1)} />
       </div>
-      <ScontriniDiOggi db={db} cassa={cassa} occupato={occupato} onAnnulla={(s) => void annulla(s)} />
+      <ScontriniDiOggi db={db} cassa={cassa} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} />
     </section>
   );
 }
 
 /** Scontrini di oggi (tutte le casse): totali al netto degli annulli, annullo, nome di questa cassa. */
-function ScontriniDiOggi({ db, cassa, occupato, onAnnulla }: {
-  db: Firestore; cassa: CassaProva | null; occupato: boolean; onAnnulla: (s: ScontrinoArchivio) => void;
+function ScontriniDiOggi({ db, cassa, occupato, onAnnulla, onInvia }: {
+  db: Firestore; cassa: CassaProva | null; occupato: boolean; onAnnulla: (s: ScontrinoArchivio) => void; onInvia: (s: ScontrinoArchivio, quando: Date) => void;
 }) {
   const giorno = oggi();
   const sc = useScontriniDelGiorno(db, giorno);
   const [nome, setNome] = useState(leggiNomeCassa());
   const r = riepilogo(sc.dati);
-  const ora = (x: unknown) => { const t = (x as { creatoIl?: { toDate?: () => Date } }).creatoIl?.toDate?.(); return t ? t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '…'; };
+  const data = (x: unknown) => (x as { creatoIl?: { toDate?: () => Date } }).creatoIl?.toDate?.();
+  const ora = (x: unknown) => { const t = data(x); return t ? t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '…'; };
   const elenco = [...sc.dati].sort((a, b) => b.id.localeCompare(a.id));
   return (
     <details class="scontrini-oggi">
@@ -307,7 +321,10 @@ function ScontriniDiOggi({ db, cassa, occupato, onAnnulla }: {
                 {s.tipo === 'A' ? `Annullo di ${s.progressivoOriginale}` : `${euro(s.totale)} · ${s.pagamento === 'contanti' ? 'contanti' : 'carta'}${s.sumup ? ` (SumUp ${s.sumup})` : ''}${annullato ? ' · annullato' : ''}`}
                 {' · '}{s.righe.map((x) => `${x.quantita}× ${x.descrizione}`).join(', ')}
               </small>
-              {annullabile && <div class="comandi"><button type="button" class="secondario pericolo piccolo" disabled={occupato} onClick={() => onAnnulla(s)}>Annulla</button></div>}
+              <div class="comandi">
+                <button type="button" class="secondario piccolo" onClick={() => onInvia(s, data(s) ?? new Date())}>📤 Invia</button>
+                {annullabile && <button type="button" class="secondario pericolo piccolo" disabled={occupato} onClick={() => onAnnulla(s)}>Annulla</button>}
+              </div>
             </li>
           );
         })}

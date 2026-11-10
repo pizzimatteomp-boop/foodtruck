@@ -13,8 +13,10 @@ dependencies {
     implementation project(':capacitor-firebase-authentication')
     implementation project(':capacitor-app')
     implementation project(':capacitor-app-launcher')
+    implementation project(':capacitor-filesystem')
     implementation project(':capacitor-local-notifications')
     implementation project(':capacitor-preferences')
+    implementation project(':capacitor-share')
 
 }
 

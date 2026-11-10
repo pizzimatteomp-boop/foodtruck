@@ -345,3 +345,4 @@ input.corto { width: 80px; }
 .pallini button[aria-selected='true'] { background: var(--testo); }
 .scontrini-oggi { margin-top: 8px; }
 .scontrini-oggi summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.cassa .invia { width: 100%; }

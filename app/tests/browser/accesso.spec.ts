@@ -527,15 +527,21 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await expect(cassa.getByLabel('Totale')).toContainText('Totale (4 pz)');
   await expect(cassa.getByLabel('Totale')).toContainText('16,50 €');
   await cassa.screenshot({ path: 'test-results/cassa.png' });
-  await cassa.getByRole('button', { name: 'CONT' }).click();
+  await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
   await expect(cassa.getByRole('status')).toContainText(/DCW2026\/9999-\d+ · 16,50 € · contanti/);
   await expect(righe).toContainText('Tocca i prodotti');
+  // invio: nel browser senza condivisione si scarica la ricevuta VegMan
+  const scarico = page.waitForEvent('download');
+  await cassa.getByRole('button', { name: /Invia scontrino DCW2026\/9999-/ }).click();
+  const file = await scarico;
+  expect(file.suggestedFilename()).toMatch(/^VegMan-DCW2026-9999-\d+\.png$/);
+  await file.saveAs('test-results/ricevuta.png');
   // importo digitato e subito carta, senza righe (come Billy)
   await tastierino.getByRole('button', { name: '5', exact: true }).click();
-  await cassa.getByRole('button', { name: 'ELET' }).click();
+  await cassa.getByRole('button', { name: 'ELET', exact: true }).click();
   await expect(cassa.getByRole('status')).toContainText('5,00 € · elettronico');
   // vuoto: messaggio
-  await cassa.getByRole('button', { name: 'CONT' }).click();
+  await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
   await expect(cassa.getByRole('alert')).toContainText('vuoto');
   // archivio: scontrini di oggi con totali; annullo del primo
   await cassa.getByText(/^Scontrini di oggi · 2 · 21,50 €/).click();
@@ -548,6 +554,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await expect(cassa.getByText(/^Scontrini di oggi · 1 · 5,00 €/)).toBeVisible();
   await expect(oggi.getByRole('listitem')).toHaveCount(3);
   await expect(oggi).toContainText('Annullo di DCW2026/9999-');
+  await expect(oggi.getByRole('button', { name: '📤 Invia' })).toHaveCount(3);
 });
 
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {
