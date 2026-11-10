@@ -538,3 +538,15 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await cassa.getByRole('button', { name: 'CONT' }).click();
   await expect(cassa.getByRole('alert')).toContainText('vuoto');
 });
+
+test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {
+  const page = await (await browser.newContext({ viewport: { width: 360, height: 760 } })).newPage();
+  await page.addInitScript(() => localStorage.setItem('vegman-oggi', '2026-11-07'));
+  await accedi(page, MATTEO);
+  await expect(page.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
+  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']) {
+    await page.goto(`/#/${p}`);
+    await page.waitForTimeout(400);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `pagina ${p}`).toBeLessThanOrEqual(360);
+  }
+});
