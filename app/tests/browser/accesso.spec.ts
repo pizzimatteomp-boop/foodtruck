@@ -507,7 +507,14 @@ test('cassa di prova: scontrini sul simulatore, risposta persa recuperata, annul
 test('cassa come Billy: quantità con ×, importo libero, contanti; importo digitato e carta (simulatore)', async ({ page }) => {
   await accedi(page, MATTEO);
   await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: /Cassa$/ }).click();
+  // apertura: nessun evento → il titolare lo crea e apre la cassa
+  const apri = page.getByRole('region', { name: 'Apri la cassa' });
+  await expect(apri).toContainText('Nessun evento aperto');
+  await apri.getByLabel('Nome dell\'evento').fill('Sagra di prova');
+  await apri.getByLabel('Luogo').fill('Osimo');
+  await apri.getByRole('button', { name: 'Crea e apri la cassa' }).click();
   const cassa = page.getByRole('region', { name: 'Cassa', exact: true });
+  await expect(cassa).toContainText('📍 Sagra di prova · 07/11 · Osimo · Cassa 1');
   await expect(cassa.getByRole('note')).toContainText('SIMULATORE');
   const tastierino = cassa.getByRole('group', { name: 'Tastierino' });
   const prodotti = cassa.getByRole('group', { name: 'Prodotti' });
@@ -544,17 +551,23 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
   await expect(cassa.getByRole('alert')).toContainText('vuoto');
   // archivio: scontrini di oggi con totali; annullo del primo
-  await cassa.getByText(/^Scontrini di oggi · 2 · 21,50 €/).click();
-  const oggi = cassa.getByRole('list', { name: 'Scontrini di oggi' });
+  await cassa.getByText(/^Scontrini dell'evento · 2 · 21,50 €/).click();
+  const oggi = cassa.getByRole('list', { name: 'Scontrini dell\'evento' });
   await expect(oggi.getByRole('listitem')).toHaveCount(2);
   await expect(cassa.getByText('Contanti 16,50 € · Carta 5,00 €')).toBeVisible();
   page.once('dialog', (d) => void d.accept());
   await oggi.getByRole('listitem').filter({ hasText: '16,50 €' }).getByRole('button', { name: 'Annulla' }).click();
   await expect(cassa.getByRole('status')).toContainText('Annullato');
-  await expect(cassa.getByText(/^Scontrini di oggi · 1 · 5,00 €/)).toBeVisible();
+  await expect(cassa.getByText(/^Scontrini dell'evento · 1 · 5,00 €/)).toBeVisible();
   await expect(oggi.getByRole('listitem')).toHaveCount(3);
   await expect(oggi).toContainText('Annullo di DCW2026/9999-');
   await expect(oggi.getByRole('button', { name: '📤 Invia' })).toHaveCount(3);
+  // cambia: si torna all'apertura, l'evento creato è proposto
+  await cassa.getByRole('button', { name: 'Cambia' }).click();
+  await expect(apri.getByLabel('Evento', { exact: true })).toContainText('Sagra di prova');
+  await apri.getByLabel('Nome di questa cassa').fill('Furgone');
+  await apri.getByRole('button', { name: 'Apri cassa' }).click();
+  await expect(cassa).toContainText('· Furgone');
 });
 
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {

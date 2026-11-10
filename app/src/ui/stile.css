@@ -346,3 +346,5 @@ input.corto { width: 80px; }
 .scontrini-oggi { margin-top: 8px; }
 .scontrini-oggi summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
 .cassa .invia { width: 100%; }
+.cassa-evento { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.9rem; }
+.spunta { display: flex; gap: 8px; align-items: center; }

@@ -66,7 +66,7 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async (c) => {
     const d = c.firestore();
     for (const [uid, p] of Object.entries(PERSONE)) await setDoc(doc(d, 'utenti', uid), p);
-    await setDoc(doc(d, 'eventi', 'ev1'), { nome: 'Festa di Osimo' });
+    await setDoc(doc(d, 'eventi', 'ev1'), { nome: 'Festa di Osimo', dal: '2026-11-07', al: '2026-11-08', paese: 'IT', stato: 'aperto' });
     await setDoc(doc(d, 'eventi', 'ev1', 'checklist', 'v1'), { voce: 'Friggitrice', fatto: false });
     await setDoc(doc(d, 'prodotti', 'r1'), { nome: 'Kebab', tipo: 'vendibile', gruppo: '', prezzo: 12, resa: { quantita: 1, unita: 'pz' }, ricetta: [], quotaVendite: 0 });
     await setDoc(doc(d, 'ingredienti', 'i1'), { nome: 'Ceci', categoria: 'alimentare', unita: 'g', gruppo: '', confezione: null });
@@ -126,6 +126,21 @@ describe('persone e ruoli', () => {
     await assertFails(updateDoc(doc(db('matteo'), 'utenti', 'matteo'), { ruolo: 'team' }));
     await assertFails(deleteDoc(doc(db('matteo'), 'utenti', 'matteo')));
     await assertSucceeds(updateDoc(doc(db('matteo'), 'utenti', 'luca'), { attivo: false }));
+  });
+});
+
+describe('eventi: solo il titolare, con i campi giusti', () => {
+  const ev = { nome: 'Sagra', dal: '2026-11-10', al: '2026-11-11', luogo: 'Osimo', paese: 'IT', stato: 'aperto' };
+  it('il titolare crea, modifica e chiude un evento; la cassa lo legge ma non lo tocca', async () => {
+    await assertSucceeds(setDoc(doc(db('matteo'), 'eventi', 'e2'), ev));
+    await assertSucceeds(updateDoc(doc(db('matteo'), 'eventi', 'e2'), { stato: 'chiuso' }));
+    await assertSucceeds(getDoc(doc(db('anna'), 'eventi', 'e2')));
+    await assertFails(setDoc(doc(db('anna'), 'eventi', 'e3'), ev));
+  });
+  it('campi sbagliati: rifiutato', async () => {
+    for (const x of [{ nome: '' }, { dal: '10/11/2026' }, { al: '2026-11-09' }, { paese: 'Italia' }, { stato: 'boh' }, { extra: 1 }, { luogo: 'x'.repeat(121) }]) {
+      await assertFails(setDoc(doc(db('matteo'), 'eventi', 'e4'), { ...ev, ...x }));
+    }
   });
 });
 

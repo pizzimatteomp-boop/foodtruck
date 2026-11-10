@@ -19,7 +19,9 @@ import { RifiutoAgenzia, SessioneScaduta } from '../fiscal/trasporto';
 import type { Prodotto } from '../foodcost/modello';
 import { euro } from './formato';
 import { nomeCassa, riepilogo, scontrinoAnnullo, scontrinoVendita, type ScontrinoArchivio } from '../cassa/archivio';
-import { registraScontrino, useScontriniDelGiorno } from '../cassa/archivio.db';
+import { registraScontrino, useScontriniEvento } from '../cassa/archivio.db';
+import { descriviEvento, ErroreEvento, eventiPerCassa, fuoriItalia, preparaEvento, type Evento } from '../eventi/eventi';
+import { creaEvento } from '../eventi/eventi.db';
 import { oggi } from '../dati/oggi';
 import { condividiScontrino } from './condividi';
 import { spiegaCausa, type EsitoSumUp } from '../cassa/sumup';
@@ -46,11 +48,74 @@ const IVA: Aliquota[] = ['10', '22', '4', '5'];
 const TASTI = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['.', '0', '⌫']];
 
 const NOME_CASSA = 'vegman-nome-cassa';
-function leggiNomeCassa(): string {
-  try { return nomeCassa(localStorage.getItem(NOME_CASSA)); } catch { return nomeCassa(null); }
+const EVENTO_CASSA = 'vegman-evento-cassa';
+const STAMPA_COMANDE = 'vegman-stampa-comande';
+function leggi(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } }
+function scrivi(k: string, v: string | null) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* solo comodità */ } }
+function leggiNomeCassa(): string { return nomeCassa(leggi(NOME_CASSA)); }
+
+/** Cassa: prima si apre su un evento (C3), poi si vende. */
+export function Cassa({ db, uid, titolare }: { db: Firestore; uid: string; titolare: boolean }) {
+  const ev = useRaccolta<Evento>(db, 'eventi');
+  const [scelto, setScelto] = useState<string | null>(leggi(EVENTO_CASSA));
+  const evento = ev.dati.find((e) => e.id === scelto && e.stato === 'aperto');
+  if (!ev.caricato) return <p class="nota">Carico…</p>;
+  if (!evento) return <AperturaCassa db={db} eventi={ev.dati} titolare={titolare} onApri={(id) => { scrivi(EVENTO_CASSA, id); setScelto(id); }} />;
+  return <Vendita db={db} uid={uid} evento={evento} onCambia={() => { scrivi(EVENTO_CASSA, null); setScelto(null); }} />;
 }
 
-export function Cassa({ db, uid }: { db: Firestore; uid: string }) {
+function AperturaCassa({ db, eventi, titolare, onApri }: { db: Firestore; eventi: Evento[]; titolare: boolean; onApri: (id: string) => void }) {
+  const lista = eventiPerCassa(eventi, oggi());
+  const [id, setId] = useState(lista[0]?.id ?? '');
+  const [nome, setNome] = useState(leggiNomeCassa());
+  const [comande, setComande] = useState(leggi(STAMPA_COMANDE) === '1');
+  const [nuovo, setNuovo] = useState({ nome: '', dal: oggi(), al: '', luogo: '', paese: 'IT' });
+  const [errore, setErrore] = useState('');
+  const apri = (x: string) => { scrivi(NOME_CASSA, nomeCassa(nome)); scrivi(STAMPA_COMANDE, comande ? '1' : '0'); onApri(x); };
+  async function crea(e: Event) {
+    e.preventDefault();
+    try { const x = await creaEvento(db, preparaEvento(nuovo)); apri(x); } catch (err) {
+      setErrore(err instanceof ErroreEvento ? err.message : (err as { code?: string }).code === 'permission-denied' ? 'Solo il titolare crea gli eventi.' : 'Evento non salvato: riprova.');
+    }
+  }
+  return (
+    <section class="scheda" aria-label="Apri la cassa">
+      <h1>Apri la cassa</h1>
+      {lista.length ? (
+        <div class="nuova">
+          <label class="campo"><span>Evento</span>
+            <select aria-label="Evento" value={id} onChange={(e) => setId(e.currentTarget.value)}>
+              {lista.map((x) => <option key={x.id} value={x.id}>{descriviEvento(x)}</option>)}
+            </select>
+          </label>
+          <label class="campo"><span>Nome di questa cassa</span><input value={nome} maxLength={30} onInput={(e) => setNome(e.currentTarget.value)} /></label>
+          <label class="spunta"><input type="checkbox" checked={comande} onChange={(e) => setComande(e.currentTarget.checked)} /> Stampa le comande per la cucina</label>
+          <button type="button" class="primario" disabled={!id} onClick={() => apri(id)}>Apri cassa</button>
+        </div>
+      ) : <p class="nota">Nessun evento aperto.{titolare ? ' Creane uno qui sotto.' : ' Chiedi al titolare di crearlo.'}</p>}
+      {titolare && (
+        <details open={!lista.length}>
+          <summary>＋ Nuovo evento</summary>
+          <form class="nuova" onSubmit={(e) => void crea(e)}>
+            <input aria-label="Nome dell'evento" placeholder="Nome (es. Sagra di Osimo)" value={nuovo.nome} onInput={(e) => setNuovo({ ...nuovo, nome: e.currentTarget.value })} />
+            <div class="due">
+              <label class="campo"><span>Dal</span><input type="date" value={nuovo.dal} onInput={(e) => setNuovo({ ...nuovo, dal: e.currentTarget.value })} /></label>
+              <label class="campo"><span>Al</span><input type="date" value={nuovo.al} min={nuovo.dal} onInput={(e) => setNuovo({ ...nuovo, al: e.currentTarget.value })} /></label>
+            </div>
+            <div class="due">
+              <input aria-label="Luogo" placeholder="Luogo" value={nuovo.luogo} onInput={(e) => setNuovo({ ...nuovo, luogo: e.currentTarget.value })} />
+              <input aria-label="Paese" placeholder="Paese (IT)" maxLength={2} value={nuovo.paese} onInput={(e) => setNuovo({ ...nuovo, paese: e.currentTarget.value })} />
+            </div>
+            <button type="submit" class="primario">Crea e apri la cassa</button>
+          </form>
+        </details>
+      )}
+      {errore && <p class="errore" role="alert">{errore}</p>}
+    </section>
+  );
+}
+
+function Vendita({ db, uid, evento, onCambia }: { db: Firestore; uid: string; evento: Evento; onCambia: () => void }) {
   const pro = useRaccolta<Prodotto>(db, 'prodotti');
   const [cassa, setCassa] = useState<CassaProva | null>(null);
   const [righe, setRighe] = useState<Riga[]>([]);
@@ -96,7 +161,7 @@ export function Cassa({ db, uid }: { db: Firestore; uid: string }) {
     setOccupato(true);
     try {
       const r = await cassa.vendi(righePerScontrino(p.righe), 'elettronico');
-      await archivia(scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: p.righe, pagamento: 'elettronico', ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), ...(codice ? { sumup: codice } : {}) }));
+      await archivia(scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: p.righe, pagamento: 'elettronico', ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id, ...(codice ? { sumup: codice } : {}) }));
       await chiudiPagamento();
       setAttesa(null);
       setEsitoSumUp(null);
@@ -169,13 +234,14 @@ export function Cassa({ db, uid }: { db: Firestore; uid: string }) {
       try { daEmettere = aggiungiLibera([], t, descrizione, iva); } catch (e) { setAvviso({ testo: messaggio(e), errore: true }); return; }
     }
     if (!daEmettere.length) { setAvviso({ testo: 'Lo scontrino è vuoto.', errore: true }); return; }
+    if (fuoriItalia(evento)) { setAvviso({ testo: `Evento fuori Italia (${evento.paese}): niente scontrino fiscale italiano. La ricevuta del luogo va definita col commercialista.`, errore: true }); return; }
     if (attesa) { setAvviso({ testo: 'C\'è un pagamento con carta in corso: chiudilo prima.', errore: true }); return; }
     if (pagamento === 'elettronico' && NATIVA && conSumUp) { await avviaSumUp(daEmettere); return; }
     setOccupato(true);
     const totale = totaleCentesimi(daEmettere);
     try {
       const r = await cassa.vendi(righePerScontrino(daEmettere), pagamento);
-      await archivia(scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: daEmettere, pagamento, ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi() }));
+      await archivia(scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: daEmettere, pagamento, ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id }));
       setRighe([]);
       setT(TASTIERINO_VUOTO);
       setDescrizione('');
@@ -195,6 +261,11 @@ export function Cassa({ db, uid }: { db: Firestore; uid: string }) {
   return (
     <section class="cassa" aria-label="Cassa">
       <p class="simulatore cassa-banda" role="note"><strong>SIMULATORE</strong> · scontrini di prova, l'Agenzia non viene contattata</p>
+      <div class="cassa-evento">
+        <span>📍 {descriviEvento(evento)} · <strong>{leggiNomeCassa()}</strong>{leggi(STAMPA_COMANDE) === '1' ? ' · 🖨 comande' : ''}</span>
+        <button type="button" class="secondario piccolo" onClick={onCambia}>Cambia</button>
+      </div>
+      {fuoriItalia(evento) && <p class="errore" role="alert">Evento fuori Italia ({evento.paese}): la cassa fiscale italiana non si usa qui.</p>}
 
       <ol class="cassa-righe" aria-label="Righe dello scontrino">
         {righe.length === 0 && <li class="vuota">Tocca i prodotti o scrivi un importo.</li>}
@@ -286,31 +357,25 @@ export function Cassa({ db, uid }: { db: Firestore; uid: string }) {
         <button type="button" role="tab" aria-selected={pagina === 0} aria-label="Tastierino" onClick={() => vaiA(0)} />
         <button type="button" role="tab" aria-selected={pagina === 1} aria-label="Prodotti" onClick={() => vaiA(1)} />
       </div>
-      <ScontriniDiOggi db={db} cassa={cassa} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} />
+      <ScontriniEvento db={db} evento={evento.id} cassa={cassa} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} />
     </section>
   );
 }
 
-/** Scontrini di oggi (tutte le casse): totali al netto degli annulli, annullo, nome di questa cassa. */
-function ScontriniDiOggi({ db, cassa, occupato, onAnnulla, onInvia }: {
-  db: Firestore; cassa: CassaProva | null; occupato: boolean; onAnnulla: (s: ScontrinoArchivio) => void; onInvia: (s: ScontrinoArchivio, quando: Date) => void;
+/** Scontrini dell'evento (tutte le casse): totali al netto degli annulli, annullo, invio. */
+function ScontriniEvento({ db, evento, cassa, occupato, onAnnulla, onInvia }: {
+  db: Firestore; evento: string; cassa: CassaProva | null; occupato: boolean; onAnnulla: (s: ScontrinoArchivio) => void; onInvia: (s: ScontrinoArchivio, quando: Date) => void;
 }) {
-  const giorno = oggi();
-  const sc = useScontriniDelGiorno(db, giorno);
-  const [nome, setNome] = useState(leggiNomeCassa());
+  const sc = useScontriniEvento(db, evento);
   const r = riepilogo(sc.dati);
   const data = (x: unknown) => (x as { creatoIl?: { toDate?: () => Date } }).creatoIl?.toDate?.();
   const ora = (x: unknown) => { const t = data(x); return t ? t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '…'; };
   const elenco = [...sc.dati].sort((a, b) => b.id.localeCompare(a.id));
   return (
     <details class="scontrini-oggi">
-      <summary>Scontrini di oggi · {r.vendite} · {euro(r.totale)}</summary>
+      <summary>Scontrini dell'evento · {r.vendite} · {euro(r.totale)}</summary>
       <p class="nota">Contanti {euro(r.contanti)} · Carta {euro(r.elettronico)}{r.annullati ? ` · ${r.annullati} annullati` : ''}</p>
-      <label class="campo"><span>Nome di questa cassa</span>
-        <input value={nome} maxLength={30} onInput={(e) => setNome(e.currentTarget.value)}
-          onBlur={() => { const n = nomeCassa(nome); setNome(n); try { localStorage.setItem(NOME_CASSA, n); } catch { /* solo comodità */ } }} />
-      </label>
-      <ul class="persone" aria-label="Scontrini di oggi">
+      <ul class="persone" aria-label="Scontrini dell'evento">
         {elenco.map((s) => {
           const annullato = s.tipo === 'V' && r.annullatiIdtrx.has(s.idtrx);
           const annullabile = s.tipo === 'V' && !annullato && !!cassa?.scontrini.some((x) => x.idtrx === s.idtrx && !x.annullato);
@@ -329,7 +394,7 @@ function ScontriniDiOggi({ db, cassa, occupato, onAnnulla, onInvia }: {
           );
         })}
       </ul>
-      {sc.caricato && !elenco.length && <p class="nota">Nessuno scontrino oggi.</p>}
+      {sc.caricato && !elenco.length && <p class="nota">Ancora nessuno scontrino per questo evento.</p>}
     </details>
   );
 }

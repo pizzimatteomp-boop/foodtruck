@@ -16,3 +16,12 @@ export function useScontriniDelGiorno(db: Firestore, giorno: string): { dati: (S
     () => setStato((s) => ({ ...s, caricato: true }))), [db, giorno]);
   return stato;
 }
+
+/** Scontrini di un evento (tutte le casse, tutti i giorni), aggiornati dal vivo. */
+export function useScontriniEvento(db: Firestore, evento: string): { dati: (ScontrinoArchivio & { id: string })[]; caricato: boolean } {
+  const [stato, setStato] = useState<{ dati: (ScontrinoArchivio & { id: string })[]; caricato: boolean }>({ dati: [], caricato: false });
+  useEffect(() => onSnapshot(query(collection(db, 'scontrini'), where('evento', '==', evento)),
+    (q) => setStato({ dati: q.docs.map((d) => ({ ...(d.data() as ScontrinoArchivio), id: d.id })), caricato: true }),
+    () => setStato((s) => ({ ...s, caricato: true }))), [db, evento]);
+  return stato;
+}

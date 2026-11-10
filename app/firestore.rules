@@ -133,7 +133,16 @@ service cloud.firestore {
     // ---------- Eventi e checklist ----------
     match /eventi/{id} {
       allow read: if team();
-      allow write: if titolare();
+      // Evento: nome, giorni (da/a), luogo, Paese (IT = cassa fiscale italiana), stato.
+      allow create, update: if titolare()
+        && nuovo().keys().hasOnly(['nome', 'dal', 'al', 'luogo', 'paese', 'stato'])
+        && testo(nuovo().nome) && nuovo().nome.size() <= 80
+        && nuovo().dal is string && nuovo().dal.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && nuovo().al is string && nuovo().al.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && nuovo().al >= nuovo().dal
+        && (!('luogo' in nuovo()) || (nuovo().luogo is string && nuovo().luogo.size() <= 120))
+        && nuovo().paese is string && nuovo().paese.matches('^[A-Z]{2}$')
+        && nuovo().stato in ['aperto', 'chiuso'];
+      allow delete: if titolare();
       match /checklist/{voce} { allow read: if team(); allow write: if titolare(); }
     }
 
