@@ -13,7 +13,8 @@ export class ErroreSumUp extends Error {
 /** Indirizzo che apre SumUp per incassare `centesimi` euro. */
 export function urlPagamento(a: { chiave: string; centesimi: number; titolo: string; idTransazione: string }): string {
   const chiave = a.chiave.trim();
-  if (!/^[A-Za-z0-9-]{8,100}$/.test(chiave)) throw new ErroreSumUp('Chiave SumUp mancante o non valida (impostala in «Cassa · prova»).');
+  // Qualunque carattere stampabile senza spazi (le chiavi recenti sono tipo «sup_afk_…»).
+  if (!/^[\x21-\x7E]{8,200}$/.test(chiave)) throw new ErroreSumUp('Chiave SumUp mancante o non valida (impostala in «Cassa · prova»).');
   if (!Number.isInteger(a.centesimi) || a.centesimi <= 0) throw new ErroreSumUp('Importo non valido per il pagamento con carta.');
   const importo = (a.centesimi / 100).toFixed(2);
   const p = new URLSearchParams({

@@ -15,6 +15,10 @@ describe('SumUp', () => {
   it('errori: chiave mancante, importo non valido', () => {
     expect(() => urlPagamento({ chiave: '', centesimi: 100, titolo: 'x', idTransazione: '1' })).toThrow(ErroreSumUp);
     expect(() => urlPagamento({ chiave: 'chiave con spazi', centesimi: 100, titolo: 'x', idTransazione: '1' })).toThrow(/Chiave/);
+    expect(() => urlPagamento({ chiave: 'corta', centesimi: 100, titolo: 'x', idTransazione: '1' })).toThrow(/Chiave/);
+    // chiavi recenti con trattini bassi e altri simboli: accettate e codificate nell'indirizzo
+    const u = new URL(urlPagamento({ chiave: '  sup_afk_AbC123xyz+/=  ', centesimi: 100, titolo: 'x', idTransazione: '1' }));
+    expect(u.searchParams.get('affiliate-key')).toBe('sup_afk_AbC123xyz+/=');
     expect(() => urlPagamento({ chiave: 'abcdefgh', centesimi: 0, titolo: 'x', idTransazione: '1' })).toThrow(/Importo/);
     expect(() => urlPagamento({ chiave: 'abcdefgh', centesimi: 1.5, titolo: 'x', idTransazione: '1' })).toThrow(/Importo/);
   });
