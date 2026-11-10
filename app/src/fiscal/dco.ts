@@ -50,6 +50,13 @@ export interface Pagamenti {
   contanti?: number | string;
   elettronico?: number | string;
   ticket?: { importo: number | string; numero: number };
+  /**
+   * Corrispettivo non riscosso (pagina dell'Agenzia, «Corrispettivo non riscosso»):
+   * - fattura: «Emissione fattura» (NR_EF): tutto il totale, seguirà la fattura; nient'altro si incassa;
+   * - beni: «Credito per cessione di bene consegnato» (NR_CS), importo;
+   * - servizi: «Prestazioni di servizi» (NR_PS), importo.
+   */
+  nonRiscosso?: { fattura?: boolean; beni?: number | string; servizi?: number | string };
 }
 
 export class ErroreDocumento extends Error {
@@ -156,9 +163,19 @@ export function documentoVendita(args: { cedente: Cedente; righe: Riga[]; pagame
   const pc = importo(args.pagamenti.contanti, 'Contanti');
   const pe = importo(args.pagamenti.elettronico, 'Pagamento elettronico');
   const tr = importo(args.pagamenti.ticket?.importo, 'Ticket');
-  if (!pc.plus(pe).plus(tr).eq(_ammontare)) {
-    throw new ErroreDocumento(`I pagamenti (${f2(pc.plus(pe).plus(tr))} €) non coincidono con il totale (${f2(_ammontare)} €)`);
+  const nr = args.pagamenti.nonRiscosso ?? {};
+  const ps = importo(nr.servizi, 'Non riscosso (servizi)');
+  const cs = importo(nr.beni, 'Non riscosso (beni)');
+  const fattura = nr.fattura === true;
+  // Come la pagina dell'Agenzia: con «Emissione fattura» il non riscosso è tutto il totale.
+  if (fattura && !pc.plus(pe).plus(tr).plus(ps).plus(cs).isZero()) {
+    throw new ErroreDocumento('Con «seguirà fattura» non si indicano altri pagamenti');
   }
+  const pagato = pc.plus(pe).plus(tr).plus(ps).plus(cs);
+  if (!fattura && !pagato.eq(_ammontare)) {
+    throw new ErroreDocumento(`I pagamenti (${f2(pagato)} €) non coincidono con il totale (${f2(_ammontare)} €)`);
+  }
+  const nonRiscosso = fattura ? _ammontare : ps.plus(cs);
   return {
     datiTrasmissione: { formato: 'DCW10' },
     cedentePrestatore: cedentePrestatore(args.cedente),
@@ -169,14 +186,15 @@ export function documentoVendita(args: { cedente: Cedente; righe: Riga[]; pagame
       dataOra: dataAgenzia(args.quando),
       multiAttivita: { codiceAttivita: '', descAttivita: '' },
       ...tot,
+      totaleNonRiscosso: f8(nonRiscosso),
       elementiContabili: elementi,
       vendita: [
         { tipo: 'PC', importo: f2(pc) },
         { tipo: 'PE', importo: f2(pe) },
         { tipo: 'TR', importo: f2(tr), numero: String(args.pagamenti.ticket?.numero ?? 0) },
-        { tipo: 'NR_EF', importo: '0.00' },
-        { tipo: 'NR_PS', importo: '0.00' },
-        { tipo: 'NR_CS', importo: '0.00' },
+        { tipo: 'NR_EF', importo: fattura ? f2(_ammontare) : '0.00' },
+        { tipo: 'NR_PS', importo: f2(ps) },
+        { tipo: 'NR_CS', importo: f2(cs) },
       ],
       scontoAbbuono: '0.00',
       importoDetraibileDeducibile: '0.00000000',

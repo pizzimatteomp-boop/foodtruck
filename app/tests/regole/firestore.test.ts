@@ -50,7 +50,8 @@ const registra = (chi: Chi, extra: Record<string, unknown> = {}) => {
   return setDoc(doc(db(chi), 'scontrini', `${String(d.ambiente)}-${String(d.idtrx)}`), d);
 };
 const movimento = (chi: Chi, extra: Record<string, unknown> = {}) => ({
-  tipo: 'pasto_staff', prodotto: 'Kebab', quantita: 1, motivo: 'pranzo staff', evento: 'ev1', ...firma(chi), ...extra,
+  tipo: 'pasto_staff', prodotto: 'r1', descrizione: 'Kebab', quantita: 1, motivo: 'pranzo staff', persona: 'Luca', evento: 'ev1',
+  cassa: 'Cassa 1', giorno: '2026-11-10', gruppo: 'g1', ...firma(chi), ...extra,
 });
 
 beforeAll(async () => {
@@ -227,6 +228,26 @@ describe('scontrini: si registrano e basta', () => {
     await assertFails(registra('anna', { idtrx: '14', sumup: '' }));
   });
 
+  it('omaggio: vendita a 0 € con il motivo', async () => {
+    const omaggio = { pagamento: 'nessuno', totale: 0, motivo: 'Fornitore', righe: [{ descrizione: 'Kebab', quantita: 1, prezzo: 12, aliquota: '10', omaggio: true }] };
+    await assertSucceeds(registra('anna', { idtrx: '20', ...omaggio }));
+    await assertFails(registra('anna', { idtrx: '21', ...omaggio, motivo: '' }));
+    await assertFails(registra('anna', { idtrx: '22', ...omaggio, totale: 12 }));
+    const { motivo: _m, ...senzaMotivo } = omaggio;
+    await assertFails(registra('anna', { idtrx: '23', ...senzaMotivo }));
+  });
+
+  it('non riscosso: seguirà fattura o da pagare, sempre col motivo', async () => {
+    const nr = { pagamento: 'non_riscosso', totale: 36, motivo: 'Organizzatore Sagra' };
+    await assertSucceeds(registra('anna', { idtrx: '30', ...nr, nonRiscosso: 'fattura' }));
+    await assertSucceeds(registra('anna', { idtrx: '31', ...nr, nonRiscosso: 'credito' }));
+    await assertFails(registra('anna', { idtrx: '32', ...nr }));
+    await assertFails(registra('anna', { idtrx: '33', ...nr, nonRiscosso: 'boh' }));
+    await assertFails(registra('anna', { idtrx: '34', ...nr, nonRiscosso: 'fattura', motivo: '' }));
+    await assertFails(registra('anna', { idtrx: '35', nonRiscosso: 'fattura' }));
+    await assertFails(registra('anna', { idtrx: '36', pagamento: 'bonifico' }));
+  });
+
   it('il team non registra né legge scontrini', async () => {
     await assertFails(registra('luca', { idtrx: '15' }));
     await assertFails(getDoc(doc(db('luca'), 'scontrini', 's1')));
@@ -240,8 +261,10 @@ describe('movimenti senza incasso', () => {
     }
   });
 
-  it('omaggio, anche con lo scontrino della riga a 0 €', async () => {
-    await assertSucceeds(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { tipo: 'omaggio', scontrino: 's1' })));
+  it('persona facoltativa; l\'omaggio non è un movimento ma uno scontrino a 0 €', async () => {
+    const { persona: _p, ...senza } = movimento('anna');
+    await assertSucceeds(addDoc(collection(db('anna'), 'movimenti'), senza));
+    await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { tipo: 'omaggio' })));
   });
 
   it('nessun campo di incasso: se c\'è un pagamento è una vendita', async () => {
@@ -254,7 +277,11 @@ describe('movimenti senza incasso', () => {
     await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { tipo: 'vendita' })));
     await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { motivo: '' })));
     await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { quantita: 0 })));
-    await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { tipo: 'scarto', scontrino: 's1' })));
+    await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { quantita: 1.5 })));
+    await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { scontrino: 's1' })));
+    await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { giorno: '10/11/2026' })));
+    await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { persona: '' })));
+    await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { cassa: '' })));
   });
 
   it('non si modificano né cancellano; li vede solo il titolare', async () => {

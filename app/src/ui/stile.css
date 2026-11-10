@@ -321,10 +321,14 @@ input.corto { width: 80px; }
 .cassa-descrizione input { min-width: 0; width: 100%; }
 .cassa-display { text-align: right; font-size: 1.4rem; font-variant-numeric: tabular-nums; min-height: 1.6em; padding: 0 8px; }
 .cassa-display .per { color: var(--accento); margin-right: 8px; }
-.cassa-pagamenti { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.cassa-pagamenti { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr); gap: 4px; }
 .cassa-pagamenti button { min-height: 64px; font-size: 1.4rem; font-weight: 700; border: 0; }
 .cassa-pagamenti .cont { background: var(--arancio); color: #000; }
 .cassa-pagamenti .elet { background: var(--glaucous-forte); color: #fff; }
+.cassa-pagamenti .nr { background: var(--lampone); color: #fff; font-size: 1.1rem; }
+.cassa-pagamenti .senza { background: var(--menta); color: #000; }
+.cassa-pagamenti button[aria-expanded='true'] { outline: 3px solid var(--testo); outline-offset: -3px; }
+.cassa-pannello { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--bordo); border-radius: 8px; background: var(--scheda); }
 .cassa-pagine { display: flex; width: 100%; min-width: 0; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
 .cassa-pagine::-webkit-scrollbar { display: none; }
 .cassa-pagina { flex: 0 0 100%; scroll-snap-align: start; min-width: 0; }

@@ -93,6 +93,39 @@ describe('documento di vendita', () => {
     });
     expect(d.documentoCommerciale.ammontareComplessivo).toBe('10.00000000');
   });
+
+  it('omaggio totale: documento a 0 € senza pagamenti', () => {
+    const d = documentoVendita({
+      cedente: PASTARE, righe: [{ descrizione: 'Kebab veg', quantita: 2, prezzoLordo: 12, aliquotaIVA: '10', omaggio: true }],
+      pagamenti: {}, quando: QUANDO,
+    });
+    expect(d.documentoCommerciale.ammontareComplessivo).toBe('0.00000000');
+    expect(d.documentoCommerciale.elementiContabili[0]!.omaggio).toBe('Y');
+    expect(d.documentoCommerciale.vendita.every((v) => v.importo === '0.00')).toBe(true);
+  });
+
+  const vendita = (nr: Record<string, unknown>, altri: Record<string, unknown> = {}) => documentoVendita({
+    cedente: PASTARE, righe: [{ descrizione: 'Kebab veg', quantita: 3, prezzoLordo: 12, aliquotaIVA: '10' }],
+    pagamenti: { ...altri, nonRiscosso: nr }, quando: QUANDO,
+  });
+  const voce = (d: ReturnType<typeof vendita>, tipo: string) => d.documentoCommerciale.vendita.find((v) => v.tipo === tipo)!.importo;
+
+  it('non riscosso con fattura (NR_EF): tutto il totale, come la pagina dell\'Agenzia', () => {
+    const d = vendita({ fattura: true });
+    expect(voce(d, 'NR_EF')).toBe('36.00');
+    expect(voce(d, 'PC')).toBe('0.00');
+    expect(d.documentoCommerciale.totaleNonRiscosso).toBe('36.00000000');
+    expect(() => vendita({ fattura: true }, { contanti: 36 })).toThrow(/fattura/);
+  });
+
+  it('non riscosso per beni consegnati (NR_CS) e servizi (NR_PS), anche insieme ai contanti', () => {
+    const d = vendita({ beni: 30 }, { contanti: 6 });
+    expect(voce(d, 'NR_CS')).toBe('30.00');
+    expect(voce(d, 'NR_EF')).toBe('0.00');
+    expect(d.documentoCommerciale.totaleNonRiscosso).toBe('30.00000000');
+    expect(voce(vendita({ servizi: 36 }), 'NR_PS')).toBe('36.00');
+    expect(() => vendita({ beni: 20 })).toThrow(/non coincidono/);
+  });
 });
 
 describe('annullo', () => {

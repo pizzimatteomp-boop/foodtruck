@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { idScontrino, nomeCassa, riepilogo, scontrinoAnnullo, scontrinoVendita, SENZA_EVENTO } from './archivio';
+import { descriviPagamento, eOmaggio, idScontrino, nomeCassa, riepilogo, scontrinoAnnullo, scontrinoVendita, SENZA_EVENTO } from './archivio';
 import type { Riga } from './carrello';
 
 const RIGHE: Riga[] = [
@@ -31,8 +31,26 @@ describe('archivio scontrini', () => {
     const a = v('1', 'contanti', 10);
     const docs = [a, v('2', 'contanti', 20), v('3', 'elettronico', 1650), scontrinoAnnullo(a, { idtrx: '4', progressivo: 'P4', cassa: 'C', giorno: '2026-11-10' })];
     const r = riepilogo(docs);
-    expect({ ...r, annullatiIdtrx: [...r.annullatiIdtrx] }).toEqual({ vendite: 2, annullati: 1, annullatiIdtrx: ['1'], contanti: 0.2, elettronico: 16.5, totale: 16.7 });
+    expect({ ...r, annullatiIdtrx: [...r.annullatiIdtrx] }).toEqual({ vendite: 2, annullati: 1, annullatiIdtrx: ['1'], contanti: 0.2, elettronico: 16.5, totale: 16.7, nonRiscosso: 0, omaggi: 0, valoreOmaggi: 0 });
     expect(riepilogo([{ ...v('5', 'contanti', 100), pagamento: 'nessuno' }]).totale).toBe(0);
+  });
+
+  it('omaggio (0 €, righe segnate) e non riscosso (fuori dall\'incassato) con il motivo', () => {
+    const base = { progressivo: 'P', righe: RIGHE, ambiente: 'simulatore' as const, cassa: 'C', giorno: '2026-11-10' };
+    const o = scontrinoVendita({ ...base, idtrx: '1', pagamento: 'omaggio', motivo: '  Fornitore Rossi ' });
+    expect(o).toMatchObject({ totale: 0, pagamento: 'nessuno', motivo: 'Fornitore Rossi' });
+    expect(o.righe.every((r) => r.omaggio)).toBe(true);
+    expect(eOmaggio(o)).toBe(true);
+    expect(descriviPagamento(o)).toBe('Omaggio');
+    const f = scontrinoVendita({ ...base, idtrx: '2', pagamento: 'fattura', motivo: 'Organizzatore' });
+    expect(f).toMatchObject({ totale: 28.5, pagamento: 'non_riscosso', nonRiscosso: 'fattura' });
+    expect(descriviPagamento(f)).toMatch(/fattura/);
+    const c = scontrinoVendita({ ...base, idtrx: '3', pagamento: 'credito', motivo: 'Pro loco' });
+    expect(descriviPagamento(c)).toMatch(/da pagare/);
+    expect(scontrinoVendita({ ...base, idtrx: '4', pagamento: 'contanti', motivo: '  ' })).not.toHaveProperty('motivo');
+    expect(descriviPagamento(scontrinoAnnullo(f, { idtrx: '9', progressivo: 'P9', cassa: 'C', giorno: '2026-11-10' }))).toBe('—');
+    const r = riepilogo([o, f, c, scontrinoVendita({ ...base, idtrx: '5', pagamento: 'contanti' })]);
+    expect(r).toMatchObject({ vendite: 4, totale: 28.5, contanti: 28.5, nonRiscosso: 57, omaggi: 1, valoreOmaggi: 28.5 });
   });
 
   it('nome della cassa', () => {
