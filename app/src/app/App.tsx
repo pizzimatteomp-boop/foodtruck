@@ -11,6 +11,7 @@ import { GestioneMenu } from '../ui/GestioneMenu';
 import { MenuPubblico } from '../ui/MenuPubblico';
 import { Home } from '../ui/Home';
 import { Importa } from '../ui/Importa';
+import { Cassa } from '../ui/Cassa';
 import { CassaProva } from '../ui/CassaProva';
 import { Ingredienti } from '../ui/Ingredienti';
 import { Persone } from '../ui/Persone';
@@ -50,6 +51,7 @@ export function App({ servizi, ambiente }: { servizi: Servizi; ambiente: Ambient
     <Struttura servizi={servizi} ambiente={ambiente} profilo={stato.profilo} pagina={pagina}>
       {stato.profilo.ruolo === 'titolare' && <FotografiaAutomatica db={servizi.db} uid={stato.uid} />}
       {pagina.id === 'persone' ? <Persone db={servizi.db} titolareUid={stato.uid} />
+        : pagina.id === 'vendi' ? <Cassa db={servizi.db} />
         : pagina.id === 'cassa' ? <CassaProva db={servizi.db} titolare={stato.profilo.ruolo === 'titolare'} />
         : pagina.id === 'importa' ? <Importa db={servizi.db} uid={stato.uid} />
         : pagina.id === 'prodotti' ? <Prodotti db={servizi.db} parametro={parametroDa(hash)} />

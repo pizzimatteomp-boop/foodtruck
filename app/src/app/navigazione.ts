@@ -5,7 +5,7 @@
 import { puo, type Ruolo } from '../firebase/ruoli';
 
 export interface Pagina {
-  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa' | 'cassa';
+  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa' | 'cassa' | 'vendi';
   titolo: string;
   icona: string;
   /** Una riga per il pannello della Home. */
@@ -17,6 +17,7 @@ export interface Pagina {
 
 export const PAGINE: readonly Pagina[] = [
   { id: 'home', titolo: 'Home', icona: '🏠', descrizione: '', principale: true, visibile: () => true },
+  { id: 'vendi', titolo: 'Cassa', icona: '💶', descrizione: 'Vendi: prodotti, importi liberi, pagamento', principale: true, visibile: (r) => puo(r, 'scontrini') },
   { id: 'prodotti', titolo: 'Prodotti', icona: '🌯', descrizione: 'Ricette, food cost e menu', principale: true, visibile: (r) => puo(r, 'acquisti') },
   { id: 'ingredienti', titolo: 'Ingredienti', icona: '🥕', descrizione: 'Prezzi, fonti ed etichette', principale: true, visibile: (r) => puo(r, 'acquisti') },
   { id: 'fatture', titolo: 'Fatture', icona: '🧾', descrizione: 'Carica le fatture, controlla le righe nuove', principale: true, visibile: (r) => puo(r, 'acquisti') },

@@ -305,3 +305,40 @@ input.corto { width: 80px; }
 /* Cassa di prova: sempre ben visibile che è il simulatore */
 .simulatore { background: var(--menta, #B9DED3); color: #000; border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
 .resoconto { white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--sfondo); padding: 8px; border-radius: 8px; max-height: 40vh; overflow: auto; }
+
+/* Cassa (impostazione come Billy) */
+.cassa { display: flex; flex-direction: column; gap: 8px; }
+.cassa-banda { margin: 0; font-size: 0.85rem; }
+.cassa-righe { list-style: none; margin: 0; padding: 0; max-height: 32vh; overflow-y: auto; border-radius: 10px; background: var(--scheda); }
+.cassa-righe li { display: grid; grid-template-columns: 1fr auto auto 40px; gap: 8px; align-items: center; padding: 8px 10px; font-variant-numeric: tabular-nums; }
+.cassa-righe li:nth-child(even) { background: color-mix(in srgb, var(--tenue) 12%, transparent); }
+.cassa-righe li.vuota { display: block; color: var(--tenue); }
+.cassa-righe .qta { color: var(--tenue); font-size: 0.9rem; }
+.cassa-righe .tot { font-weight: 600; }
+.cassa-righe .meno { min-height: 36px; padding: 0; border-radius: 8px; background: transparent; border: 1px solid var(--bordo); color: var(--testo); }
+.cassa-totale { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-radius: 999px; background: var(--scheda); font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.cassa-descrizione { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.cassa-display { text-align: right; font-size: 1.4rem; font-variant-numeric: tabular-nums; min-height: 1.6em; padding: 0 8px; }
+.cassa-display .per { color: var(--accento); margin-right: 8px; }
+.cassa-pagamenti { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.cassa-pagamenti button { min-height: 64px; font-size: 1.4rem; font-weight: 700; border: 0; }
+.cassa-pagamenti .cont { background: var(--arancio); color: #000; }
+.cassa-pagamenti .elet { background: var(--glaucous-forte); color: #fff; }
+.cassa-pagine { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.cassa-pagine::-webkit-scrollbar { display: none; }
+.cassa-pagina { flex: 0 0 100%; scroll-snap-align: start; min-width: 0; }
+.tastierino { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.tastierino button { min-height: 60px; border: 0; border-radius: 6px; font-size: 1.5rem; }
+.tastierino .tasto { background: color-mix(in srgb, var(--tenue) 30%, var(--scheda)); color: var(--testo); }
+.tastierino .preferito { color: #000; font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
+.tastierino .aggiungi { grid-column: span 2; font-size: 1.1rem; background: var(--menta); color: #000; }
+.cassa-filtri { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.cassa-filtri .schede { display: flex; gap: 6px; overflow-x: auto; }
+.cassa-filtri .schede button { min-height: 40px; padding: 0 12px; white-space: nowrap; background: transparent; border: 1px solid var(--bordo); color: var(--testo); }
+.cassa-filtri .schede button[aria-selected='true'] { background: var(--selezione); color: var(--su-selezione); border-color: var(--selezione); font-weight: 600; }
+.griglia-prodotti { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.griglia-prodotti button { min-height: 64px; border: 0; border-radius: 6px; color: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; font-weight: 600; overflow-wrap: anywhere; }
+.griglia-prodotti small { font-weight: 400; }
+.pallini { display: flex; justify-content: center; gap: 10px; }
+.pallini button { width: 12px; height: 12px; min-height: 0; padding: 0; border-radius: 50%; border: 0; background: var(--bordo); }
+.pallini button[aria-selected='true'] { background: var(--testo); }

@@ -97,7 +97,7 @@ test('persona nuova → abilitata dal titolare → entra con il ruolo cassa', as
   await expect(giulia.getByText('Ruolo: Cassa')).toBeVisible();
   await expect(giulia.getByRole('region', { name: 'Persone' })).toHaveCount(0);
   // La cassa vede solo Home e la cassa di prova, niente pagine del titolare.
-  await expect(giulia.getByRole('navigation', { name: 'Pagine' }).getByRole('link')).toHaveText([/Cassa · prova/]);
+  await expect(giulia.getByRole('navigation', { name: 'Pagine' }).getByRole('link')).toHaveText([/Vendi:/, /Cassa · prova/]);
   // Anche scrivendo l'indirizzo a mano, la cassa non entra nella pagina Persone.
   await giulia.goto('/#/persone');
   await expect(giulia.getByRole('heading', { name: 'Ciao Giulia' })).toBeVisible();
@@ -502,4 +502,39 @@ test('cassa di prova: scontrini sul simulatore, risposta persa recuperata, annul
   await expect(cassa).toContainText('Si inseriscono solo nell\'app Android');
   await expect(cassa.getByLabel('Password Fisconline')).toHaveCount(0);
   await cassa.screenshot({ path: 'test-results/cassa-prova.png' });
+});
+
+test('cassa come Billy: quantità con ×, importo libero, contanti; importo digitato e carta (simulatore)', async ({ page }) => {
+  await accedi(page, MATTEO);
+  await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: /Cassa$/ }).click();
+  const cassa = page.getByRole('region', { name: 'Cassa', exact: true });
+  await expect(cassa.getByRole('note')).toContainText('SIMULATORE');
+  const tastierino = cassa.getByRole('group', { name: 'Tastierino' });
+  const prodotti = cassa.getByRole('group', { name: 'Prodotti' });
+  // 3 × Pane e olio
+  await tastierino.getByRole('button', { name: '3', exact: true }).click();
+  await tastierino.getByRole('button', { name: 'Per (quantità)' }).click();
+  await cassa.getByRole('tab', { name: 'Prodotti' }).click();
+  await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
+  const righe = cassa.getByRole('list', { name: 'Righe dello scontrino' });
+  await expect(righe).toContainText('3 pz × 4,00 €');
+  // riga a importo libero: 4,50 € «Speciale» IVA 10%
+  await cassa.getByRole('tab', { name: 'Tastierino' }).click();
+  for (const k of ['4', '.', '5']) await tastierino.getByRole('button', { name: k, exact: true }).click();
+  await cassa.getByLabel('Descrizione').fill('Speciale');
+  await tastierino.getByRole('button', { name: '+ importo' }).click();
+  await expect(righe).toContainText('Speciale');
+  await expect(cassa.getByLabel('Totale')).toContainText('Totale (4 pz)');
+  await expect(cassa.getByLabel('Totale')).toContainText('16,50 €');
+  await cassa.screenshot({ path: 'test-results/cassa.png' });
+  await cassa.getByRole('button', { name: 'CONT' }).click();
+  await expect(cassa.getByRole('status')).toContainText(/DCW2026\/9999-\d+ · 16,50 € · contanti/);
+  await expect(righe).toContainText('Tocca i prodotti');
+  // importo digitato e subito carta, senza righe (come Billy)
+  await tastierino.getByRole('button', { name: '5', exact: true }).click();
+  await cassa.getByRole('button', { name: 'ELET' }).click();
+  await expect(cassa.getByRole('status')).toContainText('5,00 € · elettronico');
+  // vuoto: messaggio
+  await cassa.getByRole('button', { name: 'CONT' }).click();
+  await expect(cassa.getByRole('alert')).toContainText('vuoto');
 });
