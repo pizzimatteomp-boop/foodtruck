@@ -22,21 +22,6 @@ describe('cassa di prova (solo simulatore)', () => {
     await expect(c.annulla('nessuno')).rejects.toThrow();
   });
 
-  it('omaggio a 0 € e non riscosso (fattura o beni consegnati) sul simulatore', async () => {
-    const c = new CassaProva(archivioInMemoria(), QUANDO);
-    const voci = (i: number) => (c.simulatore.documenti[i]!.documento as unknown as { documentoCommerciale: { vendita: { tipo: string; importo: string }[]; totaleNonRiscosso: string; elementiContabili: { omaggio: string }[] } }).documentoCommerciale;
-    await c.vendi([KEBAB], 'omaggio');
-    expect(c.scontrini[0]!.totale).toBe(0);
-    expect(voci(0).elementiContabili[0]!.omaggio).toBe('Y');
-    await c.vendi([KEBAB, PATATE], 'fattura');
-    expect(voci(1).vendita.find((v) => v.tipo === 'NR_EF')!.importo).toBe('29.00');
-    await c.vendi([PATATE], 'credito');
-    expect(voci(2).vendita.find((v) => v.tipo === 'NR_CS')!.importo).toBe('5.00');
-    expect(voci(2).totaleNonRiscosso).toBe('5.00000000');
-    // Annullo di un omaggio: stesso contenuto, riga omaggio compresa.
-    await c.annulla(c.scontrini[2]!.idtrx);
-  });
-
   it('risposta persa → recuperato, senza doppioni', async () => {
     const c = new CassaProva(archivioInMemoria(), QUANDO);
     const r = await c.vendi([KEBAB], 'contanti', 'rete-dopo');

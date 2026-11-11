@@ -562,23 +562,18 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await expect(oggi.getByRole('listitem')).toHaveCount(3);
   await expect(oggi).toContainText('Annullo di DCW2026/9999-');
   await expect(oggi.getByRole('button', { name: '📤 Invia' })).toHaveCount(3);
-  // C4 · non riscosso (pagato dall'organizzatore): serve sapere chi paga
+  // C4 · omaggio: movimento interno, niente scontrino né Agenzia
   await cassa.getByRole('tab', { name: 'Prodotti' }).click();
-  await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
-  await cassa.getByRole('button', { name: 'Non riscosso' }).click();
-  const nr = cassa.getByRole('group', { name: 'Non riscosso' });
-  await nr.getByRole('button', { name: 'Emetti non riscosso' }).click();
-  await expect(cassa.getByRole('alert')).toContainText('Scrivi chi pagherà');
-  await nr.getByLabel('Chi paga').fill('Pro loco');
-  await nr.getByRole('button', { name: 'Emetti non riscosso' }).click();
-  await expect(cassa.getByRole('status')).toContainText('4,00 € · non riscosso · seguirà fattura');
-  // omaggio: scontrino a 0 €
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
   await cassa.getByRole('button', { name: 'Senza incasso' }).click();
   const senza = cassa.getByRole('group', { name: 'Senza incasso' });
+  await expect(senza.getByLabel('Omaggio')).toBeChecked();
+  await senza.getByRole('button', { name: 'Registra' }).click();
+  await expect(cassa.getByRole('alert')).toContainText('Scrivi il motivo');
   await senza.getByLabel('Motivo').fill('Artista');
-  await senza.getByRole('button', { name: 'Emetti omaggio' }).click();
-  await expect(cassa.getByRole('status')).toContainText('0,00 € · omaggio');
+  await senza.getByRole('button', { name: 'Registra' }).click();
+  await expect(cassa.getByRole('status')).toContainText('Omaggio: 1 pz registrati (nessuno scontrino)');
+  await expect(cassa.getByRole('button', { name: 'Non riscosso' })).toHaveCount(0);
   // pasto staff: niente scontrino, niente importo
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
   await cassa.getByRole('button', { name: 'Senza incasso' }).click();
@@ -597,8 +592,9 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await senza.getByRole('button', { name: 'Registra' }).click();
   await expect(cassa.getByRole('alert')).toContainText('solo prodotti');
   await righe.getByRole('button', { name: /^Togli uno/ }).click();
-  await expect(cassa.getByText(/· Non riscosso 4,00 € · Omaggi 1 \(4,00 €\)/)).toBeVisible();
-  await cassa.getByText(/^Senza incasso dell'evento · 1 pz/).click();
+  await expect(cassa.getByText(/^Scontrini dell'evento · 1 · 5,00 €/)).toBeVisible();
+  await cassa.getByText(/^Senza incasso dell'evento · 2 pz/).click();
+  await expect(cassa.getByText('Omaggio: 1× Pane e olio')).toBeVisible();
   await expect(cassa.getByText('Pasto staff: 1× Pane e olio')).toBeVisible();
   await expect(cassa.getByRole('list', { name: 'Movimenti senza incasso' })).toContainText('pranzo · Luca');
   await cassa.screenshot({ path: 'test-results/cassa-senza-incasso.png' });

@@ -3,7 +3,7 @@
  * Usa lo stesso motore dell'emissione vera (emissione.ts), così sul telefono si prova davvero
  * la regola anti-doppioni, con guasti a comando.
  */
-import { documentoAnnullo, documentoVendita, type Aliquota, type Cedente, type Pagamenti } from './dco';
+import { documentoAnnullo, documentoVendita, type Aliquota, type Cedente } from './dco';
 import { emettiVendita, inviaAnnulloReso, verificaSospeso, chiudiSospesoAMano, type ArchivioInvii, type EsitoEmissione } from './emissione';
 import { ServizioDCO } from './servizio';
 import { SimulatoreAgenzia, type Guasto } from './simulatore';
@@ -15,22 +15,7 @@ export const CEDENTE_SIMULATO: Cedente = {
 };
 
 export interface RigaCassa { descrizione: string; quantita: number; prezzo: number; aliquota: Aliquota }
-/**
- * Come si chiude lo scontrino: contanti, elettronico (carta), omaggio (tutte le righe a 0 €),
- * non riscosso con fattura (NR_EF) o per beni consegnati da pagare dopo (NR_CS).
- */
-export type Pagamento = 'contanti' | 'elettronico' | 'omaggio' | 'fattura' | 'credito';
-
-/** Pagamenti del documento per un totale (in euro). */
-export function pagamentiPer(pagamento: Pagamento, totale: number): Pagamenti {
-  switch (pagamento) {
-    case 'contanti': return { contanti: totale };
-    case 'elettronico': return { elettronico: totale };
-    case 'omaggio': return {};
-    case 'fattura': return { nonRiscosso: { fattura: true } };
-    case 'credito': return { nonRiscosso: { beni: totale } };
-  }
-}
+export type Pagamento = 'contanti' | 'elettronico';
 
 export interface ScontrinoProva {
   idtrx: string;
@@ -52,12 +37,11 @@ export class CassaProva {
   constructor(private readonly archivio: ArchivioInvii, private readonly adesso: () => Date) {}
 
   async vendi(righe: RigaCassa[], pagamento: Pagamento, guasto?: Guasto): Promise<EsitoEmissione> {
-    const omaggio = pagamento === 'omaggio';
-    const totale = omaggio ? 0 : totaleRighe(righe);
+    const totale = totaleRighe(righe);
     const doc = documentoVendita({
       cedente: CEDENTE_SIMULATO,
-      righe: righe.map((r) => ({ descrizione: r.descrizione, quantita: r.quantita, prezzoLordo: r.prezzo, aliquotaIVA: r.aliquota, ...(omaggio ? { omaggio: true } : {}) })),
-      pagamenti: pagamentiPer(pagamento, totale),
+      righe: righe.map((r) => ({ descrizione: r.descrizione, quantita: r.quantita, prezzoLordo: r.prezzo, aliquotaIVA: r.aliquota })),
+      pagamenti: pagamento === 'contanti' ? { contanti: totale } : { elettronico: totale },
       quando: this.adesso(),
     });
     if (guasto) this.simulatore.guasta(guasto);

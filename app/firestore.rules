@@ -9,7 +9,7 @@ rules_version = '2';
 //
 // Principi (vedi CLAUDE.md):
 //   - gli scontrini registrati non si modificano né si cancellano, nemmeno dal titolare;
-//   - i movimenti senza incasso (pasto staff, prova, scarto) non hanno campi di importo; l'omaggio è uno scontrino a 0 €;
+//   - i movimenti senza incasso (omaggio, pasto staff, organizzatore, prova, scarto) non hanno campi di importo;
 //   - ogni registrazione porta chi l'ha fatta e l'ora del server, non quella del dispositivo.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -160,7 +160,7 @@ service cloud.firestore {
       // Id = ambiente + idtrx: lo stesso scontrino non si registra due volte (la creazione di un id esistente è rifiutata).
       allow create: if cassa() && firmato()
         && nuovo().keys().hasOnly(['tipo', 'idtrx', 'progressivo', 'evento', 'totale', 'creatoDa', 'creatoIl', 'ambiente',
-             'cassa', 'pagamento', 'righe', 'giorno', 'sumup', 'progressivoOriginale', 'idtrxOriginale', 'nonRiscosso', 'motivo'])
+             'cassa', 'pagamento', 'righe', 'giorno', 'sumup', 'progressivoOriginale', 'idtrxOriginale'])
         && nuovo().tipo in ['V', 'A', 'R']
         && testo(nuovo().idtrx)
         && testo(nuovo().progressivo)
@@ -169,14 +169,7 @@ service cloud.firestore {
         && nuovo().ambiente in ['simulatore', 'agenzia']
         && id == nuovo().ambiente + '-' + nuovo().idtrx
         && testo(nuovo().cassa)
-        && nuovo().pagamento in ['contanti', 'elettronico', 'nessuno', 'non_riscosso']
-        && (!('motivo' in nuovo()) || testo(nuovo().motivo))
-        // Omaggio = vendita a 0 € senza pagamento, con il motivo (a chi e perché).
-        && (nuovo().tipo != 'V' || nuovo().pagamento != 'nessuno' || (nuovo().totale == 0 && testo(nuovo().motivo)))
-        // Non riscosso (pagato dall'organizzatore): seguirà fattura o si pagherà dopo, con il motivo.
-        && ((nuovo().pagamento == 'non_riscosso') == ('nonRiscosso' in nuovo()))
-        && (nuovo().pagamento != 'non_riscosso'
-            || (nuovo().tipo == 'V' && nuovo().nonRiscosso in ['fattura', 'credito'] && testo(nuovo().motivo)))
+        && nuovo().pagamento in ['contanti', 'elettronico', 'nessuno']
         && nuovo().righe is list && nuovo().righe.size() <= 100
         && nuovo().giorno is string && nuovo().giorno.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
         && (!('sumup' in nuovo()) || testo(nuovo().sumup))
@@ -185,14 +178,14 @@ service cloud.firestore {
     }
 
     // ---------- Movimenti senza incasso ----------
-    // Pasto staff, prova/assaggio, scarto: uno per prodotto, nessun campo importo (se c'è un pagamento
-    // è una vendita e va con lo scontrino). L'omaggio è uno scontrino a 0 € (vedi sopra).
+    // Omaggio, pasto staff, per l'organizzatore, prova/assaggio, scarto: uno per prodotto, nessun campo
+    // importo e niente Agenzia (se c'è un pagamento è una vendita e va con lo scontrino o la fattura).
     match /movimenti/{id} {
       allow read: if titolare();
       allow create: if cassa() && firmato()
         && nuovo().keys().hasOnly(['tipo', 'prodotto', 'descrizione', 'quantita', 'motivo', 'persona', 'evento',
                                    'cassa', 'giorno', 'gruppo', 'creatoDa', 'creatoIl'])
-        && nuovo().tipo in ['pasto_staff', 'prova', 'scarto']
+        && nuovo().tipo in ['omaggio', 'pasto_staff', 'organizzatore', 'prova', 'scarto']
         && testo(nuovo().prodotto)
         && testo(nuovo().descrizione)
         && nuovo().quantita is int && nuovo().quantita > 0 && nuovo().quantita <= 1000

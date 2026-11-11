@@ -18,7 +18,7 @@ import { CassaProva, type Pagamento } from '../fiscal/prova';
 import { RifiutoAgenzia, SessioneScaduta } from '../fiscal/trasporto';
 import type { Prodotto } from '../foodcost/modello';
 import { euro } from './formato';
-import { descriviPagamento, nomeCassa, riepilogo, scontrinoAnnullo, scontrinoVendita, type ScontrinoArchivio } from '../cassa/archivio';
+import { nomeCassa, riepilogo, scontrinoAnnullo, scontrinoVendita, type ScontrinoArchivio } from '../cassa/archivio';
 import { registraScontrino, useScontriniEvento } from '../cassa/archivio.db';
 import { nomeMovimento, preparaMovimenti, riepilogoMovimenti, TIPI_MOVIMENTO, type TipoMovimento } from '../cassa/movimenti';
 import { registraMovimenti, useMovimentiEvento } from '../cassa/movimenti.db';
@@ -117,9 +117,6 @@ function AperturaCassa({ db, eventi, titolare, onApri }: { db: Firestore; eventi
   );
 }
 
-/** Pannelli sotto i tasti di pagamento: non riscosso (N.R.) e senza incasso. */
-type Pannello = null | 'nr' | 'senza';
-type SenzaIncasso = 'omaggio' | TipoMovimento;
 
 function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: string; titolare: boolean; evento: Evento; onCambia: () => void }) {
   const pro = useRaccolta<Prodotto>(db, 'prodotti');
@@ -134,9 +131,8 @@ function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: 
   const [occupato, setOccupato] = useState(false);
   const [pagina, setPagina] = useState(0);
   const pagine = useRef<HTMLDivElement>(null);
-  const [pannello, setPannello] = useState<Pannello>(null);
-  const [nr, setNr] = useState<'fattura' | 'credito'>('fattura');
-  const [senza, setSenza] = useState<SenzaIncasso>('omaggio');
+  const [pannello, setPannello] = useState(false);
+  const [senza, setSenza] = useState<TipoMovimento>('omaggio');
   const [motivo, setMotivo] = useState('');
   const [persona, setPersona] = useState('');
 
@@ -251,12 +247,12 @@ function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: 
     setRighe([]);
     setT(TASTIERINO_VUOTO);
     setDescrizione('');
-    setPannello(null);
+    setPannello(false);
     setMotivo('');
     setPersona('');
   }
 
-  /** Pasto staff, prova, scarto: nessuno scontrino, nessun importo. */
+  /** Omaggio, pasto staff, organizzatore, prova, scarto: nessuno scontrino, nessun importo, niente Agenzia. */
   async function registraSenzaIncasso(tipo: TipoMovimento) {
     if (occupato) return;
     setOccupato(true);
@@ -272,22 +268,20 @@ function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: 
     setOccupato(false);
   }
 
-  async function paga(pagamento: Pagamento, perche?: string) {
+  async function paga(pagamento: Pagamento) {
     if (!cassa || occupato) return;
     const daEmettere = righeDaEmettere();
     if (!daEmettere) return;
     if (fuoriItalia(evento)) { setAvviso({ testo: `Evento fuori Italia (${evento.paese}): niente scontrino fiscale italiano. La ricevuta del luogo va definita col commercialista.`, errore: true }); return; }
     if (attesa) { setAvviso({ testo: 'C\'è un pagamento con carta in corso: chiudilo prima.', errore: true }); return; }
-    const conMotivo = pagamento === 'omaggio' || pagamento === 'fattura' || pagamento === 'credito';
-    if (conMotivo && !perche?.trim()) { setAvviso({ testo: pagamento === 'omaggio' ? 'Scrivi a chi va l\'omaggio e perché.' : 'Scrivi chi pagherà (es. l\'organizzatore).', errore: true }); return; }
     if (pagamento === 'elettronico' && NATIVA && conSumUp) { await avviaSumUp(daEmettere); return; }
     setOccupato(true);
     try {
       const r = await cassa.vendi(righePerScontrino(daEmettere), pagamento);
-      const s = scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: daEmettere, pagamento, ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id, ...(conMotivo && perche ? { motivo: perche } : {}) });
+      const s = scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: daEmettere, pagamento, ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id });
       await archivia(s);
       svuota();
-      setAvviso({ testo: `✅ ${r.progressivo} · ${euro(s.totale)} · ${descriviPagamento(s).toLowerCase()}${r.stato === 'recuperato' ? ' (recuperato)' : ''}`, errore: false });
+      setAvviso({ testo: `✅ ${r.progressivo} · ${euro(s.totale)} · ${pagamento === 'contanti' ? 'contanti' : 'carta'}${r.stato === 'recuperato' ? ' (recuperato)' : ''}`, errore: false });
     } catch (e) { setAvviso({ testo: messaggio(e), errore: true }); }
     setOccupato(false);
   }
@@ -360,32 +354,17 @@ function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: 
       <div class="cassa-pagamenti">
         <button type="button" class="cont" disabled={occupato} onClick={() => void paga('contanti')}>CONT</button>
         <button type="button" class="elet" disabled={occupato} onClick={() => void paga('elettronico')}>{conSumUp ? 'ELET · SumUp' : 'ELET'}</button>
-        <button type="button" class="nr" aria-label="Non riscosso" aria-expanded={pannello === 'nr'} disabled={occupato} onClick={() => setPannello(pannello === 'nr' ? null : 'nr')}>N.R.</button>
-        <button type="button" class="senza" aria-label="Senza incasso" aria-expanded={pannello === 'senza'} disabled={occupato} onClick={() => setPannello(pannello === 'senza' ? null : 'senza')}>🎁</button>
+        <button type="button" class="senza" aria-label="Senza incasso" aria-expanded={pannello} disabled={occupato} onClick={() => setPannello(!pannello)}>🎁</button>
       </div>
-      {pannello === 'nr' && (
-        <div class="cassa-pannello" role="group" aria-label="Non riscosso">
-          <p class="nota">Pasti pagati da altri (organizzatore, festival): scontrino senza incasso, da riscuotere dopo.</p>
-          <div class="scelte">
-            <label class="spunta"><input type="radio" name="nr" checked={nr === 'fattura'} onChange={() => setNr('fattura')} /> Seguirà fattura</label>
-            <label class="spunta"><input type="radio" name="nr" checked={nr === 'credito'} onChange={() => setNr('credito')} /> Pagherà dopo</label>
-          </div>
-          <input aria-label="Chi paga" placeholder="Chi paga (es. Pro loco Osimo)" maxLength={200} value={motivo} onInput={(e) => setMotivo(e.currentTarget.value)} />
-          <button type="button" class="primario" disabled={occupato} onClick={() => void paga(nr, motivo)}>Emetti non riscosso</button>
-        </div>
-      )}
-      {pannello === 'senza' && (
+      {pannello && (
         <div class="cassa-pannello" role="group" aria-label="Senza incasso">
           <div class="scelte">
-            <label class="spunta"><input type="radio" name="senza" checked={senza === 'omaggio'} onChange={() => setSenza('omaggio')} /> Omaggio</label>
             {TIPI_MOVIMENTO.map((x) => <label key={x.tipo} class="spunta"><input type="radio" name="senza" checked={senza === x.tipo} onChange={() => setSenza(x.tipo)} /> {x.nome}</label>)}
           </div>
-          <p class="nota">{senza === 'omaggio' ? 'Scontrino con le righe in omaggio (0 €).' : 'Nessuno scontrino e nessun importo: solo prodotti, scaricati dal magazzino.'}</p>
-          <input aria-label="Motivo" placeholder={senza === 'omaggio' ? 'A chi e perché (es. fornitore, artista)' : `Motivo (${TIPI_MOVIMENTO.find((x) => x.tipo === senza)!.aiuto})`} maxLength={200} value={motivo} onInput={(e) => setMotivo(e.currentTarget.value)} />
+          <p class="nota">Nessuno scontrino e nessun importo: solo prodotti, scaricati dal magazzino. Se qualcuno paga (anche l'organizzatore) è una vendita: CONT, ELET o fattura.</p>
+          <input aria-label="Motivo" placeholder={`Motivo (${TIPI_MOVIMENTO.find((x) => x.tipo === senza)!.aiuto})`} maxLength={200} value={motivo} onInput={(e) => setMotivo(e.currentTarget.value)} />
           {senza === 'pasto_staff' && <input aria-label="Persona" placeholder="Chi ha mangiato (facoltativo)" maxLength={60} value={persona} onInput={(e) => setPersona(e.currentTarget.value)} />}
-          <button type="button" class="primario" disabled={occupato} onClick={() => {
-            if (senza === 'omaggio') void paga('omaggio', motivo); else void registraSenzaIncasso(senza);
-          }}>{senza === 'omaggio' ? 'Emetti omaggio' : 'Registra'}</button>
+          <button type="button" class="primario" disabled={occupato} onClick={() => void registraSenzaIncasso(senza)}>Registra</button>
         </div>
       )}
 
@@ -444,7 +423,7 @@ function ScontriniEvento({ db, evento, cassa, occupato, onAnnulla, onInvia }: {
   return (
     <details class="scontrini-oggi">
       <summary>Scontrini dell'evento · {r.vendite} · {euro(r.totale)}</summary>
-      <p class="nota">Contanti {euro(r.contanti)} · Carta {euro(r.elettronico)}{r.nonRiscosso ? ` · Non riscosso ${euro(r.nonRiscosso)}` : ''}{r.omaggi ? ` · Omaggi ${r.omaggi} (${euro(r.valoreOmaggi)})` : ''}{r.annullati ? ` · ${r.annullati} annullati` : ''}</p>
+      <p class="nota">Contanti {euro(r.contanti)} · Carta {euro(r.elettronico)}{r.annullati ? ` · ${r.annullati} annullati` : ''}</p>
       <ul class="persone" aria-label="Scontrini dell'evento">
         {elenco.map((s) => {
           const annullato = s.tipo === 'V' && r.annullatiIdtrx.has(s.idtrx);
@@ -453,7 +432,7 @@ function ScontriniEvento({ db, evento, cassa, occupato, onAnnulla, onInvia }: {
             <li key={s.id} class={annullato || s.tipo !== 'V' ? 'disattivo' : ''}>
               <div class="nome"><strong>{s.progressivo}</strong> <small>{ora(s)} · {s.cassa}{s.ambiente === 'simulatore' ? ' · simulatore' : ''}</small></div>
               <small class="dettaglio">
-                {s.tipo === 'A' ? `Annullo di ${s.progressivoOriginale}` : `${euro(s.totale)} · ${descriviPagamento(s).toLowerCase()}${s.motivo ? ` (${s.motivo})` : ''}${annullato ? ' · annullato' : ''}`}
+                {s.tipo === 'A' ? `Annullo di ${s.progressivoOriginale}` : `${euro(s.totale)} · ${s.pagamento === 'contanti' ? 'contanti' : 'carta'}${s.sumup ? ` (SumUp ${s.sumup})` : ''}${annullato ? ' · annullato' : ''}`}
                 {' · '}{s.righe.map((x) => `${x.quantita}× ${x.descrizione}`).join(', ')}
               </small>
               <div class="comandi">

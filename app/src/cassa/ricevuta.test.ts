@@ -19,9 +19,6 @@ describe('ricevuta di cortesia', () => {
     const a = contenutoRicevuta(scontrinoAnnullo(v, { idtrx: '2', progressivo: 'P2', cassa: 'C', giorno: '2026-11-10' }), new Date());
     expect(a).toMatchObject({ titolo: 'Annullo', pagamento: '—' });
     expect(contenutoRicevuta({ ...v, sumup: undefined } as never, new Date()).pagamento).toBe('Carta');
-    const o = contenutoRicevuta(scontrinoVendita({ idtrx: '3', progressivo: 'P3', pagamento: 'omaggio', motivo: 'Artista', ambiente: 'simulatore', cassa: 'C', giorno: '2026-11-10',
-      righe: [{ descrizione: 'Kebab', quantita: 1, centesimi: 1200, aliquota: '10' }] }), new Date());
-    expect(o).toMatchObject({ totale: '0,00 €', pagamento: 'Omaggio', righe: [{ testo: '1 × Kebab', importo: 'omaggio' }] });
   });
 
   it('messaggio e nomi dei file', () => {

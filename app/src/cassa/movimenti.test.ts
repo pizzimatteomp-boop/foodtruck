@@ -21,7 +21,7 @@ describe('movimenti senza incasso', () => {
     expect(() => preparaMovimenti([{ descrizione: 'Varie', quantita: 1, centesimi: 100, aliquota: '10' }], BASE)).toThrow(/solo prodotti/);
     expect(() => preparaMovimenti([K], { ...BASE, motivo: '  ' })).toThrow(/motivo/);
     expect(() => preparaMovimenti([], BASE)).toThrow(/almeno/);
-    expect(() => preparaMovimenti([K], { ...BASE, tipo: 'omaggio' as never })).toThrow(/non ammesso/);
+    expect(() => preparaMovimenti([K], { ...BASE, tipo: 'vendita' as never })).toThrow(/non ammesso/);
   });
 
   it('riepilogo per tipo', () => {
@@ -31,6 +31,7 @@ describe('movimenti senza incasso', () => {
       { tipo: 'scarto', nome: 'Scarto', pezzi: 2, prodotti: '2× Patate' },
     ]);
     expect(nomeMovimento('prova')).toBe('Prova / assaggio');
+    expect(riepilogoMovimenti(preparaMovimenti([K], { ...BASE, tipo: 'omaggio', motivo: 'artista' }))[0]!.nome).toBe('Omaggio');
     expect(nomeMovimento('x' as never)).toBe('x');
   });
 });

@@ -228,26 +228,6 @@ describe('scontrini: si registrano e basta', () => {
     await assertFails(registra('anna', { idtrx: '14', sumup: '' }));
   });
 
-  it('omaggio: vendita a 0 € con il motivo', async () => {
-    const omaggio = { pagamento: 'nessuno', totale: 0, motivo: 'Fornitore', righe: [{ descrizione: 'Kebab', quantita: 1, prezzo: 12, aliquota: '10', omaggio: true }] };
-    await assertSucceeds(registra('anna', { idtrx: '20', ...omaggio }));
-    await assertFails(registra('anna', { idtrx: '21', ...omaggio, motivo: '' }));
-    await assertFails(registra('anna', { idtrx: '22', ...omaggio, totale: 12 }));
-    const { motivo: _m, ...senzaMotivo } = omaggio;
-    await assertFails(registra('anna', { idtrx: '23', ...senzaMotivo }));
-  });
-
-  it('non riscosso: seguirà fattura o da pagare, sempre col motivo', async () => {
-    const nr = { pagamento: 'non_riscosso', totale: 36, motivo: 'Organizzatore Sagra' };
-    await assertSucceeds(registra('anna', { idtrx: '30', ...nr, nonRiscosso: 'fattura' }));
-    await assertSucceeds(registra('anna', { idtrx: '31', ...nr, nonRiscosso: 'credito' }));
-    await assertFails(registra('anna', { idtrx: '32', ...nr }));
-    await assertFails(registra('anna', { idtrx: '33', ...nr, nonRiscosso: 'boh' }));
-    await assertFails(registra('anna', { idtrx: '34', ...nr, nonRiscosso: 'fattura', motivo: '' }));
-    await assertFails(registra('anna', { idtrx: '35', nonRiscosso: 'fattura' }));
-    await assertFails(registra('anna', { idtrx: '36', pagamento: 'bonifico' }));
-  });
-
   it('il team non registra né legge scontrini', async () => {
     await assertFails(registra('luca', { idtrx: '15' }));
     await assertFails(getDoc(doc(db('luca'), 'scontrini', 's1')));
@@ -256,15 +236,14 @@ describe('scontrini: si registrano e basta', () => {
 
 describe('movimenti senza incasso', () => {
   it('pasto staff, prova e scarto registrati dalla cassa', async () => {
-    for (const tipo of ['pasto_staff', 'prova', 'scarto']) {
+    for (const tipo of ['omaggio', 'pasto_staff', 'organizzatore', 'prova', 'scarto']) {
       await assertSucceeds(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { tipo })));
     }
   });
 
-  it('persona facoltativa; l\'omaggio non è un movimento ma uno scontrino a 0 €', async () => {
+  it('persona facoltativa', async () => {
     const { persona: _p, ...senza } = movimento('anna');
     await assertSucceeds(addDoc(collection(db('anna'), 'movimenti'), senza));
-    await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { tipo: 'omaggio' })));
   });
 
   it('nessun campo di incasso: se c\'è un pagamento è una vendita', async () => {

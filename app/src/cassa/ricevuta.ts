@@ -2,7 +2,7 @@
  * Ricevuta di cortesia VegMan (fase «Cassa», C2b): accompagna il PDF dell'Agenzia, che è il documento
  * fiscale e non si modifica. Qui solo i contenuti; il disegno col marchio è in ui/ricevutaImmagine.ts.
  */
-import { descriviPagamento, type ScontrinoArchivio } from './archivio';
+import type { ScontrinoArchivio } from './archivio';
 
 export const FRASE = 'Grazie! Cibo 100% vegetale 🌱';
 export const FRASE_EN = 'Thank you! 100% plant-based food';
@@ -25,9 +25,9 @@ export function contenutoRicevuta(s: ScontrinoArchivio, quando: Date): Contenuto
   return {
     titolo: s.tipo === 'A' ? 'Annullo' : 'Ricevuta',
     quando: data,
-    righe: s.righe.map((r) => ({ testo: `${r.quantita} × ${r.descrizione}`, importo: r.omaggio ? 'omaggio' : euro(r.quantita * r.prezzo) })),
+    righe: s.righe.map((r) => ({ testo: `${r.quantita} × ${r.descrizione}`, importo: euro(r.quantita * r.prezzo) })),
     totale: euro(s.totale),
-    pagamento: descriviPagamento(s),
+    pagamento: s.pagamento === 'contanti' ? 'Contanti' : s.pagamento === 'elettronico' ? `Carta${s.sumup ? ` · ${s.sumup}` : ''}` : '—',
     documento: `Documento commerciale n. ${s.progressivo}`,
     nota: s.ambiente === 'simulatore' ? 'PROVA · non è un documento fiscale' : 'Il documento commerciale è nel PDF allegato',
   };

@@ -1,16 +1,18 @@
 /**
- * Movimenti senza incasso (fase «Cassa», C4): pasto staff, prova/assaggio, scarto.
- * Nessun importo e nessuno scontrino: se qualcuno paga è una vendita. L'omaggio invece è uno
- * scontrino a 0 € e il «pagato dall'organizzatore» uno scontrino non riscosso (archivio.ts).
+ * Movimenti senza incasso (fase «Cassa», C4): omaggio, pasto staff, per l'organizzatore,
+ * prova/assaggio, scarto. Nessun importo e nessuno scontrino, niente Agenzia (deciso da Matteo
+ * l'11/11/2026): se qualcuno paga, anche l'organizzatore, è una vendita normale con scontrino o fattura.
  * Si registrano per prodotto (servono al magazzino) e non si modificano né si cancellano.
  */
 import type { Riga } from './carrello';
 import { ErroreCassa } from './carrello';
 
-export type TipoMovimento = 'pasto_staff' | 'prova' | 'scarto';
+export type TipoMovimento = 'omaggio' | 'pasto_staff' | 'organizzatore' | 'prova' | 'scarto';
 
 export const TIPI_MOVIMENTO: { tipo: TipoMovimento; nome: string; aiuto: string }[] = [
+  { tipo: 'omaggio', nome: 'Omaggio', aiuto: 'a chi e perché' },
   { tipo: 'pasto_staff', nome: 'Pasto staff', aiuto: 'chi ha mangiato' },
+  { tipo: 'organizzatore', nome: 'Per l\'organizzatore', aiuto: 'per chi: staff, artisti, volontari' },
   { tipo: 'prova', nome: 'Prova / assaggio', aiuto: 'cosa si è provato' },
   { tipo: 'scarto', nome: 'Scarto', aiuto: 'rovinato, caduto, scaduto…' },
 ];
