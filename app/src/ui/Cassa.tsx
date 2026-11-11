@@ -15,6 +15,9 @@ import { useRaccolta } from '../dati/useRaccolta.db';
 import type { Aliquota } from '../fiscal/dco';
 import { archivioInMemoria, archivioSuDispositivo, InvioInSospeso, NonEmesso, type ArchivioInvii } from '../fiscal/emissione';
 import { CassaProva, type Pagamento } from '../fiscal/prova';
+import type { CassaAgenzia } from '../fiscal/cassaAgenzia';
+import { collegaCassaVera, MANTIENI_VIVA_MS } from './agenziaTelefono';
+import { messaggioSicuro } from '../fiscal/portale';
 import { RifiutoAgenzia, SessioneScaduta } from '../fiscal/trasporto';
 import type { Prodotto } from '../foodcost/modello';
 import { euro } from './formato';
@@ -48,7 +51,7 @@ function messaggio(e: unknown): string {
   if (e instanceof ErroreCassa) return e.message;
   if (e instanceof InvioInSospeso) return 'C\'è uno scontrino in sospeso: va verificato (Cassa · prova → Verifica).';
   if (e instanceof NonEmesso) return 'Non emesso: riprova.';
-  if (e instanceof SessioneScaduta) return 'Sessione scaduta: niente emesso.';
+  if (e instanceof SessioneScaduta) return `${e.message} Niente emesso: riprova.`;
   if (e instanceof RifiutoAgenzia) return e.message;
   return (e as Error)?.message || 'Errore imprevisto.';
 }
@@ -62,6 +65,9 @@ const STAMPA_COMANDE = 'vegman-stampa-comande';
 const APERTURA = 'vegman-apertura-cassa';
 const REGISTRO = 'vegman-registro-emergenza';
 const NUMERO_COMANDA = 'vegman-numero-comanda';
+/** «agenzia» = scontrini fiscali veri (solo titolare, solo app Android, attivato all'apertura scrivendo VERO). */
+const MODO = 'vegman-modo-cassa';
+type CassaInUso = CassaProva | CassaAgenzia;
 function leggiRegistroLocale(): Registro { try { return leggiRegistro(leggi(REGISTRO)); } catch { return []; } }
 function leggi(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } }
 function scrivi(k: string, v: string | null) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* solo comodità */ } }
@@ -85,6 +91,11 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
   const [id, setId] = useState(lista[0]?.id ?? '');
   const [nome, setNome] = useState(leggiNomeCassa());
   const [comande, setComande] = useState(leggi(STAMPA_COMANDE) === '1');
+  const [vero, setVero] = useState(leggi(MODO) === 'agenzia' && titolare && NATIVA);
+  function sceltaVero(si: boolean) {
+    if (si && prompt('Da ora gli scontrini saranno VERI, trasmessi all\'Agenzia delle Entrate. Scrivi VERO per confermare.')?.trim().toUpperCase() !== 'VERO') return;
+    setVero(si);
+  }
   const [fondo, setFondo] = useState(() => fondoProposto(leggiApertura(), lista[0]?.id ?? '', leggiNomeCassa()));
   // Cassa già aperta su questo evento con questo nome: si propone il fondo scritto allora (si può correggere).
   const giaAperta = (() => { const a = leggiApertura(); return a && a.evento === id && a.cassa === nomeCassa(nome) ? a : null; })();
@@ -98,6 +109,7 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
     const n = nomeCassa(nome);
     scrivi(NOME_CASSA, n);
     scrivi(STAMPA_COMANDE, comande ? '1' : '0');
+    scrivi(MODO, vero ? 'agenzia' : 'simulatore');
     // Riaprendo la stessa cassa sullo stesso evento (es. dopo «Cambia») resta l'ora di apertura; il fondo si aggiorna.
     const r = apriCassa(leggiApertura(), x, n, f, Date.now());
     scrivi(APERTURA, JSON.stringify(r.apertura));
@@ -126,6 +138,10 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
           {giaAperta && <p class="nota">Questa cassa è già aperta su questo evento dal {new Date(giaAperta.da).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}: riaprendola si continua, col fondo scritto qui.</p>}
           <label class="spunta"><input type="checkbox" checked={comande} onChange={(e) => setComande(e.currentTarget.checked)} /> Stampa le comande per la cucina</label>
           <Stampante />
+          {titolare && NATIVA && (
+            <label class={vero ? 'spunta vero' : 'spunta'}><input type="checkbox" checked={vero} onChange={(e) => sceltaVero(e.currentTarget.checked)} /> Scontrini VERI (Agenzia delle Entrate)</label>
+          )}
+          {titolare && !NATIVA && <p class="nota">Gli scontrini veri si emettono solo dall'app Android: qui la cassa usa il simulatore.</p>}
           <button type="button" class="primario" disabled={!id} onClick={() => apri(id)}>Apri cassa</button>
         </div>
       ) : <p class="nota">Nessun evento aperto.{titolare ? ' Creane uno qui sotto.' : ' Chiedi al titolare di crearlo.'}</p>}
@@ -154,7 +170,10 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
 
 function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firestore; uid: string; titolare: boolean; evento: Evento; onCambia: () => void; onChiusa: (messaggio: string) => void }) {
   const pro = useRaccolta<Prodotto>(db, 'prodotti');
-  const [cassa, setCassa] = useState<CassaProva | null>(null);
+  const [cassa, setCassa] = useState<CassaInUso | null>(null);
+  const modoVero = titolare && NATIVA && leggi(MODO) === 'agenzia';
+  const [collegamento, setCollegamento] = useState<{ stato: 'collego' | 'ok' | 'errore'; testo?: string }>({ stato: modoVero ? 'collego' : 'ok' });
+  const [tentativo, setTentativo] = useState(0);
   const [righe, setRighe] = useState<Riga[]>([]);
   const [t, setT] = useState<Tastierino>(TASTIERINO_VUOTO);
   const [descrizione, setDescrizione] = useState('');
@@ -179,8 +198,9 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
   function setRegistro(r: Registro) { registroRef.current = r; scrivi(REGISTRO, JSON.stringify(r)); setRegistroStato(r); }
   const [senzaRete, setSenzaRete] = useState(false);
   const [voceAMano, setVoceAMano] = useState<number | null>(null);
-  useEffect(() => { if (cassa) cassa.simulatore.fuoriRete = senzaRete; }, [cassa, senzaRete]);
-  const fuoriRete = () => senzaRete || (typeof navigator !== 'undefined' && navigator.onLine === false);
+  useEffect(() => { if (cassa?.ambiente === 'simulatore') cassa.simulatore.fuoriRete = senzaRete; }, [cassa, senzaRete]);
+  // Con l'Agenzia vera non collegata (rete assente, accesso non riuscito) le vendite vanno nel registro di emergenza.
+  const fuoriRete = () => senzaRete || (typeof navigator !== 'undefined' && navigator.onLine === false) || (modoVero && collegamento.stato !== 'ok');
   useEffect(() => {
     const torna = () => { if (daEmettere(registroRef.current, evento.id).length) setAvviso({ testo: '📶 La rete è tornata: premi «Emetti ora» nel registro di emergenza.', errore: false }); };
     window.addEventListener('online', torna);
@@ -207,8 +227,24 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
     return null;
   }
 
-  // Numerazione del simulatore dall'ora (decimi di secondo): riaprendo la cassa o con più telefoni non si ripete.
-  useEffect(() => { void archivio().then((a) => setCassa(new CassaProva(a, () => new Date(), Math.floor(Date.now() / 100) % 1e9))); }, []);
+  useEffect(() => {
+    if (!modoVero) {
+      // Numerazione del simulatore dall'ora (decimi di secondo): riaprendo la cassa o con più telefoni non si ripete.
+      void archivio().then((a) => setCassa(new CassaProva(a, () => new Date(), Math.floor(Date.now() / 100) % 1e9)));
+      return undefined;
+    }
+    let vivo = true;
+    setCollegamento({ stato: 'collego' });
+    collegaCassaVera().then((c) => { if (vivo) { setCassa(c); setCollegamento({ stato: 'ok' }); } })
+      .catch((e: unknown) => { if (vivo) setCollegamento({ stato: 'errore', testo: messaggioSicuro(e) }); });
+    return () => { vivo = false; };
+  }, [tentativo]);
+  // Sessione tenuta sveglia con una lettura leggera; se è scaduta il nuovo accesso parte da solo.
+  useEffect(() => {
+    if (!cassa || cassa.ambiente !== 'agenzia') return undefined;
+    const t = setInterval(() => { cassa.mantieniViva().catch(() => undefined); }, MANTIENI_VIVA_MS);
+    return () => clearInterval(t);
+  }, [cassa]);
 
   // SumUp (solo app Android, se la chiave è impostata): ELET apre SumUp, al ritorno si emette lo scontrino.
   const [conSumUp, setConSumUp] = useState(false);
@@ -248,7 +284,7 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
     }
     try {
       const r = await cassa.vendi(righePerScontrino(p.righe), 'elettronico');
-      const ok = await archivia(scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: p.righe, pagamento: 'elettronico', ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id, ...(codice ? { sumup: codice } : {}) }));
+      const ok = await archivia(scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: p.righe, pagamento: 'elettronico', ambiente: cassa.ambiente, cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id, ...(codice ? { sumup: codice } : {}) }));
       await chiudiPagamento();
       setAttesa(null);
       setEsitoSumUp(null);
@@ -286,8 +322,13 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
     }
   }
 
+  /** Invio al cliente: ricevuta VegMan e, per gli scontrini veri, il PDF dell'Agenzia (il documento fiscale). */
   async function invia(s: ScontrinoArchivio, quando: Date) {
-    try { await condividiScontrino(s, quando); } catch (e) {
+    let pdf: Uint8Array | undefined;
+    if (s.ambiente === 'agenzia' && cassa?.ambiente === 'agenzia') {
+      try { pdf = await cassa.pdf(s.idtrx); } catch (e) { setAvviso({ testo: `PDF dell'Agenzia non scaricato (${messaggio(e)}): mando solo la ricevuta, riprova dopo per il PDF.`, errore: true }); }
+    }
+    try { await condividiScontrino(s, quando, pdf); } catch (e) {
       if (!/cancel/i.test((e as Error)?.message ?? '')) setAvviso({ testo: `Invio non riuscito: ${messaggio(e)}`, errore: true });
     }
   }
@@ -388,7 +429,7 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
     const cera = !!(await cassa.sospeso());
     try {
       const r = await cassa.vendi(righePerScontrino(daEmettere), pagamento);
-      const s = scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: daEmettere, pagamento, ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id });
+      const s = scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: daEmettere, pagamento, ambiente: cassa.ambiente, cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id });
       const ok = await archivia(s);
       svuota();
       const nc = comanda(daEmettere);
@@ -403,7 +444,7 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
   /** Regolarizzazione: emette (o verifica) le voci del registro di questo evento, in ordine, e si ferma al primo intoppo. */
   async function emettiRegistro() {
     if (!cassa || occupato) return;
-    if (fuoriRete()) { setAvviso({ testo: 'Ancora senza rete: riprova quando torna.', errore: true }); return; }
+    if (fuoriRete()) { setAvviso({ testo: modoVero && collegamento.stato !== 'ok' ? 'Agenzia non collegata: premi «Riprova» in cima, poi «Emetti ora».' : 'Ancora senza rete: riprova quando torna.', errore: true }); return; }
     setOccupato(true);
     let emesse = 0;
     try {
@@ -412,7 +453,7 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
         setRegistro(e.registro);
         if (e.tipo === 'ferma') { setVoceAMano(e.aMano ? v.numero : null); setAvviso({ testo: e.messaggio, errore: true }); setOccupato(false); return; }
         emesse++;
-        await archivia(scontrinoVendita({ idtrx: e.idtrx, progressivo: e.progressivo, righe: v.righe, pagamento: v.pagamento, ambiente: 'simulatore', cassa: v.cassa, giorno: oggi(), evento: v.evento, emergenza: v.quando, ...(v.sumup ? { sumup: v.sumup } : {}) }));
+        await archivia(scontrinoVendita({ idtrx: e.idtrx, progressivo: e.progressivo, righe: v.righe, pagamento: v.pagamento, ambiente: cassa.ambiente, cassa: v.cassa, giorno: oggi(), evento: v.evento, emergenza: v.quando, ...(v.sumup ? { sumup: v.sumup } : {}) }));
       }
       setAvviso({ testo: `✅ Registro di emergenza: ${emesse} ${emesse === 1 ? 'scontrino emesso' : 'scontrini emessi'}.`, errore: false });
     } catch (e) { setAvviso({ testo: `${emesse ? `${emesse} emessi, poi: ` : ''}${messaggio(e)}`, errore: true }); }
@@ -433,8 +474,13 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
 
   return (
     <section class="cassa" aria-label="Cassa">
-      <p class="simulatore cassa-banda" role="note"><strong>SIMULATORE</strong> · scontrini di prova, l'Agenzia non viene contattata
-        <label class="spunta"><input type="checkbox" checked={senzaRete} onChange={(e) => setSenzaRete(e.currentTarget.checked)} /> Prova senza rete</label></p>
+      {modoVero ? (
+        <p class="vero cassa-banda" role="note"><strong>AGENZIA VERA</strong> · scontrini fiscali veri ·{' '}
+          {collegamento.stato === 'ok' ? 'collegata ✅' : collegamento.stato === 'collego' ? 'mi collego…' : <>non collegata: le vendite vanno nel registro di emergenza ({collegamento.testo}) <button type="button" class="secondario piccolo" onClick={() => setTentativo((x) => x + 1)}>Riprova</button></>}</p>
+      ) : (
+        <p class="simulatore cassa-banda" role="note"><strong>SIMULATORE</strong> · scontrini di prova, l'Agenzia non viene contattata
+          <label class="spunta"><input type="checkbox" checked={senzaRete} onChange={(e) => setSenzaRete(e.currentTarget.checked)} /> Prova senza rete</label></p>
+      )}
       <RegistroEmergenza registro={registro} evento={evento.id} occupato={occupato} voceAMano={voceAMano} onEmetti={() => void emettiRegistro()} onRisolvi={risolvi} />
       <div class="cassa-evento">
         <span>📍 {descriviEvento(evento)} · <strong>{leggiNomeCassa()}</strong> · fondo {euro((leggiApertura()?.fondo ?? 0) / 100)}{leggi(STAMPA_COMANDE) === '1' ? ' · 🖨 comande' : ''}</span>
@@ -556,7 +602,7 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
         <button type="button" role="tab" aria-selected={pagina === 0} aria-label="Tastierino" onClick={() => vaiA(0)} />
         <button type="button" role="tab" aria-selected={pagina === 1} aria-label="Prodotti" onClick={() => vaiA(1)} />
       </div>
-      <ScontriniEvento db={db} evento={evento.id} cassa={cassa} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} onStampa={(s, q) => void stampaRicevuta(s, q)} />
+      <ScontriniEvento db={db} evento={evento.id} puoAnnullare={(s) => !!cassa && (cassa.ambiente === 'agenzia' ? s.ambiente === 'agenzia' : cassa.scontrini.some((x) => x.idtrx === s.idtrx && !x.annullato))} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} onStampa={(s, q) => void stampaRicevuta(s, q)} />
       {titolare && <MovimentiEvento db={db} evento={evento.id} />}
       {titolare && <QuadratureEvento db={db} evento={evento} />}
     </section>
@@ -564,8 +610,8 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
 }
 
 /** Scontrini dell'evento (tutte le casse): totali al netto degli annulli, annullo, invio. */
-function ScontriniEvento({ db, evento, cassa, occupato, onAnnulla, onInvia, onStampa }: {
-  db: Firestore; evento: string; cassa: CassaProva | null; occupato: boolean; onAnnulla: (s: ScontrinoArchivio) => void; onInvia: (s: ScontrinoArchivio, quando: Date) => void;
+function ScontriniEvento({ db, evento, puoAnnullare, occupato, onAnnulla, onInvia, onStampa }: {
+  db: Firestore; evento: string; puoAnnullare: (s: ScontrinoArchivio) => boolean; occupato: boolean; onAnnulla: (s: ScontrinoArchivio) => void; onInvia: (s: ScontrinoArchivio, quando: Date) => void;
   onStampa: (s: ScontrinoArchivio, quando: Date) => void;
 }) {
   const conStampante = !!stampanteSalvata();
@@ -581,7 +627,7 @@ function ScontriniEvento({ db, evento, cassa, occupato, onAnnulla, onInvia, onSt
       <ul class="persone" aria-label="Scontrini dell'evento">
         {elenco.map((s) => {
           const annullato = s.tipo === 'V' && r.annullatiIdtrx.has(s.idtrx);
-          const annullabile = s.tipo === 'V' && !annullato && !!cassa?.scontrini.some((x) => x.idtrx === s.idtrx && !x.annullato);
+          const annullabile = s.tipo === 'V' && !annullato && puoAnnullare(s);
           return (
             <li key={s.id} class={annullato || s.tipo !== 'V' ? 'disattivo' : ''}>
               <div class="nome"><strong>{s.progressivo}</strong> <small>{ora(s)} · {s.cassa}{s.ambiente === 'simulatore' ? ' · simulatore' : ''}</small></div>

@@ -30,6 +30,7 @@ export function totaleRighe(righe: RigaCassa[]): number {
 }
 
 export class CassaProva {
+  readonly ambiente = 'simulatore' as const;
   readonly simulatore: SimulatoreAgenzia;
   private readonly servizio: ServizioDCO;
   readonly scontrini: ScontrinoProva[] = [];
@@ -77,4 +78,7 @@ export class CassaProva {
 
   sospeso() { return this.archivio.sospeso(); }
   chiudiAMano() { return chiudiSospesoAMano(this.archivio); }
+  /** PDF finto del simulatore (stessa strada di quello vero). */
+  pdf(idtrx: string): Promise<Uint8Array> { return this.servizio.pdf(idtrx); }
+  async mantieniViva(): Promise<void> { await this.servizio.datiFiscali(); }
 }

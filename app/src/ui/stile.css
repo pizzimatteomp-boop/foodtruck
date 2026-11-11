@@ -358,3 +358,6 @@ input.corto { width: 80px; }
 .emergenza summary { font-weight: 700; }
 .cassa-banda .spunta { display: inline-flex; margin-left: 8px; font-weight: 600; }
 .cassa-cliente { width: 100%; font-size: 1.1rem; font-weight: 600; }
+/* Cassa con scontrini veri: banda ben visibile (nero su arancio, combinazione del manuale) */
+.vero.cassa-banda { background: var(--arancio); color: #000; border-radius: 8px; padding: 6px 10px; }
+.spunta.vero { color: var(--lampone); font-weight: 700; }

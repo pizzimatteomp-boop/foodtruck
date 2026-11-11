@@ -20,6 +20,9 @@ describe('cassa di prova (solo simulatore)', () => {
     expect(c.scontrini[0]!.annullato).toBe(true);
     await expect(c.annulla(r.idtrx)).rejects.toThrow(/già annullato/);
     await expect(c.annulla('nessuno')).rejects.toThrow();
+    expect(new TextDecoder().decode(await c.pdf(r.idtrx))).toContain('SIMULATORE');
+    await c.mantieniViva();
+    expect(c.ambiente).toBe('simulatore');
   });
 
   it('numerazione di partenza: riaprendo la cassa i numeri non si ripetono', async () => {
