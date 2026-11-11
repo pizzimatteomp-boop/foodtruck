@@ -54,6 +54,10 @@ describe('stampa termica ESC/POS', () => {
     expect(t).toContain('senza cipolla');
     expect(t).not.toMatch(/EUR|€/);
     expect(testo(comandaTermica({ numero: 1, cassa: 'C', ora: '1', righe: [] }))).not.toContain('senza');
+    // nome per chiamare il cliente, grande (doppia larghezza: 16 caratteri per riga)
+    const n = testo(comandaTermica({ numero: 3, cliente: ' Giulia Bianchi Rossi ', cassa: 'C', ora: '1', righe: [] }));
+    expect(n).toContain('COMANDA 3\nGIULIA BIANCHI\nROSSI\n');
+    expect(testo(comandaTermica({ numero: 3, cliente: '  ', cassa: 'C', ora: '1', righe: [] }))).toContain('COMANDA 3\n');
   });
 
   it('a pezzi per il Bluetooth e scelta della caratteristica', () => {

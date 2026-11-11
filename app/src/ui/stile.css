@@ -357,3 +357,4 @@ input.corto { width: 80px; }
 .emergenza { border: 2px solid var(--arancio); border-radius: 8px; padding: 8px 10px; background: color-mix(in srgb, var(--arancio) 12%, var(--scheda)); }
 .emergenza summary { font-weight: 700; }
 .cassa-banda .spunta { display: inline-flex; margin-left: 8px; font-weight: 600; }
+.cassa-cliente { width: 100%; font-size: 1.1rem; font-weight: 600; }

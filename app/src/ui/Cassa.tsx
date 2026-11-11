@@ -155,6 +155,9 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
   const [righe, setRighe] = useState<Riga[]>([]);
   const [t, setT] = useState<Tastierino>(TASTIERINO_VUOTO);
   const [descrizione, setDescrizione] = useState('');
+  /** Nome per chiamare il cliente, solo sulla comanda (non si salva da nessuna parte). */
+  const [cliente, setCliente] = useState('');
+  const conComande = leggi(STAMPA_COMANDE) === '1';
   const [iva, setIva] = useState<Aliquota>('10');
   const [gruppo, setGruppo] = useState('');
   const [cerca, setCerca] = useState('');
@@ -266,10 +269,12 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
     const numero = Number(leggi(NUMERO_COMANDA) ?? '0') + 1;
     scrivi(NUMERO_COMANDA, String(numero));
     const ora = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-    stampa(comandaTermica({ numero, cassa: leggiNomeCassa(), ora, righe: righeC.map((r) => ({ quantita: r.quantita, descrizione: r.descrizione })), ...(nota ? { nota } : {}) }))
+    const nome = cliente.trim();
+    setCliente('');
+    stampa(comandaTermica({ numero, cassa: leggiNomeCassa(), ora, righe: righeC.map((r) => ({ quantita: r.quantita, descrizione: r.descrizione })), ...(nome ? { cliente: nome } : {}), ...(nota ? { nota } : {}) }))
       .then(() => setAvvisoStampa(''))
       .catch((e: unknown) => setAvvisoStampa(`🖨 Comanda ${numero} non stampata: ${e instanceof ErroreStampa ? e.message : 'errore della stampante'}`));
-    return ` · comanda ${numero}`;
+    return ` · comanda ${numero}${nome ? ` (${nome})` : ''}`;
   }
 
   async function stampaRicevuta(s: ScontrinoArchivio, quando: Date) {
@@ -346,6 +351,7 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
     setT(TASTIERINO_VUOTO);
     setDescrizione('');
     setPannello(false);
+    setCliente('');
     setMotivo('');
     setPersona('');
   }
@@ -479,6 +485,9 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
       )}
       {avvisoStampa && <p class="esito errore" role="alert">{avvisoStampa}</p>}
 
+      {conComande && (
+        <input class="cassa-cliente" aria-label="Nome per la comanda" placeholder="Nome (per chiamare il cliente)" maxLength={30} value={cliente} onInput={(e) => setCliente(e.currentTarget.value)} />
+      )}
       <div class="cassa-descrizione">
         <input aria-label="Descrizione" placeholder="Descrizione" maxLength={60} value={descrizione} onInput={(e) => setDescrizione(e.currentTarget.value)} />
         <select aria-label="IVA" value={iva} onChange={(e) => setIva(e.currentTarget.value as Aliquota)}>

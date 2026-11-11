@@ -632,11 +632,13 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await apri.getByRole('button', { name: 'Apri cassa' }).click();
   await expect(cassa).toContainText('· Furgone');
   await expect(cassa).toContainText('🖨 comande');
+  await cassa.getByLabel('Nome per la comanda').fill('Giulia');
   // C6 · chiusura: vendita 4 € in contanti, nel cassetto se ne contano 50 (fondo) → mancano 4 €
   await cassa.getByRole('tab', { name: 'Prodotti' }).click();
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
   await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
-  await expect(cassa.getByRole('status')).toContainText('4,00 € · contanti · comanda 1');
+  await expect(cassa.getByRole('status')).toContainText('4,00 € · contanti · comanda 1 (Giulia)');
+  await expect(cassa.getByLabel('Nome per la comanda')).toHaveValue('');
   // la stampa non riesce (niente Bluetooth): la vendita resta valida e lo si dice
   await expect(cassa.getByRole('alert')).toContainText('Comanda 1 non stampata');
   await expect(cassa.getByRole('button', { name: '🖨 Stampa' })).toBeVisible();

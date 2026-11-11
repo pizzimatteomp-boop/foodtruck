@@ -96,6 +96,8 @@ export function ricevutaTermica(c: ContenutoRicevuta, logo?: Bitmap): Uint8Array
 
 export interface Comanda {
   numero: number;
+  /** Nome per chiamare il cliente (facoltativo): stampato grande. */
+  cliente?: string;
   cassa: string;
   /** Già nel formato italiano (es. «20:31»). */
   ora: string;
@@ -103,10 +105,12 @@ export interface Comanda {
   nota?: string;
 }
 
-/** Comanda per la cucina: numero grande, prodotti in doppia altezza, niente prezzi. */
+/** Comanda per la cucina: numero e nome del cliente grandi, prodotti in doppia altezza, niente prezzi. */
 export function comandaTermica(c: Comanda): Uint8Array {
-  const o = new Byte().cmd(ESC, 0x40).centro().grassetto(true).dimensione(2).testo(`COMANDA ${c.numero}`)
-    .dimensione(0).grassetto(false).testo(`${c.cassa} - ${c.ora}`).sinistra().linea().dimensione(1);
+  const o = new Byte().cmd(ESC, 0x40).centro().grassetto(true).dimensione(2).testo(`COMANDA ${c.numero}`);
+  const nome = c.cliente?.trim();
+  if (nome) for (const x of aCapo(nome.toUpperCase(), COLONNE / 2)) o.testo(x);
+  o.dimensione(0).grassetto(false).testo(`${c.cassa} - ${c.ora}`).sinistra().linea().dimensione(1);
   for (const r of c.righe) for (const x of aCapo(`${r.quantita} x ${r.descrizione}`, COLONNE)) o.testo(x);
   o.dimensione(0).linea();
   if (c.nota) for (const x of aCapo(c.nota)) o.testo(x);
