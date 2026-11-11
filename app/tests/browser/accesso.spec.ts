@@ -632,6 +632,18 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await apri.getByRole('button', { name: 'Apri cassa' }).click();
   await expect(cassa).toContainText('· Furgone');
   await expect(cassa).toContainText('🖨 comande');
+  await expect(cassa).toContainText('· Furgone · fondo 50,00 €');
+  // riaprendo la stessa cassa il fondo scritto prima è proposto e si può correggere
+  await cassa.getByRole('button', { name: 'Cambia' }).click();
+  await expect(apri.getByLabel('Fondo cassa (contanti all\'inizio)')).toHaveValue('50,00');
+  await expect(apri).toContainText('Questa cassa è già aperta su questo evento');
+  await apri.getByLabel('Fondo cassa (contanti all\'inizio)').fill('60');
+  await apri.getByRole('button', { name: 'Apri cassa' }).click();
+  await expect(cassa).toContainText('fondo 60,00 €');
+  await cassa.getByRole('button', { name: 'Cambia' }).click();
+  await apri.getByLabel('Fondo cassa (contanti all\'inizio)').fill('50');
+  await apri.getByRole('button', { name: 'Apri cassa' }).click();
+  await expect(cassa).toContainText('fondo 50,00 €');
   await cassa.getByLabel('Nome per la comanda').fill('Giulia');
   // C6 · chiusura: vendita 4 € in contanti, nel cassetto se ne contano 50 (fondo) → mancano 4 €
   await cassa.getByRole('tab', { name: 'Prodotti' }).click();

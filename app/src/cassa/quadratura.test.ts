@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { scontrinoAnnullo, scontrinoVendita, type ScontrinoArchivio } from './archivio';
-import { atteso, avvisiQuadrature, centesimi, differenze, msDi, preparaQuadratura, type Apertura } from './quadratura';
+import { apri, atteso, avvisiQuadrature, centesimi, differenze, fondoProposto, msDi, preparaQuadratura, type Apertura } from './quadratura';
 
 const ora = (ms: number) => ({ toMillis: () => ms });
 const v = (id: string, euro: number, pagamento: 'contanti' | 'elettronico', ms: number | null, cassa = 'Cassa 1', evento = 'ev1') => ({
@@ -10,6 +10,17 @@ const v = (id: string, euro: number, pagamento: 'contanti' | 'elettronico', ms: 
 const A: Apertura = { evento: 'ev1', cassa: 'Cassa 1', da: 1000, fondo: 10000 };
 
 describe('quadratura di cassa', () => {
+  it('apertura: riaprendo la stessa cassa resta l\'ora ma il fondo si corregge', () => {
+    expect(apri(null, 'ev1', 'Cassa 1', 5000, 10)).toEqual({ apertura: { evento: 'ev1', cassa: 'Cassa 1', da: 10, fondo: 5000 }, nuova: true });
+    expect(apri(A, 'ev1', 'Cassa 1', 7000, 99)).toEqual({ apertura: { ...A, fondo: 7000 }, nuova: false });
+    expect(apri(A, 'ev2', 'Cassa 1', 0, 99).nuova).toBe(true);
+    expect(apri(A, 'ev1', 'Furgone', 0, 99).nuova).toBe(true);
+    expect(fondoProposto(A, 'ev1', 'Cassa 1')).toBe('100,00');
+    expect(fondoProposto(A, 'ev1', 'Furgone')).toBe('');
+    expect(fondoProposto({ ...A, fondo: 0 }, 'ev1', 'Cassa 1')).toBe('');
+    expect(fondoProposto(null, 'ev1', 'Cassa 1')).toBe('');
+  });
+
   it('importi scritti a mano in centesimi', () => {
     expect(centesimi('120,5', 'x')).toBe(12050);
     expect(centesimi(' 1.234,56 € ', 'x')).toBe(123456);

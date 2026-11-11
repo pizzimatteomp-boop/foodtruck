@@ -36,6 +36,20 @@ export interface Quadratura {
   nota?: string;
 }
 
+/**
+ * Apertura della cassa: nuova se cambia evento o nome della cassa; se è la stessa (es. dopo «Cambia»)
+ * resta l'ora di apertura di prima ma il fondo è quello scritto adesso (correzione).
+ */
+export function apri(prima: Apertura | null, evento: string, cassa: string, fondo: number, adesso: number): { apertura: Apertura; nuova: boolean } {
+  if (prima && prima.evento === evento && prima.cassa === cassa) return { apertura: { ...prima, fondo }, nuova: false };
+  return { apertura: { evento, cassa, da: adesso, fondo }, nuova: true };
+}
+
+/** Fondo da proporre nel campo: quello già scritto se la cassa è già aperta su questo evento. */
+export function fondoProposto(prima: Apertura | null, evento: string, cassa: string): string {
+  return prima && prima.evento === evento && prima.cassa === cassa && prima.fondo ? (prima.fondo / 100).toFixed(2).replace('.', ',') : '';
+}
+
 /** «123,5» o «123.50» → centesimi; vuoto = 0. */
 export function centesimi(testo: string, campo: string): number {
   const t = testo.trim().replace(/\s|€/g, '');

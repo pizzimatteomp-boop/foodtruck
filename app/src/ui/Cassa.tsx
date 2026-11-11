@@ -22,7 +22,7 @@ import { nomeCassa, riepilogo, scontrinoAnnullo, scontrinoVendita, type Scontrin
 import { registraScontrino, useScontriniEvento } from '../cassa/archivio.db';
 import { nomeMovimento, preparaMovimenti, riepilogoMovimenti, TIPI_MOVIMENTO, type TipoMovimento } from '../cassa/movimenti';
 import { registraMovimenti, useMovimentiEvento } from '../cassa/movimenti.db';
-import { centesimi, differenze, preparaQuadratura, type Apertura } from '../cassa/quadratura';
+import { apri as apriCassa, centesimi, differenze, fondoProposto, preparaQuadratura, type Apertura } from '../cassa/quadratura';
 import { annota, daEmettere, descriviVoce, emettiVoce, leggiRegistro, risoltaAMano, testoRegistro, type Registro, type VoceEmergenza } from '../cassa/emergenza';
 import { chiudiEvento, registraQuadratura, useQuadrature } from '../cassa/quadratura.db';
 import { descriviEvento, ErroreEvento, eventiPerCassa, fuoriItalia, preparaEvento, type Evento } from '../eventi/eventi';
@@ -85,7 +85,11 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
   const [id, setId] = useState(lista[0]?.id ?? '');
   const [nome, setNome] = useState(leggiNomeCassa());
   const [comande, setComande] = useState(leggi(STAMPA_COMANDE) === '1');
-  const [fondo, setFondo] = useState('');
+  const [fondo, setFondo] = useState(() => fondoProposto(leggiApertura(), lista[0]?.id ?? '', leggiNomeCassa()));
+  // Cassa già aperta su questo evento con questo nome: si propone il fondo scritto allora (si può correggere).
+  const giaAperta = (() => { const a = leggiApertura(); return a && a.evento === id && a.cassa === nomeCassa(nome) ? a : null; })();
+  const fondoScritto = useRef(false);
+  useEffect(() => { if (!fondoScritto.current) setFondo(fondoProposto(leggiApertura(), id, nomeCassa(nome))); }, [id, nome]);
   const [nuovo, setNuovo] = useState({ nome: '', dal: oggi(), al: '', luogo: '', paese: 'IT' });
   const [errore, setErrore] = useState('');
   const apri = (x: string) => {
@@ -94,12 +98,10 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
     const n = nomeCassa(nome);
     scrivi(NOME_CASSA, n);
     scrivi(STAMPA_COMANDE, comande ? '1' : '0');
-    // Riaprendo la stessa cassa sullo stesso evento (es. dopo «Cambia») resta l'apertura di prima.
-    const a = leggiApertura();
-    if (!a || a.evento !== x || a.cassa !== n) {
-      scrivi(APERTURA, JSON.stringify({ evento: x, cassa: n, da: Date.now(), fondo: f } satisfies Apertura));
-      scrivi(NUMERO_COMANDA, '0');
-    }
+    // Riaprendo la stessa cassa sullo stesso evento (es. dopo «Cambia») resta l'ora di apertura; il fondo si aggiorna.
+    const r = apriCassa(leggiApertura(), x, n, f, Date.now());
+    scrivi(APERTURA, JSON.stringify(r.apertura));
+    if (r.nuova) scrivi(NUMERO_COMANDA, '0');
     onApri(x);
   };
   async function crea(e: Event) {
@@ -120,7 +122,8 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
             </select>
           </label>
           <label class="campo"><span>Nome di questa cassa</span><input value={nome} maxLength={30} onInput={(e) => setNome(e.currentTarget.value)} /></label>
-          <label class="campo"><span>Fondo cassa (contanti all'inizio)</span><input inputMode="decimal" placeholder="0,00" value={fondo} onInput={(e) => setFondo(e.currentTarget.value)} /></label>
+          <label class="campo"><span>Fondo cassa (contanti all'inizio)</span><input inputMode="decimal" placeholder="0,00" value={fondo} onInput={(e) => { fondoScritto.current = true; setFondo(e.currentTarget.value); }} /></label>
+          {giaAperta && <p class="nota">Questa cassa è già aperta su questo evento dal {new Date(giaAperta.da).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}: riaprendola si continua, col fondo scritto qui.</p>}
           <label class="spunta"><input type="checkbox" checked={comande} onChange={(e) => setComande(e.currentTarget.checked)} /> Stampa le comande per la cucina</label>
           <Stampante />
           <button type="button" class="primario" disabled={!id} onClick={() => apri(id)}>Apri cassa</button>
@@ -434,7 +437,7 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
         <label class="spunta"><input type="checkbox" checked={senzaRete} onChange={(e) => setSenzaRete(e.currentTarget.checked)} /> Prova senza rete</label></p>
       <RegistroEmergenza registro={registro} evento={evento.id} occupato={occupato} voceAMano={voceAMano} onEmetti={() => void emettiRegistro()} onRisolvi={risolvi} />
       <div class="cassa-evento">
-        <span>📍 {descriviEvento(evento)} · <strong>{leggiNomeCassa()}</strong>{leggi(STAMPA_COMANDE) === '1' ? ' · 🖨 comande' : ''}</span>
+        <span>📍 {descriviEvento(evento)} · <strong>{leggiNomeCassa()}</strong> · fondo {euro((leggiApertura()?.fondo ?? 0) / 100)}{leggi(STAMPA_COMANDE) === '1' ? ' · 🖨 comande' : ''}</span>
         <div class="comandi">
           <button type="button" class="secondario piccolo" onClick={onCambia}>Cambia</button>
           <button type="button" class="secondario piccolo" aria-expanded={chiusura} onClick={() => setChiusura(!chiusura)}>Chiudi cassa</button>
