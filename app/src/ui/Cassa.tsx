@@ -29,6 +29,10 @@ import { descriviEvento, ErroreEvento, eventiPerCassa, fuoriItalia, preparaEvent
 import { creaEvento } from '../eventi/eventi.db';
 import { oggi } from '../dati/oggi';
 import { condividiScontrino } from './condividi';
+import { comandaTermica, ricevutaTermica } from '../stampa/escpos';
+import { contenutoRicevuta } from '../cassa/ricevuta';
+import { collegaStampante, dimenticaStampante, ErroreStampa, stampa, stampanteSalvata } from './stampanteBluetooth';
+import { logoTermico } from './logoTermico';
 import { spiegaCausa, type EsitoSumUp } from '../cassa/sumup';
 import { apriSumUp, chiaveSumUp, chiudiPagamento, esitoSalvato, pagamentoInCorso, quandoTornaSumUp, type PagamentoInCorso } from './sumupTelefono';
 
@@ -57,6 +61,7 @@ const EVENTO_CASSA = 'vegman-evento-cassa';
 const STAMPA_COMANDE = 'vegman-stampa-comande';
 const APERTURA = 'vegman-apertura-cassa';
 const REGISTRO = 'vegman-registro-emergenza';
+const NUMERO_COMANDA = 'vegman-numero-comanda';
 function leggiRegistroLocale(): Registro { try { return leggiRegistro(leggi(REGISTRO)); } catch { return []; } }
 function leggi(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } }
 function scrivi(k: string, v: string | null) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* solo comodità */ } }
@@ -91,7 +96,10 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
     scrivi(STAMPA_COMANDE, comande ? '1' : '0');
     // Riaprendo la stessa cassa sullo stesso evento (es. dopo «Cambia») resta l'apertura di prima.
     const a = leggiApertura();
-    if (!a || a.evento !== x || a.cassa !== n) scrivi(APERTURA, JSON.stringify({ evento: x, cassa: n, da: Date.now(), fondo: f } satisfies Apertura));
+    if (!a || a.evento !== x || a.cassa !== n) {
+      scrivi(APERTURA, JSON.stringify({ evento: x, cassa: n, da: Date.now(), fondo: f } satisfies Apertura));
+      scrivi(NUMERO_COMANDA, '0');
+    }
     onApri(x);
   };
   async function crea(e: Event) {
@@ -114,6 +122,7 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
           <label class="campo"><span>Nome di questa cassa</span><input value={nome} maxLength={30} onInput={(e) => setNome(e.currentTarget.value)} /></label>
           <label class="campo"><span>Fondo cassa (contanti all'inizio)</span><input inputMode="decimal" placeholder="0,00" value={fondo} onInput={(e) => setFondo(e.currentTarget.value)} /></label>
           <label class="spunta"><input type="checkbox" checked={comande} onChange={(e) => setComande(e.currentTarget.checked)} /> Stampa le comande per la cucina</label>
+          <Stampante />
           <button type="button" class="primario" disabled={!id} onClick={() => apri(id)}>Apri cassa</button>
         </div>
       ) : <p class="nota">Nessun evento aperto.{titolare ? ' Creane uno qui sotto.' : ' Chiedi al titolare di crearlo.'}</p>}
@@ -181,7 +190,8 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
     const n = r[r.length - 1]!.numero;
     setRegistro(daVerificare ? r.map((v) => (v.numero === n ? { ...v, daVerificare: true as const } : v)) : r);
     setUltimo(null);
-    setAvviso({ testo: `📒 Agenzia non raggiungibile: vendita di ${euro(totaleCentesimi(righeVoce) / 100)} annotata nel registro di emergenza (n. ${n}). ${daVerificare ? 'Si verifica' : 'Lo scontrino si emette'} appena torna la rete.`, errore: false });
+    const nc = comanda(righeVoce);
+    setAvviso({ testo: `📒 Agenzia non raggiungibile: vendita di ${euro(totaleCentesimi(righeVoce) / 100)} annotata nel registro di emergenza (n. ${n}). ${daVerificare ? 'Si verifica' : 'Lo scontrino si emette'} appena torna la rete.${nc}`, errore: false });
   }
 
   /** Dopo un errore d'invio: va nel registro? (mai se lo scontrino potrebbe essere già partito senza saperlo, salvo «da verificare»). */
@@ -236,7 +246,8 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
       await chiudiPagamento();
       setAttesa(null);
       setEsitoSumUp(null);
-      if (ok) setAvviso({ testo: `✅ ${r.progressivo} · ${euro(p.centesimi / 100)} · carta${codice ? ` (SumUp ${codice})` : ''}`, errore: false });
+      const nc = comanda(p.righe);
+      if (ok) setAvviso({ testo: `✅ ${r.progressivo} · ${euro(p.centesimi / 100)} · carta${codice ? ` (SumUp ${codice})` : ''}${nc}`, errore: false });
     } catch (e) {
       const em = perEmergenza(e, cera);
       if (em) { inEmergenza(p.righe, 'elettronico', em.motivo, em.daVerificare, codice || undefined); await chiudiCarta(); setOccupato(false); return; }
@@ -247,6 +258,25 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
   }
 
   const [ultimo, setUltimo] = useState<ScontrinoArchivio | null>(null);
+  const [avvisoStampa, setAvvisoStampa] = useState('');
+
+  /** Comanda per la cucina (se attiva all'apertura e c'è una stampante): numero progressivo di questa apertura. Mai bloccante. */
+  function comanda(righeC: readonly { quantita: number; descrizione: string }[], nota?: string): string {
+    if (leggi(STAMPA_COMANDE) !== '1' || !stampanteSalvata()) return '';
+    const numero = Number(leggi(NUMERO_COMANDA) ?? '0') + 1;
+    scrivi(NUMERO_COMANDA, String(numero));
+    const ora = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    stampa(comandaTermica({ numero, cassa: leggiNomeCassa(), ora, righe: righeC.map((r) => ({ quantita: r.quantita, descrizione: r.descrizione })), ...(nota ? { nota } : {}) }))
+      .then(() => setAvvisoStampa(''))
+      .catch((e: unknown) => setAvvisoStampa(`🖨 Comanda ${numero} non stampata: ${e instanceof ErroreStampa ? e.message : 'errore della stampante'}`));
+    return ` · comanda ${numero}`;
+  }
+
+  async function stampaRicevuta(s: ScontrinoArchivio, quando: Date) {
+    try { await stampa(ricevutaTermica(contenutoRicevuta(s, quando), logoTermico() ?? undefined)); setAvvisoStampa(''); } catch (e) {
+      setAvvisoStampa(`🖨 Ricevuta non stampata: ${e instanceof ErroreStampa ? e.message : 'errore della stampante'}`);
+    }
+  }
 
   async function invia(s: ScontrinoArchivio, quando: Date) {
     try { await condividiScontrino(s, quando); } catch (e) {
@@ -327,7 +357,8 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
     try {
       const m = preparaMovimenti(righe, { tipo, motivo, persona, evento: evento.id, cassa: leggiNomeCassa(), giorno: oggi(), gruppo: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}` });
       await registraMovimenti(db, uid, m);
-      setAvviso({ testo: `✅ ${nomeMovimento(tipo)}: ${m.reduce((x, r) => x + r.quantita, 0)} pz registrati (nessuno scontrino).`, errore: false });
+      const nc = comanda(m, nomeMovimento(tipo));
+      setAvviso({ testo: `✅ ${nomeMovimento(tipo)}: ${m.reduce((x, r) => x + r.quantita, 0)} pz registrati (nessuno scontrino).${nc}`, errore: false });
       setUltimo(null);
       svuota();
     } catch (e) {
@@ -351,7 +382,8 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
       const s = scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: daEmettere, pagamento, ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id });
       const ok = await archivia(s);
       svuota();
-      if (ok) setAvviso({ testo: `✅ ${r.progressivo} · ${euro(s.totale)} · ${pagamento === 'contanti' ? 'contanti' : 'carta'}${r.stato === 'recuperato' ? ' (recuperato)' : ''}`, errore: false });
+      const nc = comanda(daEmettere);
+      if (ok) setAvviso({ testo: `✅ ${r.progressivo} · ${euro(s.totale)} · ${pagamento === 'contanti' ? 'contanti' : 'carta'}${r.stato === 'recuperato' ? ' (recuperato)' : ''}${nc}`, errore: false });
     } catch (e) {
       const em = perEmergenza(e, cera);
       if (em) { inEmergenza(daEmettere, pagamento, em.motivo, em.daVerificare); svuota(); } else setAvviso({ testo: messaggio(e), errore: true });
@@ -440,8 +472,12 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
       )}
       {avviso && <p role={avviso.errore ? 'alert' : 'status'} class={avviso.errore ? 'esito errore' : 'esito'}>{avviso.testo}</p>}
       {ultimo && !avviso?.errore && (
-        <button type="button" class="secondario invia" onClick={() => void invia(ultimo, new Date())}>📤 Invia {ultimo.tipo === 'A' ? 'annullo' : 'scontrino'} {ultimo.progressivo} (WhatsApp, email…)</button>
+        <div class="comandi">
+          <button type="button" class="secondario invia" onClick={() => void invia(ultimo, new Date())}>📤 Invia {ultimo.tipo === 'A' ? 'annullo' : 'scontrino'} {ultimo.progressivo} (WhatsApp, email…)</button>
+          {stampanteSalvata() && <button type="button" class="secondario" onClick={() => void stampaRicevuta(ultimo, new Date())}>🖨 Stampa</button>}
+        </div>
       )}
+      {avvisoStampa && <p class="esito errore" role="alert">{avvisoStampa}</p>}
 
       <div class="cassa-descrizione">
         <input aria-label="Descrizione" placeholder="Descrizione" maxLength={60} value={descrizione} onInput={(e) => setDescrizione(e.currentTarget.value)} />
@@ -508,7 +544,7 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
         <button type="button" role="tab" aria-selected={pagina === 0} aria-label="Tastierino" onClick={() => vaiA(0)} />
         <button type="button" role="tab" aria-selected={pagina === 1} aria-label="Prodotti" onClick={() => vaiA(1)} />
       </div>
-      <ScontriniEvento db={db} evento={evento.id} cassa={cassa} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} />
+      <ScontriniEvento db={db} evento={evento.id} cassa={cassa} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} onStampa={(s, q) => void stampaRicevuta(s, q)} />
       {titolare && <MovimentiEvento db={db} evento={evento.id} />}
       {titolare && <QuadratureEvento db={db} evento={evento} />}
     </section>
@@ -516,9 +552,11 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
 }
 
 /** Scontrini dell'evento (tutte le casse): totali al netto degli annulli, annullo, invio. */
-function ScontriniEvento({ db, evento, cassa, occupato, onAnnulla, onInvia }: {
+function ScontriniEvento({ db, evento, cassa, occupato, onAnnulla, onInvia, onStampa }: {
   db: Firestore; evento: string; cassa: CassaProva | null; occupato: boolean; onAnnulla: (s: ScontrinoArchivio) => void; onInvia: (s: ScontrinoArchivio, quando: Date) => void;
+  onStampa: (s: ScontrinoArchivio, quando: Date) => void;
 }) {
+  const conStampante = !!stampanteSalvata();
   const sc = useScontriniEvento(db, evento);
   const r = riepilogo(sc.dati);
   const data = (x: unknown) => (x as { creatoIl?: { toDate?: () => Date } }).creatoIl?.toDate?.();
@@ -541,6 +579,7 @@ function ScontriniEvento({ db, evento, cassa, occupato, onAnnulla, onInvia }: {
               </small>
               <div class="comandi">
                 <button type="button" class="secondario piccolo" onClick={() => onInvia(s, data(s) ?? new Date())}>📤 Invia</button>
+                {conStampante && <button type="button" class="secondario piccolo" aria-label={`Stampa ${s.progressivo}`} onClick={() => onStampa(s, data(s) ?? new Date())}>🖨</button>}
                 {annullabile && <button type="button" class="secondario pericolo piccolo" disabled={occupato} onClick={() => onAnnulla(s)}>Annulla</button>}
               </div>
             </li>
@@ -691,5 +730,33 @@ function RegistroEmergenza({ registro, evento, occupato, voceAMano, onEmetti, on
         {copiato && <small>{copiato}</small>}
       </div>
     </details>
+  );
+}
+
+/** Stampante Bluetooth di questo telefono: facoltativa (comande per la cucina e ricevute di cortesia). */
+function Stampante() {
+  const [nome, setNome] = useState(stampanteSalvata());
+  const [stato, setStato] = useState('');
+  async function collega() {
+    setStato('Cerco le stampanti…');
+    try { setNome(await collegaStampante()); setStato(''); } catch (e) { setStato(e instanceof ErroreStampa ? e.message : (e as Error)?.message || 'Collegamento non riuscito.'); }
+  }
+  async function prova() {
+    setStato('Stampo una prova…');
+    try {
+      await stampa(comandaTermica({ numero: 0, cassa: 'PROVA', ora: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }), righe: [{ quantita: 1, descrizione: 'Stampante pronta' }] }));
+      setStato('Prova stampata.');
+    } catch (e) { setStato(e instanceof ErroreStampa ? e.message : 'Stampa non riuscita.'); }
+  }
+  return (
+    <div class="campo" role="group" aria-label="Stampante">
+      <span>🖨 Stampante Bluetooth (facoltativa): <strong>{nome ?? 'nessuna'}</strong></span>
+      <div class="comandi">
+        <button type="button" class="secondario piccolo" onClick={() => void collega()}>{nome ? 'Cambia stampante' : 'Collega stampante'}</button>
+        {nome && <button type="button" class="secondario piccolo" onClick={() => void prova()}>Prova</button>}
+        {nome && <button type="button" class="secondario piccolo" onClick={() => { void dimenticaStampante(); setNome(null); setStato(''); }}>Dimentica</button>}
+      </div>
+      {stato && <small role="status">{stato}</small>}
+    </div>
   );
 }

@@ -620,18 +620,26 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await expect(cassa.getByRole('status')).toContainText('Registro di emergenza: 1 scontrino emesso');
   await expect(registro).toContainText('tutto emesso');
   await expect(registro).toContainText(/emesso DCW2026\/9999-\d+/);
+  // Stampante Bluetooth scelta in passato (qui finta: nel browser di prova non c'è Bluetooth) e comande attive
+  await page.evaluate(() => localStorage.setItem('vegman-stampante', JSON.stringify({ id: 'x', nome: 'Stampante finta', servizio: 's', caratteristica: 'c', senzaRisposta: false })));
   // cambia: si torna all'apertura, l'evento creato è proposto
   await cassa.getByRole('button', { name: 'Cambia' }).click();
   await expect(apri.getByLabel('Evento', { exact: true })).toContainText('Sagra di prova');
+  await expect(apri.getByRole('group', { name: 'Stampante' })).toContainText('Stampante finta');
+  await apri.getByLabel('Stampa le comande per la cucina').check();
   await apri.getByLabel('Nome di questa cassa').fill('Furgone');
   await apri.getByLabel('Fondo cassa (contanti all\'inizio)').fill('50');
   await apri.getByRole('button', { name: 'Apri cassa' }).click();
   await expect(cassa).toContainText('· Furgone');
+  await expect(cassa).toContainText('🖨 comande');
   // C6 · chiusura: vendita 4 € in contanti, nel cassetto se ne contano 50 (fondo) → mancano 4 €
   await cassa.getByRole('tab', { name: 'Prodotti' }).click();
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
   await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
-  await expect(cassa.getByRole('status')).toContainText('4,00 € · contanti');
+  await expect(cassa.getByRole('status')).toContainText('4,00 € · contanti · comanda 1');
+  // la stampa non riesce (niente Bluetooth): la vendita resta valida e lo si dice
+  await expect(cassa.getByRole('alert')).toContainText('Comanda 1 non stampata');
+  await expect(cassa.getByRole('button', { name: '🖨 Stampa' })).toBeVisible();
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
   await cassa.getByRole('button', { name: 'Chiudi cassa' }).click();
   const chiusura = cassa.getByRole('form', { name: 'Chiusura cassa' });
