@@ -23,6 +23,8 @@ export interface ScontrinoArchivio {
   sumup?: string;
   progressivoOriginale?: string;
   idtrxOriginale?: string;
+  /** Emesso dopo, dal registro di emergenza: millisecondi della vendita vera. */
+  emergenza?: number;
 }
 
 /** Evento provvisorio finché non c'è la scelta dell'evento (passo C3). */
@@ -32,7 +34,7 @@ export const idScontrino = (s: Pick<ScontrinoArchivio, 'ambiente' | 'idtrx'>) =>
 
 export function scontrinoVendita(a: {
   idtrx: string; progressivo: string; righe: readonly Riga[]; pagamento: 'contanti' | 'elettronico'; ambiente: Ambiente;
-  cassa: string; giorno: string; evento?: string; sumup?: string;
+  cassa: string; giorno: string; evento?: string; sumup?: string; emergenza?: number;
 }): ScontrinoArchivio {
   const s: ScontrinoArchivio = {
     tipo: 'V', idtrx: a.idtrx, progressivo: a.progressivo, evento: a.evento ?? SENZA_EVENTO,
@@ -41,6 +43,7 @@ export function scontrinoVendita(a: {
     righe: a.righe.map((r) => ({ descrizione: r.descrizione, quantita: r.quantita, prezzo: r.centesimi / 100, aliquota: r.aliquota, ...(r.prodotto ? { prodotto: r.prodotto } : {}) })),
   };
   if (a.sumup) s.sumup = a.sumup;
+  if (a.emergenza) s.emergenza = a.emergenza;
   return s;
 }
 

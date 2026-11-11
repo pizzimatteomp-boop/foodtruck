@@ -29,10 +29,14 @@ export class SimulatoreAgenzia implements Trasporto {
   /** Sessione valida: se false, ogni chiamata rimanda al login. */
   sessioneValida = true;
 
+  /** Rete assente: ogni chiamata fallisce finché non torna (prova del registro di emergenza). */
+  fuoriRete = false;
+
   /** Il prossimo invio (o i prossimi) avranno questi guasti, in ordine. */
   guasta(...g: Guasto[]) { this.guasti.push(...g); }
 
   async invia(r: Richiesta): Promise<Risposta> {
+    if (this.fuoriRete) throw new ErroreRete('Rete assente (simulata).');
     const g = this.guasti.shift();
     if (g === 'rete-prima') throw new ErroreRete('Rete assente (simulata).');
     if (g === 'sessione' || !this.sessioneValida) {

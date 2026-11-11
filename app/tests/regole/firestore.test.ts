@@ -228,6 +228,12 @@ describe('scontrini: si registrano e basta', () => {
     await assertFails(registra('anna', { idtrx: '14', sumup: '' }));
   });
 
+  it('scontrino emesso dopo dal registro di emergenza: con l\'ora della vendita', async () => {
+    await assertSucceeds(registra('anna', { idtrx: '40', emergenza: 1762890000000 }));
+    await assertFails(registra('anna', { idtrx: '41', emergenza: 'ieri' }));
+    await assertFails(registra('anna', { idtrx: '42', tipo: 'A', progressivoOriginale: 'P1', pagamento: 'nessuno', emergenza: 1762890000000 }));
+  });
+
   it('il team non registra né legge scontrini', async () => {
     await assertFails(registra('luca', { idtrx: '15' }));
     await assertFails(getDoc(doc(db('luca'), 'scontrini', 's1')));

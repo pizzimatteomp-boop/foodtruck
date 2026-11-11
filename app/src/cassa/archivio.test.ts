@@ -17,6 +17,7 @@ describe('archivio scontrini', () => {
     });
     expect(idScontrino(s)).toBe('simulatore-1');
     expect(scontrinoVendita({ idtrx: '2', progressivo: 'P2', righe: RIGHE, pagamento: 'contanti', ambiente: 'agenzia', cassa: 'C', giorno: '2026-11-10', evento: 'ev1' })).not.toHaveProperty('sumup');
+    expect(scontrinoVendita({ idtrx: '3', progressivo: 'P3', righe: RIGHE, pagamento: 'contanti', ambiente: 'agenzia', cassa: 'C', giorno: '2026-11-10', emergenza: 1234 }).emergenza).toBe(1234);
   });
 
   it('annullo: cita l\'originale, stesso importo, nessun pagamento', () => {

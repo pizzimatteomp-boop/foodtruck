@@ -352,3 +352,8 @@ input.corto { width: 80px; }
 .cassa-evento { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 8px; font-size: 0.9rem; }
 .cassa-evento .comandi { display: flex; flex-wrap: nowrap; gap: 6px; margin-left: auto; }
 .spunta { display: flex; gap: 8px; align-items: center; }
+
+/* Registro di emergenza (cassa senza rete) */
+.emergenza { border: 2px solid var(--arancio); border-radius: 8px; padding: 8px 10px; background: color-mix(in srgb, var(--arancio) 12%, var(--scheda)); }
+.emergenza summary { font-weight: 700; }
+.cassa-banda .spunta { display: inline-flex; margin-left: 8px; font-weight: 600; }

@@ -160,7 +160,7 @@ service cloud.firestore {
       // Id = ambiente + idtrx: lo stesso scontrino non si registra due volte (la creazione di un id esistente è rifiutata).
       allow create: if cassa() && firmato()
         && nuovo().keys().hasOnly(['tipo', 'idtrx', 'progressivo', 'evento', 'totale', 'creatoDa', 'creatoIl', 'ambiente',
-             'cassa', 'pagamento', 'righe', 'giorno', 'sumup', 'progressivoOriginale', 'idtrxOriginale'])
+             'cassa', 'pagamento', 'righe', 'giorno', 'sumup', 'progressivoOriginale', 'idtrxOriginale', 'emergenza'])
         && nuovo().tipo in ['V', 'A', 'R']
         && testo(nuovo().idtrx)
         && testo(nuovo().progressivo)
@@ -173,6 +173,8 @@ service cloud.firestore {
         && nuovo().righe is list && nuovo().righe.size() <= 100
         && nuovo().giorno is string && nuovo().giorno.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
         && (!('sumup' in nuovo()) || testo(nuovo().sumup))
+        // Emesso dopo dal registro di emergenza: ora della vendita vera (millisecondi).
+        && (!('emergenza' in nuovo()) || (nuovo().tipo == 'V' && nuovo().emergenza is int && nuovo().emergenza > 0))
         && (nuovo().tipo == 'V' || testo(nuovo().progressivoOriginale));
       allow update, delete: if false;
     }

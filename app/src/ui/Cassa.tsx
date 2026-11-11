@@ -23,6 +23,7 @@ import { registraScontrino, useScontriniEvento } from '../cassa/archivio.db';
 import { nomeMovimento, preparaMovimenti, riepilogoMovimenti, TIPI_MOVIMENTO, type TipoMovimento } from '../cassa/movimenti';
 import { registraMovimenti, useMovimentiEvento } from '../cassa/movimenti.db';
 import { centesimi, differenze, preparaQuadratura, type Apertura } from '../cassa/quadratura';
+import { annota, daEmettere, descriviVoce, emettiVoce, leggiRegistro, risoltaAMano, testoRegistro, type Registro, type VoceEmergenza } from '../cassa/emergenza';
 import { chiudiEvento, registraQuadratura, useQuadrature } from '../cassa/quadratura.db';
 import { descriviEvento, ErroreEvento, eventiPerCassa, fuoriItalia, preparaEvento, type Evento } from '../eventi/eventi';
 import { creaEvento } from '../eventi/eventi.db';
@@ -55,6 +56,8 @@ const NOME_CASSA = 'vegman-nome-cassa';
 const EVENTO_CASSA = 'vegman-evento-cassa';
 const STAMPA_COMANDE = 'vegman-stampa-comande';
 const APERTURA = 'vegman-apertura-cassa';
+const REGISTRO = 'vegman-registro-emergenza';
+function leggiRegistroLocale(): Registro { try { return leggiRegistro(leggi(REGISTRO)); } catch { return []; } }
 function leggi(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } }
 function scrivi(k: string, v: string | null) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* solo comodità */ } }
 function leggiNomeCassa(): string { return nomeCassa(leggi(NOME_CASSA)); }
@@ -155,6 +158,38 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
   const [motivo, setMotivo] = useState('');
   const [persona, setPersona] = useState('');
   const [chiusura, setChiusura] = useState(false);
+  // Registro di emergenza (C7): sul telefono, resta anche chiudendo l'app.
+  const [registro, setRegistroStato] = useState<Registro>(leggiRegistroLocale);
+  const registroRef = useRef(registro);
+  function setRegistro(r: Registro) { registroRef.current = r; scrivi(REGISTRO, JSON.stringify(r)); setRegistroStato(r); }
+  const [senzaRete, setSenzaRete] = useState(false);
+  const [voceAMano, setVoceAMano] = useState<number | null>(null);
+  useEffect(() => { if (cassa) cassa.simulatore.fuoriRete = senzaRete; }, [cassa, senzaRete]);
+  const fuoriRete = () => senzaRete || (typeof navigator !== 'undefined' && navigator.onLine === false);
+  useEffect(() => {
+    const torna = () => { if (daEmettere(registroRef.current, evento.id).length) setAvviso({ testo: '📶 La rete è tornata: premi «Emetti ora» nel registro di emergenza.', errore: false }); };
+    window.addEventListener('online', torna);
+    return () => window.removeEventListener('online', torna);
+  }, [evento.id]);
+
+  /**
+   * Agenzia non raggiungibile: la vendita va nel registro di emergenza. «daVerificare» se l'invio è partito
+   * e la risposta si è persa senza poterla verificare (forse è emessa: si verifica prima di riemetterla).
+   */
+  function inEmergenza(righeVoce: Riga[], pagamento: 'contanti' | 'elettronico', motivo: string, daVerificare: boolean, sumup?: string) {
+    const r = annota(registroRef.current, { quando: Date.now(), evento: evento.id, cassa: leggiNomeCassa(), righe: righeVoce, pagamento, motivo, ...(sumup ? { sumup } : {}) });
+    const n = r[r.length - 1]!.numero;
+    setRegistro(daVerificare ? r.map((v) => (v.numero === n ? { ...v, daVerificare: true as const } : v)) : r);
+    setUltimo(null);
+    setAvviso({ testo: `📒 Agenzia non raggiungibile: vendita di ${euro(totaleCentesimi(righeVoce) / 100)} annotata nel registro di emergenza (n. ${n}). ${daVerificare ? 'Si verifica' : 'Lo scontrino si emette'} appena torna la rete.`, errore: false });
+  }
+
+  /** Dopo un errore d'invio: va nel registro? (mai se lo scontrino potrebbe essere già partito senza saperlo, salvo «da verificare»). */
+  function perEmergenza(e: unknown, cera: boolean): { motivo: string; daVerificare: boolean } | null {
+    if (e instanceof NonEmesso) return { motivo: 'Agenzia non raggiungibile', daVerificare: false };
+    if (e instanceof InvioInSospeso) return cera ? { motivo: 'Scontrino precedente da verificare', daVerificare: false } : { motivo: 'Risposta persa durante l\'invio', daVerificare: true };
+    return null;
+  }
 
   // Numerazione del simulatore dall'ora (decimi di secondo): riaprendo la cassa o con più telefoni non si ripete.
   useEffect(() => { void archivio().then((a) => setCassa(new CassaProva(a, () => new Date(), Math.floor(Date.now() / 100) % 1e9))); }, []);
@@ -187,6 +222,14 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
   async function emettiDopoCarta(p: PagamentoInCorso, codice: string) {
     if (!cassa) return;
     setOccupato(true);
+    const cera = !!(await cassa.sospeso());
+    const chiudiCarta = async () => { await chiudiPagamento(); setAttesa(null); setEsitoSumUp(null); };
+    if (fuoriRete()) {
+      inEmergenza(p.righe, 'elettronico', 'Rete assente', false, codice || undefined);
+      await chiudiCarta();
+      setOccupato(false);
+      return;
+    }
     try {
       const r = await cassa.vendi(righePerScontrino(p.righe), 'elettronico');
       const ok = await archivia(scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: p.righe, pagamento: 'elettronico', ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id, ...(codice ? { sumup: codice } : {}) }));
@@ -195,6 +238,8 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
       setEsitoSumUp(null);
       if (ok) setAvviso({ testo: `✅ ${r.progressivo} · ${euro(p.centesimi / 100)} · carta${codice ? ` (SumUp ${codice})` : ''}`, errore: false });
     } catch (e) {
+      const em = perEmergenza(e, cera);
+      if (em) { inEmergenza(p.righe, 'elettronico', em.motivo, em.daVerificare, codice || undefined); await chiudiCarta(); setOccupato(false); return; }
       // Pagamento incassato ma scontrino non emesso: il pagamento resta in sospeso finché non si emette.
       setAvviso({ testo: `Carta pagata ma scontrino NON emesso (${messaggio(e)}): premi «Emetti scontrino».`, errore: true });
     }
@@ -298,15 +343,43 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
     if (fuoriItalia(evento)) { setAvviso({ testo: `Evento fuori Italia (${evento.paese}): niente scontrino fiscale italiano. La ricevuta del luogo va definita col commercialista.`, errore: true }); return; }
     if (attesa) { setAvviso({ testo: 'C\'è un pagamento con carta in corso: chiudilo prima.', errore: true }); return; }
     if (pagamento === 'elettronico' && NATIVA && conSumUp) { await avviaSumUp(daEmettere); return; }
+    if (fuoriRete()) { inEmergenza(daEmettere, pagamento, 'Rete assente', false); svuota(); return; }
     setOccupato(true);
+    const cera = !!(await cassa.sospeso());
     try {
       const r = await cassa.vendi(righePerScontrino(daEmettere), pagamento);
       const s = scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: daEmettere, pagamento, ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id });
       const ok = await archivia(s);
       svuota();
       if (ok) setAvviso({ testo: `✅ ${r.progressivo} · ${euro(s.totale)} · ${pagamento === 'contanti' ? 'contanti' : 'carta'}${r.stato === 'recuperato' ? ' (recuperato)' : ''}`, errore: false });
-    } catch (e) { setAvviso({ testo: messaggio(e), errore: true }); }
+    } catch (e) {
+      const em = perEmergenza(e, cera);
+      if (em) { inEmergenza(daEmettere, pagamento, em.motivo, em.daVerificare); svuota(); } else setAvviso({ testo: messaggio(e), errore: true });
+    }
     setOccupato(false);
+  }
+
+  /** Regolarizzazione: emette (o verifica) le voci del registro di questo evento, in ordine, e si ferma al primo intoppo. */
+  async function emettiRegistro() {
+    if (!cassa || occupato) return;
+    if (fuoriRete()) { setAvviso({ testo: 'Ancora senza rete: riprova quando torna.', errore: true }); return; }
+    setOccupato(true);
+    let emesse = 0;
+    try {
+      for (const v of daEmettere(registroRef.current, evento.id).sort((a, b) => a.numero - b.numero)) {
+        const e = await emettiVoce(registroRef.current, v.numero, cassa, Date.now());
+        setRegistro(e.registro);
+        if (e.tipo === 'ferma') { setVoceAMano(e.aMano ? v.numero : null); setAvviso({ testo: e.messaggio, errore: true }); setOccupato(false); return; }
+        emesse++;
+        await archivia(scontrinoVendita({ idtrx: e.idtrx, progressivo: e.progressivo, righe: v.righe, pagamento: v.pagamento, ambiente: 'simulatore', cassa: v.cassa, giorno: oggi(), evento: v.evento, emergenza: v.quando, ...(v.sumup ? { sumup: v.sumup } : {}) }));
+      }
+      setAvviso({ testo: `✅ Registro di emergenza: ${emesse} ${emesse === 1 ? 'scontrino emesso' : 'scontrini emessi'}.`, errore: false });
+    } catch (e) { setAvviso({ testo: `${emesse ? `${emesse} emessi, poi: ` : ''}${messaggio(e)}`, errore: true }); }
+    setOccupato(false);
+  }
+
+  function risolvi(numero: number, trovata: boolean) {
+    try { setRegistro(risoltaAMano(registroRef.current, numero, trovata, Date.now())); setVoceAMano(null); setAvviso({ testo: trovata ? `Vendita n. ${numero}: segnata come già emessa.` : `Vendita n. ${numero}: da emettere (premi «Emetti ora»).`, errore: false }); } catch (e) { setAvviso({ testo: messaggio(e), errore: true }); }
   }
 
   function vaiA(n: number) {
@@ -319,7 +392,9 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
 
   return (
     <section class="cassa" aria-label="Cassa">
-      <p class="simulatore cassa-banda" role="note"><strong>SIMULATORE</strong> · scontrini di prova, l'Agenzia non viene contattata</p>
+      <p class="simulatore cassa-banda" role="note"><strong>SIMULATORE</strong> · scontrini di prova, l'Agenzia non viene contattata
+        <label class="spunta"><input type="checkbox" checked={senzaRete} onChange={(e) => setSenzaRete(e.currentTarget.checked)} /> Prova senza rete</label></p>
+      <RegistroEmergenza registro={registro} evento={evento.id} occupato={occupato} voceAMano={voceAMano} onEmetti={() => void emettiRegistro()} onRisolvi={risolvi} />
       <div class="cassa-evento">
         <span>📍 {descriviEvento(evento)} · <strong>{leggiNomeCassa()}</strong>{leggi(STAMPA_COMANDE) === '1' ? ' · 🖨 comande' : ''}</span>
         <div class="comandi">
@@ -327,7 +402,8 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
           <button type="button" class="secondario piccolo" aria-expanded={chiusura} onClick={() => setChiusura(!chiusura)}>Chiudi cassa</button>
         </div>
       </div>
-      {chiusura && <ChiusuraCassa db={db} uid={uid} titolare={titolare} evento={evento} occupata={!!attesa || righe.length > 0} onChiusa={onChiusa} />}
+      {chiusura && <ChiusuraCassa db={db} uid={uid} titolare={titolare} evento={evento} occupata={!!attesa || righe.length > 0}
+        inEmergenza={daEmettere(registro, evento.id, leggiNomeCassa()).length} onChiusa={onChiusa} />}
       {fuoriItalia(evento) && <p class="errore" role="alert">Evento fuori Italia ({evento.paese}): la cassa fiscale italiana non si usa qui.</p>}
 
       <ol class="cassa-righe" aria-label="Righe dello scontrino">
@@ -503,8 +579,8 @@ function MovimentiEvento({ db, evento }: { db: Firestore; evento: string }) {
 const euroSegno = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${euro(Math.abs(n))}`;
 
 /** Chiusura: conta alla cieca dei contanti e del totale carta; poi la cassa torna all'apertura. */
-function ChiusuraCassa({ db, uid, titolare, evento, occupata, onChiusa }: {
-  db: Firestore; uid: string; titolare: boolean; evento: Evento; occupata: boolean; onChiusa: (messaggio: string) => void;
+function ChiusuraCassa({ db, uid, titolare, evento, occupata, inEmergenza, onChiusa }: {
+  db: Firestore; uid: string; titolare: boolean; evento: Evento; occupata: boolean; inEmergenza: number; onChiusa: (messaggio: string) => void;
 }) {
   const sc = useScontriniEvento(db, evento.id);
   const [conta, setConta] = useState({ contanti: '', pos: '', nota: '' });
@@ -516,6 +592,7 @@ function ChiusuraCassa({ db, uid, titolare, evento, occupata, onChiusa }: {
   async function chiudi(e: Event) {
     e.preventDefault();
     if (occupata) { setErrore('Prima svuota lo scontrino in corso e chiudi eventuali pagamenti con carta.'); return; }
+    if (inEmergenza) { setErrore(`Prima emetti ${inEmergenza === 1 ? 'la vendita' : `le ${inEmergenza} vendite`} del registro di emergenza (serve la rete).`); return; }
     if (!sc.caricato) { setErrore('Sto ancora leggendo gli scontrini: riprova tra un attimo.'); return; }
     try {
       const q = preparaQuadratura(apertura, conta, sc.dati, Date.now(), oggi());
@@ -575,6 +652,44 @@ function QuadratureEvento({ db, evento }: { db: Firestore; evento: Evento }) {
       </ul>
       {q.caricato && !elenco.length && <p class="nota">Nessuna cassa chiusa per questo evento.</p>}
       <button type="button" class="secondario pericolo piccolo" onClick={() => void chiudi()}>Chiudi l'evento</button>
+    </details>
+  );
+}
+
+/** Registro di emergenza di questo telefono per l'evento: vendite da emettere appena torna la rete. */
+function RegistroEmergenza({ registro, evento, occupato, voceAMano, onEmetti, onRisolvi }: {
+  registro: Registro; evento: string; occupato: boolean; voceAMano: number | null; onEmetti: () => void; onRisolvi: (numero: number, trovata: boolean) => void;
+}) {
+  const voci = registro.filter((v) => v.evento === evento);
+  const aperte = daEmettere(registro, evento);
+  const [copiato, setCopiato] = useState('');
+  if (!voci.length) return null;
+  async function copia() {
+    try { await navigator.clipboard.writeText(testoRegistro(voci)); setCopiato('Copiato.'); } catch { setCopiato('Copia non riuscita.'); }
+  }
+  const totale = aperte.reduce((t, v) => t + totaleCentesimi(v.righe), 0);
+  return (
+    <details class={aperte.length ? 'emergenza' : 'scontrini-oggi'} open={aperte.length > 0} aria-label="Registro di emergenza">
+      <summary>📒 Registro di emergenza{aperte.length ? ` · ${aperte.length} da emettere · ${euro(totale / 100)}` : ' · tutto emesso'}</summary>
+      {aperte.length > 0 && <p class="nota">Vendite fatte senza rete: lo scontrino va emesso appena torna. Non si chiude la cassa finché restano qui.</p>}
+      <ul class="persone" aria-label="Voci del registro">
+        {[...voci].sort((a, b) => b.numero - a.numero).map((v: VoceEmergenza) => (
+          <li key={v.numero} class={v.emesso ? 'disattivo' : ''}>
+            <small class="dettaglio">{descriviVoce(v)}</small>
+            {voceAMano === v.numero && v.daVerificare && (
+              <div class="comandi">
+                <button type="button" class="secondario piccolo" onClick={() => onRisolvi(v.numero, true)}>C'è sul portale</button>
+                <button type="button" class="secondario piccolo" onClick={() => onRisolvi(v.numero, false)}>Non c'è: emettila</button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div class="comandi">
+        {aperte.length > 0 && <button type="button" class="primario piccolo" disabled={occupato} onClick={onEmetti}>Emetti ora</button>}
+        <button type="button" class="secondario piccolo" onClick={() => void copia()}>Copia registro</button>
+        {copiato && <small>{copiato}</small>}
+      </div>
     </details>
   );
 }

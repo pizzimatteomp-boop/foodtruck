@@ -598,6 +598,28 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await expect(cassa.getByText('Pasto staff: 1× Pane e olio')).toBeVisible();
   await expect(cassa.getByRole('list', { name: 'Movimenti senza incasso' })).toContainText('pranzo · Luca');
   await cassa.screenshot({ path: 'test-results/cassa-senza-incasso.png' });
+  // C7 · senza rete: la vendita va nel registro di emergenza, la cassa non si chiude, poi si emette
+  await cassa.getByLabel('Prova senza rete').check();
+  await cassa.getByRole('tab', { name: 'Prodotti' }).click();
+  await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
+  await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
+  await expect(cassa.getByRole('status')).toContainText('vendita di 4,00 € annotata nel registro di emergenza (n. 1)');
+  await expect(righe).toContainText('Tocca i prodotti');
+  const registro = cassa.getByRole('group', { name: 'Registro di emergenza' });
+  await expect(registro).toContainText('1 da emettere · 4,00 €');
+  await expect(registro).toContainText('1× Pane e olio · Rete assente · DA EMETTERE');
+  await cassa.getByRole('button', { name: 'Chiudi cassa' }).click();
+  await cassa.getByRole('form', { name: 'Chiusura cassa' }).getByRole('button', { name: 'Registra chiusura' }).click();
+  await expect(cassa.getByRole('form', { name: 'Chiusura cassa' }).getByRole('alert')).toContainText('Prima emetti la vendita del registro di emergenza');
+  await cassa.getByRole('button', { name: 'Chiudi cassa' }).click();
+  await registro.getByRole('button', { name: 'Emetti ora' }).click();
+  await expect(cassa.getByRole('alert')).toContainText('Ancora senza rete');
+  await cassa.screenshot({ path: 'test-results/cassa-emergenza.png' });
+  await cassa.getByLabel('Prova senza rete').uncheck();
+  await registro.getByRole('button', { name: 'Emetti ora' }).click();
+  await expect(cassa.getByRole('status')).toContainText('Registro di emergenza: 1 scontrino emesso');
+  await expect(registro).toContainText('tutto emesso');
+  await expect(registro).toContainText(/emesso DCW2026\/9999-\d+/);
   // cambia: si torna all'apertura, l'evento creato è proposto
   await cassa.getByRole('button', { name: 'Cambia' }).click();
   await expect(apri.getByLabel('Evento', { exact: true })).toContainText('Sagra di prova');
