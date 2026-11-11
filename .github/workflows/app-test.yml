@@ -129,7 +129,9 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Installa il browser di prova
-        run: npx playwright install --with-deps chromium
+        # Se i server di Ubuntu non rispondono (successo l'11/11/2026), si installa solo il browser:
+        # le librerie di sistema che gli servono ci sono già sulle macchine di GitHub.
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
 
       - name: Prova completa con gli emulatori
         run: npm run test:browser
