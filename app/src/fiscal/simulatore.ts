@@ -24,7 +24,8 @@ const json = (stato: number, corpo: unknown): Risposta => ({ stato, tipo: 'appli
 export class SimulatoreAgenzia implements Trasporto {
   readonly documenti: Registrato[] = [];
   private guasti: Guasto[] = [];
-  private contatore = 7000;
+  /** `primo`: numerazione di partenza (in cassa si parte dall'ora, così riaprendo o con più telefoni i numeri non si ripetono). */
+  constructor(private contatore = 7000) {}
   /** Sessione valida: se false, ogni chiamata rimanda al login. */
   sessioneValida = true;
 

@@ -198,14 +198,24 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ---------- Quadratura di cassa a fine evento ----------
+    // ---------- Chiusura e quadratura di cassa ----------
+    // Conta «alla cieca»: chi è in cassa la registra ma non la rilegge; il confronto lo vede il titolare.
     // Una conta registrata non si cambia: una correzione è una nuova conta.
+    function importo(v) { return v is number && v >= 0 && v <= 100000; }
     match /quadrature/{id} {
       allow read: if titolare();
       allow create: if cassa() && firmato()
+        && nuovo().keys().hasOnly(['evento', 'cassa', 'giorno', 'dal', 'fondo', 'contanti', 'pos', 'attesoContanti', 'attesoPos',
+                                   'scontrini', 'annulli', 'nota', 'creatoDa', 'creatoIl'])
         && testo(nuovo().evento)
-        && nuovo().contanti is number && nuovo().contanti >= 0
-        && nuovo().pos is number && nuovo().pos >= 0;
+        && testo(nuovo().cassa)
+        && nuovo().giorno is string && nuovo().giorno.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && nuovo().dal is int && nuovo().dal >= 0
+        && importo(nuovo().fondo) && importo(nuovo().contanti) && importo(nuovo().pos)
+        && nuovo().attesoContanti is number && nuovo().attesoPos is number
+        && nuovo().scontrini is int && nuovo().scontrini >= 0
+        && nuovo().annulli is int && nuovo().annulli >= 0
+        && (!('nota' in nuovo()) || testo(nuovo().nota));
       allow update, delete: if false;
     }
 

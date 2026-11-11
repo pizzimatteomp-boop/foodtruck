@@ -22,6 +22,8 @@ import { nomeCassa, riepilogo, scontrinoAnnullo, scontrinoVendita, type Scontrin
 import { registraScontrino, useScontriniEvento } from '../cassa/archivio.db';
 import { nomeMovimento, preparaMovimenti, riepilogoMovimenti, TIPI_MOVIMENTO, type TipoMovimento } from '../cassa/movimenti';
 import { registraMovimenti, useMovimentiEvento } from '../cassa/movimenti.db';
+import { centesimi, differenze, preparaQuadratura, type Apertura } from '../cassa/quadratura';
+import { chiudiEvento, registraQuadratura, useQuadrature } from '../cassa/quadratura.db';
 import { descriviEvento, ErroreEvento, eventiPerCassa, fuoriItalia, preparaEvento, type Evento } from '../eventi/eventi';
 import { creaEvento } from '../eventi/eventi.db';
 import { oggi } from '../dati/oggi';
@@ -52,28 +54,43 @@ const TASTI = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['.', '0', '�
 const NOME_CASSA = 'vegman-nome-cassa';
 const EVENTO_CASSA = 'vegman-evento-cassa';
 const STAMPA_COMANDE = 'vegman-stampa-comande';
+const APERTURA = 'vegman-apertura-cassa';
 function leggi(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } }
 function scrivi(k: string, v: string | null) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* solo comodità */ } }
 function leggiNomeCassa(): string { return nomeCassa(leggi(NOME_CASSA)); }
+function leggiApertura(): Apertura | null { try { return JSON.parse(leggi(APERTURA) ?? 'null') as Apertura | null; } catch { return null; } }
 
 /** Cassa: prima si apre su un evento (C3), poi si vende. */
 export function Cassa({ db, uid, titolare }: { db: Firestore; uid: string; titolare: boolean }) {
   const ev = useRaccolta<Evento>(db, 'eventi');
   const [scelto, setScelto] = useState<string | null>(leggi(EVENTO_CASSA));
+  const [chiusa, setChiusa] = useState('');
   const evento = ev.dati.find((e) => e.id === scelto && e.stato === 'aperto');
   if (!ev.caricato) return <p class="nota">Carico…</p>;
-  if (!evento) return <AperturaCassa db={db} eventi={ev.dati} titolare={titolare} onApri={(id) => { scrivi(EVENTO_CASSA, id); setScelto(id); }} />;
-  return <Vendita db={db} uid={uid} titolare={titolare} evento={evento} onCambia={() => { scrivi(EVENTO_CASSA, null); setScelto(null); }} />;
+  if (!evento) return <AperturaCassa db={db} eventi={ev.dati} titolare={titolare} messaggio={chiusa} onApri={(id) => { scrivi(EVENTO_CASSA, id); setScelto(id); setChiusa(''); }} />;
+  return <Vendita db={db} uid={uid} titolare={titolare} evento={evento} onCambia={() => { scrivi(EVENTO_CASSA, null); setScelto(null); }}
+    onChiusa={(m) => { scrivi(APERTURA, null); scrivi(EVENTO_CASSA, null); setChiusa(m); setScelto(null); }} />;
 }
 
-function AperturaCassa({ db, eventi, titolare, onApri }: { db: Firestore; eventi: Evento[]; titolare: boolean; onApri: (id: string) => void }) {
+function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firestore; eventi: Evento[]; titolare: boolean; messaggio: string; onApri: (id: string) => void }) {
   const lista = eventiPerCassa(eventi, oggi());
   const [id, setId] = useState(lista[0]?.id ?? '');
   const [nome, setNome] = useState(leggiNomeCassa());
   const [comande, setComande] = useState(leggi(STAMPA_COMANDE) === '1');
+  const [fondo, setFondo] = useState('');
   const [nuovo, setNuovo] = useState({ nome: '', dal: oggi(), al: '', luogo: '', paese: 'IT' });
   const [errore, setErrore] = useState('');
-  const apri = (x: string) => { scrivi(NOME_CASSA, nomeCassa(nome)); scrivi(STAMPA_COMANDE, comande ? '1' : '0'); onApri(x); };
+  const apri = (x: string) => {
+    let f: number;
+    try { f = centesimi(fondo, 'Fondo cassa'); } catch (e) { setErrore((e as Error).message); return; }
+    const n = nomeCassa(nome);
+    scrivi(NOME_CASSA, n);
+    scrivi(STAMPA_COMANDE, comande ? '1' : '0');
+    // Riaprendo la stessa cassa sullo stesso evento (es. dopo «Cambia») resta l'apertura di prima.
+    const a = leggiApertura();
+    if (!a || a.evento !== x || a.cassa !== n) scrivi(APERTURA, JSON.stringify({ evento: x, cassa: n, da: Date.now(), fondo: f } satisfies Apertura));
+    onApri(x);
+  };
   async function crea(e: Event) {
     e.preventDefault();
     try { const x = await creaEvento(db, preparaEvento(nuovo)); apri(x); } catch (err) {
@@ -83,6 +100,7 @@ function AperturaCassa({ db, eventi, titolare, onApri }: { db: Firestore; eventi
   return (
     <section class="scheda" aria-label="Apri la cassa">
       <h1>Apri la cassa</h1>
+      {messaggio && <p class="esito" role="status">{messaggio}</p>}
       {lista.length ? (
         <div class="nuova">
           <label class="campo"><span>Evento</span>
@@ -91,6 +109,7 @@ function AperturaCassa({ db, eventi, titolare, onApri }: { db: Firestore; eventi
             </select>
           </label>
           <label class="campo"><span>Nome di questa cassa</span><input value={nome} maxLength={30} onInput={(e) => setNome(e.currentTarget.value)} /></label>
+          <label class="campo"><span>Fondo cassa (contanti all'inizio)</span><input inputMode="decimal" placeholder="0,00" value={fondo} onInput={(e) => setFondo(e.currentTarget.value)} /></label>
           <label class="spunta"><input type="checkbox" checked={comande} onChange={(e) => setComande(e.currentTarget.checked)} /> Stampa le comande per la cucina</label>
           <button type="button" class="primario" disabled={!id} onClick={() => apri(id)}>Apri cassa</button>
         </div>
@@ -118,7 +137,7 @@ function AperturaCassa({ db, eventi, titolare, onApri }: { db: Firestore; eventi
 }
 
 
-function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: string; titolare: boolean; evento: Evento; onCambia: () => void }) {
+function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firestore; uid: string; titolare: boolean; evento: Evento; onCambia: () => void; onChiusa: (messaggio: string) => void }) {
   const pro = useRaccolta<Prodotto>(db, 'prodotti');
   const [cassa, setCassa] = useState<CassaProva | null>(null);
   const [righe, setRighe] = useState<Riga[]>([]);
@@ -135,8 +154,10 @@ function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: 
   const [senza, setSenza] = useState<TipoMovimento>('omaggio');
   const [motivo, setMotivo] = useState('');
   const [persona, setPersona] = useState('');
+  const [chiusura, setChiusura] = useState(false);
 
-  useEffect(() => { void archivio().then((a) => setCassa(new CassaProva(a, () => new Date()))); }, []);
+  // Numerazione del simulatore dall'ora (decimi di secondo): riaprendo la cassa o con più telefoni non si ripete.
+  useEffect(() => { void archivio().then((a) => setCassa(new CassaProva(a, () => new Date(), Math.floor(Date.now() / 100) % 1e9))); }, []);
 
   // SumUp (solo app Android, se la chiave è impostata): ELET apre SumUp, al ritorno si emette lo scontrino.
   const [conSumUp, setConSumUp] = useState(false);
@@ -168,11 +189,11 @@ function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: 
     setOccupato(true);
     try {
       const r = await cassa.vendi(righePerScontrino(p.righe), 'elettronico');
-      await archivia(scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: p.righe, pagamento: 'elettronico', ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id, ...(codice ? { sumup: codice } : {}) }));
+      const ok = await archivia(scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: p.righe, pagamento: 'elettronico', ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id, ...(codice ? { sumup: codice } : {}) }));
       await chiudiPagamento();
       setAttesa(null);
       setEsitoSumUp(null);
-      setAvviso({ testo: `✅ ${r.progressivo} · ${euro(p.centesimi / 100)} · carta${codice ? ` (SumUp ${codice})` : ''}`, errore: false });
+      if (ok) setAvviso({ testo: `✅ ${r.progressivo} · ${euro(p.centesimi / 100)} · carta${codice ? ` (SumUp ${codice})` : ''}`, errore: false });
     } catch (e) {
       // Pagamento incassato ma scontrino non emesso: il pagamento resta in sospeso finché non si emette.
       setAvviso({ testo: `Carta pagata ma scontrino NON emesso (${messaggio(e)}): premi «Emetti scontrino».`, errore: true });
@@ -188,10 +209,13 @@ function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: 
     }
   }
 
-  /** Registra lo scontrino nell'archivio; se non riesce lo dice, ma lo scontrino resta emesso. */
-  async function archivia(s: ScontrinoArchivio) {
+  /** Registra lo scontrino nell'archivio; se non riesce lo dice (e lo dice per ultimo), ma lo scontrino resta emesso. */
+  async function archivia(s: ScontrinoArchivio): Promise<boolean> {
     setUltimo(s);
-    try { await registraScontrino(db, uid, s); } catch { setAvviso({ testo: `Scontrino ${s.progressivo} emesso ma non registrato nell'archivio: segnalalo al titolare.`, errore: true }); }
+    try { await registraScontrino(db, uid, s); return true; } catch {
+      setAvviso({ testo: `Scontrino ${s.progressivo} emesso ma non registrato nell'archivio: segnalalo al titolare.`, errore: true });
+      return false;
+    }
   }
 
   async function annulla(s: ScontrinoArchivio) {
@@ -200,8 +224,7 @@ function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: 
     setOccupato(true);
     try {
       const r = await cassa.annulla(s.idtrx);
-      await archivia(scontrinoAnnullo(s, { idtrx: r.idtrx, progressivo: r.progressivo, cassa: leggiNomeCassa(), giorno: oggi() }));
-      setAvviso({ testo: `Annullato ${s.progressivo} con ${r.progressivo}.`, errore: false });
+      if (await archivia(scontrinoAnnullo(s, { idtrx: r.idtrx, progressivo: r.progressivo, cassa: leggiNomeCassa(), giorno: oggi() }))) setAvviso({ testo: `Annullato ${s.progressivo} con ${r.progressivo}.`, errore: false });
     } catch (e) { setAvviso({ testo: messaggio(e), errore: true }); }
     setOccupato(false);
   }
@@ -279,9 +302,9 @@ function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: 
     try {
       const r = await cassa.vendi(righePerScontrino(daEmettere), pagamento);
       const s = scontrinoVendita({ idtrx: r.idtrx, progressivo: r.progressivo, righe: daEmettere, pagamento, ambiente: 'simulatore', cassa: leggiNomeCassa(), giorno: oggi(), evento: evento.id });
-      await archivia(s);
+      const ok = await archivia(s);
       svuota();
-      setAvviso({ testo: `✅ ${r.progressivo} · ${euro(s.totale)} · ${pagamento === 'contanti' ? 'contanti' : 'carta'}${r.stato === 'recuperato' ? ' (recuperato)' : ''}`, errore: false });
+      if (ok) setAvviso({ testo: `✅ ${r.progressivo} · ${euro(s.totale)} · ${pagamento === 'contanti' ? 'contanti' : 'carta'}${r.stato === 'recuperato' ? ' (recuperato)' : ''}`, errore: false });
     } catch (e) { setAvviso({ testo: messaggio(e), errore: true }); }
     setOccupato(false);
   }
@@ -299,8 +322,12 @@ function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: 
       <p class="simulatore cassa-banda" role="note"><strong>SIMULATORE</strong> · scontrini di prova, l'Agenzia non viene contattata</p>
       <div class="cassa-evento">
         <span>📍 {descriviEvento(evento)} · <strong>{leggiNomeCassa()}</strong>{leggi(STAMPA_COMANDE) === '1' ? ' · 🖨 comande' : ''}</span>
-        <button type="button" class="secondario piccolo" onClick={onCambia}>Cambia</button>
+        <div class="comandi">
+          <button type="button" class="secondario piccolo" onClick={onCambia}>Cambia</button>
+          <button type="button" class="secondario piccolo" aria-expanded={chiusura} onClick={() => setChiusura(!chiusura)}>Chiudi cassa</button>
+        </div>
       </div>
+      {chiusura && <ChiusuraCassa db={db} uid={uid} titolare={titolare} evento={evento} occupata={!!attesa || righe.length > 0} onChiusa={onChiusa} />}
       {fuoriItalia(evento) && <p class="errore" role="alert">Evento fuori Italia ({evento.paese}): la cassa fiscale italiana non si usa qui.</p>}
 
       <ol class="cassa-righe" aria-label="Righe dello scontrino">
@@ -407,6 +434,7 @@ function Vendita({ db, uid, titolare, evento, onCambia }: { db: Firestore; uid: 
       </div>
       <ScontriniEvento db={db} evento={evento.id} cassa={cassa} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} />
       {titolare && <MovimentiEvento db={db} evento={evento.id} />}
+      {titolare && <QuadratureEvento db={db} evento={evento} />}
     </section>
   );
 }
@@ -468,6 +496,85 @@ function MovimentiEvento({ db, evento }: { db: Firestore; evento: string }) {
         ))}
       </ul>
       {m.caricato && !elenco.length && <p class="nota">Nessun movimento per questo evento.</p>}
+    </details>
+  );
+}
+
+const euroSegno = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${euro(Math.abs(n))}`;
+
+/** Chiusura: conta alla cieca dei contanti e del totale carta; poi la cassa torna all'apertura. */
+function ChiusuraCassa({ db, uid, titolare, evento, occupata, onChiusa }: {
+  db: Firestore; uid: string; titolare: boolean; evento: Evento; occupata: boolean; onChiusa: (messaggio: string) => void;
+}) {
+  const sc = useScontriniEvento(db, evento.id);
+  const [conta, setConta] = useState({ contanti: '', pos: '', nota: '' });
+  const [errore, setErrore] = useState('');
+  const [invio, setInvio] = useState(false);
+  const salvata = leggiApertura();
+  const cassa = leggiNomeCassa();
+  const apertura: Apertura = salvata && salvata.evento === evento.id && salvata.cassa === cassa ? salvata : { evento: evento.id, cassa, da: 0, fondo: 0 };
+  async function chiudi(e: Event) {
+    e.preventDefault();
+    if (occupata) { setErrore('Prima svuota lo scontrino in corso e chiudi eventuali pagamenti con carta.'); return; }
+    if (!sc.caricato) { setErrore('Sto ancora leggendo gli scontrini: riprova tra un attimo.'); return; }
+    try {
+      const q = preparaQuadratura(apertura, conta, sc.dati, Date.now(), oggi());
+      if (!confirm(`Chiudere «${cassa}» con contanti ${euro(q.contanti)} e carta ${euro(q.pos)}? La conta non si potrà cambiare.`)) return;
+      setInvio(true);
+      await registraQuadratura(db, uid, q);
+      const d = differenze(q);
+      onChiusa(titolare
+        ? `Cassa chiusa. ${d.quadra ? 'Tutto quadra ✅' : `Differenze: contanti ${euroSegno(d.contanti)}, carta ${euroSegno(d.pos)}.`}`
+        : 'Cassa chiusa: conta registrata. Il confronto lo vede il titolare.');
+    } catch (err) {
+      setErrore(err instanceof ErroreCassa ? err.message : 'Chiusura non registrata: riprova.');
+      setInvio(false);
+    }
+  }
+  const aperta = apertura.da ? new Date(apertura.da).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null;
+  return (
+    <form class="cassa-pannello" aria-label="Chiusura cassa" onSubmit={(e) => void chiudi(e)}>
+      <strong>Chiusura di «{cassa}»</strong>
+      <p class="nota">{aperta ? `Aperta il ${aperta} con fondo ${euro(apertura.fondo / 100)}.` : 'Apertura non registrata su questo telefono: si contano tutte le vendite di questa cassa nell\'evento, fondo 0.'} Conta e scrivi quanto c'è: il confronto con gli scontrini lo vede il titolare.</p>
+      <label class="campo"><span>Contanti contati (fondo compreso)</span><input inputMode="decimal" placeholder="0,00" value={conta.contanti} onInput={(e) => setConta({ ...conta, contanti: e.currentTarget.value })} /></label>
+      <label class="campo"><span>Carta (POS): totale del lettore</span><input inputMode="decimal" placeholder="0,00" value={conta.pos} onInput={(e) => setConta({ ...conta, pos: e.currentTarget.value })} /></label>
+      <input aria-label="Nota" placeholder="Nota (facoltativa)" maxLength={300} value={conta.nota} onInput={(e) => setConta({ ...conta, nota: e.currentTarget.value })} />
+      <button type="submit" class="primario" disabled={invio}>Registra chiusura</button>
+      {errore && <p class="errore" role="alert">{errore}</p>}
+    </form>
+  );
+}
+
+/** Chiusure dell'evento con il confronto (solo titolare) e chiusura dell'evento. */
+function QuadratureEvento({ db, evento }: { db: Firestore; evento: Evento }) {
+  const q = useQuadrature(db, evento.id);
+  const elenco = [...q.dati].sort((a, b) => b.dal - a.dal);
+  const storte = elenco.filter((x) => !differenze(x).quadra).length;
+  async function chiudi() {
+    if (!confirm(`Chiudere l'evento «${evento.nome}»? Nessuna cassa potrà più aprirlo.`)) return;
+    try { await chiudiEvento(db, evento.id); } catch { alert('Evento non chiuso: riprova.'); }
+  }
+  return (
+    <details class="scontrini-oggi">
+      <summary>Chiusure dell'evento · {elenco.length}{storte ? ` · ⚠ ${storte} non quadrano` : ''}</summary>
+      <ul class="persone" aria-label="Chiusure dell'evento">
+        {elenco.map((x) => {
+          const d = differenze(x);
+          const quando = (x as { creatoIl?: { toDate?: () => Date } }).creatoIl?.toDate?.()?.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) ?? '…';
+          return (
+            <li key={x.id}>
+              <div class="nome"><strong>{x.cassa}</strong> <small>{quando} · {x.scontrini} scontrini{x.annulli ? ` · ${x.annulli} annulli` : ''}</small></div>
+              <small class="dettaglio">
+                Contanti: contati {euro(x.contanti)} · attesi {euro(x.attesoContanti)} (fondo {euro(x.fondo)}){d.contanti ? ` · ⚠ ${euroSegno(d.contanti)}` : ' ✅'}<br />
+                Carta: {euro(x.pos)} · attesa {euro(x.attesoPos)}{d.pos ? ` · ⚠ ${euroSegno(d.pos)}` : ' ✅'}
+                {x.nota ? <><br />Nota: {x.nota}</> : null}
+              </small>
+            </li>
+          );
+        })}
+      </ul>
+      {q.caricato && !elenco.length && <p class="nota">Nessuna cassa chiusa per questo evento.</p>}
+      <button type="button" class="secondario pericolo piccolo" onClick={() => void chiudi()}>Chiudi l'evento</button>
     </details>
   );
 }

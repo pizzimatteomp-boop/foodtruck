@@ -30,11 +30,15 @@ export function totaleRighe(righe: RigaCassa[]): number {
 }
 
 export class CassaProva {
-  readonly simulatore = new SimulatoreAgenzia();
-  private readonly servizio = new ServizioDCO(this.simulatore);
+  readonly simulatore: SimulatoreAgenzia;
+  private readonly servizio: ServizioDCO;
   readonly scontrini: ScontrinoProva[] = [];
 
-  constructor(private readonly archivio: ArchivioInvii, private readonly adesso: () => Date) {}
+  /** `primo`: numerazione di partenza del simulatore (vedi SimulatoreAgenzia). */
+  constructor(private readonly archivio: ArchivioInvii, private readonly adesso: () => Date, primo?: number) {
+    this.simulatore = new SimulatoreAgenzia(primo);
+    this.servizio = new ServizioDCO(this.simulatore);
+  }
 
   async vendi(righe: RigaCassa[], pagamento: Pagamento, guasto?: Guasto): Promise<EsitoEmissione> {
     const totale = totaleRighe(righe);

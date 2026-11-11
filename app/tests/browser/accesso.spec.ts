@@ -602,8 +602,47 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await cassa.getByRole('button', { name: 'Cambia' }).click();
   await expect(apri.getByLabel('Evento', { exact: true })).toContainText('Sagra di prova');
   await apri.getByLabel('Nome di questa cassa').fill('Furgone');
+  await apri.getByLabel('Fondo cassa (contanti all\'inizio)').fill('50');
   await apri.getByRole('button', { name: 'Apri cassa' }).click();
   await expect(cassa).toContainText('· Furgone');
+  // C6 · chiusura: vendita 4 € in contanti, nel cassetto se ne contano 50 (fondo) → mancano 4 €
+  await cassa.getByRole('tab', { name: 'Prodotti' }).click();
+  await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
+  await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
+  await expect(cassa.getByRole('status')).toContainText('4,00 € · contanti');
+  await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
+  await cassa.getByRole('button', { name: 'Chiudi cassa' }).click();
+  const chiusura = cassa.getByRole('form', { name: 'Chiusura cassa' });
+  await expect(chiusura).toContainText('fondo 50,00 €');
+  await chiusura.getByLabel('Contanti contati (fondo compreso)').fill('50');
+  await chiusura.getByRole('button', { name: 'Registra chiusura' }).click();
+  await expect(chiusura.getByRole('alert')).toContainText('svuota lo scontrino');
+  await righe.getByRole('button', { name: /^Togli uno/ }).click();
+  await chiusura.getByLabel('Carta (POS): totale del lettore').fill('abc');
+  await chiusura.getByRole('button', { name: 'Registra chiusura' }).click();
+  await expect(chiusura.getByRole('alert')).toContainText('Carta (POS): scrivi un importo');
+  await chiusura.getByLabel('Carta (POS): totale del lettore').fill('');
+  await chiusura.getByLabel('Nota').fill('resto sbagliato?');
+  page.once('dialog', (d) => void d.accept());
+  await chiusura.getByRole('button', { name: 'Registra chiusura' }).click();
+  await expect(apri.getByRole('status')).toContainText('Cassa chiusa. Differenze: contanti −4,00 €, carta 0,00 €.');
+  // il titolare vede il confronto nella cassa e tra gli avvisi
+  await apri.getByLabel('Nome di questa cassa').fill('Furgone');
+  await apri.getByRole('button', { name: 'Apri cassa' }).click();
+  await cassa.getByText(/^Chiusure dell'evento · 1 · ⚠ 1 non quadrano/).click();
+  const chiusure = cassa.getByRole('list', { name: 'Chiusure dell\'evento' });
+  await expect(chiusure).toContainText('Contanti: contati 50,00 € · attesi 54,00 € (fondo 50,00 €) · ⚠ −4,00 €');
+  await expect(chiusure).toContainText('Carta: 0,00 € · attesa 0,00 € ✅');
+  await expect(chiusure).toContainText('Nota: resto sbagliato?');
+  await cassa.screenshot({ path: 'test-results/cassa-chiusura.png' });
+  await page.goto('/#/avvisi');
+  await expect(page.getByRole('list', { name: 'Da fare' })).toContainText(/Quadratura Sagra di prova · Furgone · \d\d\/\d\d\/2026: contanti −4,00 €/);
+  // chiusura dell'evento: non si può più aprire
+  await page.goto('/#/vendi');
+  page.once('dialog', (d) => void d.accept());
+  await cassa.getByText(/^Chiusure dell'evento/).click();
+  await cassa.getByRole('button', { name: 'Chiudi l\'evento' }).click();
+  await expect(apri).toContainText('Nessun evento aperto');
 });
 
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {

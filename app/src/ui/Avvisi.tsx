@@ -8,6 +8,9 @@ import { costruisciMenu, stessoMenu } from '../menu/menu';
 import { useMenuPubblicato } from '../menu/menu.db';
 import { avvisiFoodCost, fotografia, fotografiaDaSalvare, nomeMese, type Avviso } from '../storico/storico';
 import { salvaFotografia, salvaSogliaRincaro, useFotografie, useSogliaRincaro } from '../storico/storico.db';
+import { avvisiQuadrature } from '../cassa/quadratura';
+import { useQuadrature } from '../cassa/quadratura.db';
+import type { Evento } from '../eventi/eventi';
 
 const ICONE: Record<Avviso['tipo'], string> = { soglia: '🔴', rincaro: '📈', 'senza-prezzo': '❓', 'prezzo-vecchio': '🕰' };
 
@@ -42,6 +45,8 @@ export function Avvisi({ db }: { db: Firestore }) {
   const { fotografie } = useFotografie(db);
   const soglia = useSogliaRincaro(db);
   const pub = useMenuPubblicato(db);
+  const quadrature = useQuadrature(db);
+  const eventi = useRaccolta<Evento>(db, 'eventi');
   const [nuovaSoglia, setNuovaSoglia] = useState('');
   const [esito, setEsito] = useState('');
   const foodCost = useMemo(() => (caricato ? avvisiFoodCost(dati, oggi(), soglia) : []), [caricato, dati.prodotti, dati.ingredienti, dati.articoli, dati.acquisti, soglia]);
@@ -55,6 +60,7 @@ export function Avvisi({ db }: { db: Firestore }) {
     daControllare > 0 && { testo: `${daControllare} ${daControllare === 1 ? 'articolo' : 'articoli'} delle fatture da controllare`, link: '#/fatture' },
     menu.bloccanti.length > 0 && { testo: `Menu: ${menu.bloccanti.length} dati da sistemare prima di pubblicare`, link: '#/pubblica' },
     menuDaPubblicare && { testo: 'Menu: ci sono modifiche non ancora pubblicate', link: '#/pubblica' },
+    ...avvisiQuadrature(quadrature.dati, (id) => eventi.dati.find((e) => e.id === id)?.nome ?? 'evento').map((testo) => ({ testo, link: '#/vendi' })),
   ].filter(Boolean) as { testo: string; link: string }[];
   const totale = foodCost.length + altri.length;
 

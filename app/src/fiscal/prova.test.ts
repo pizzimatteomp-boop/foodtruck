@@ -22,6 +22,12 @@ describe('cassa di prova (solo simulatore)', () => {
     await expect(c.annulla('nessuno')).rejects.toThrow();
   });
 
+  it('numerazione di partenza: riaprendo la cassa i numeri non si ripetono', async () => {
+    const c = new CassaProva(archivioInMemoria(), QUANDO, 123456);
+    const r = await c.vendi([KEBAB], 'contanti');
+    expect(r.progressivo).toBe('DCW2026/9999-123457');
+  });
+
   it('risposta persa → recuperato, senza doppioni', async () => {
     const c = new CassaProva(archivioInMemoria(), QUANDO);
     const r = await c.vendi([KEBAB], 'contanti', 'rete-dopo');

@@ -274,11 +274,21 @@ describe('movimenti senza incasso', () => {
 
 describe('quadratura di cassa e registro', () => {
   it('la cassa registra la conta, la vede il titolare, non si cambia', async () => {
-    const ref = await assertSucceeds(addDoc(collection(db('anna'), 'quadrature'), { evento: 'ev1', contanti: 320, pos: 540.5, ...firma('anna') }));
+    const q = (extra: Record<string, unknown> = {}) => ({
+      evento: 'ev1', cassa: 'Cassa 1', giorno: '2026-11-10', dal: 1762790400000, fondo: 100, contanti: 320, pos: 540.5,
+      attesoContanti: 325, attesoPos: 540.5, scontrini: 40, annulli: 1, nota: 'manca un resto', ...firma('anna'), ...extra,
+    });
+    const ref = await assertSucceeds(addDoc(collection(db('anna'), 'quadrature'), q()));
     await assertFails(getDoc(doc(db('anna'), 'quadrature', ref.id)));
     await assertSucceeds(getDoc(doc(db('matteo'), 'quadrature', ref.id)));
     await assertFails(updateDoc(doc(db('matteo'), 'quadrature', ref.id), { contanti: 300 }));
-    await assertFails(addDoc(collection(db('anna'), 'quadrature'), { evento: 'ev1', contanti: -5, pos: 0, ...firma('anna') }));
+    await assertFails(deleteDoc(doc(db('matteo'), 'quadrature', ref.id)));
+    await assertFails(addDoc(collection(db('anna'), 'quadrature'), q({ contanti: -5 })));
+    await assertFails(addDoc(collection(db('anna'), 'quadrature'), q({ cassa: '' })));
+    await assertFails(addDoc(collection(db('anna'), 'quadrature'), q({ scontrini: 1.5 })));
+    await assertFails(addDoc(collection(db('anna'), 'quadrature'), q({ giorno: 'ieri' })));
+    await assertFails(addDoc(collection(db('anna'), 'quadrature'), q({ extra: 1 })));
+    await assertFails(addDoc(collection(db('luca'), 'quadrature'), { ...q(), ...firma('luca') }));
   });
 
   it('registro: tutti aggiungono, solo il titolare legge, nessuno cancella', async () => {
