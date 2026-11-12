@@ -361,3 +361,9 @@ input.corto { width: 80px; }
 /* Cassa con scontrini veri: banda ben visibile (nero su arancio, combinazione del manuale) */
 .vero.cassa-banda { background: var(--arancio); color: #000; border-radius: 8px; padding: 6px 10px; }
 .spunta.vero { color: var(--lampone); font-weight: 700; }
+/* Resoconto dell'evento */
+.riquadri { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 100px), 1fr)); gap: 6px; margin: 8px 0; }
+.riquadri div { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--menta) 45%, var(--scheda)); }
+.riquadri small { color: var(--tenue); font-size: 0.8rem; }
+.riquadri strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.resoconto .tabella th[scope='row'] small { font-weight: 400; color: var(--tenue); white-space: normal; }

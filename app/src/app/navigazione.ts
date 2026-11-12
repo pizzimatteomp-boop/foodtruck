@@ -5,7 +5,7 @@
 import { puo, type Ruolo } from '../firebase/ruoli';
 
 export interface Pagina {
-  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa' | 'cassa' | 'vendi';
+  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa' | 'cassa' | 'vendi' | 'resoconto';
   titolo: string;
   icona: string;
   /** Una riga per il pannello della Home. */
@@ -22,6 +22,7 @@ export const PAGINE: readonly Pagina[] = [
   { id: 'ingredienti', titolo: 'Ingredienti', icona: '🥕', descrizione: 'Prezzi, fonti ed etichette', principale: true, visibile: (r) => puo(r, 'acquisti') },
   { id: 'fatture', titolo: 'Fatture', icona: '🧾', descrizione: 'Carica le fatture, controlla le righe nuove', principale: true, visibile: (r) => puo(r, 'acquisti') },
   { id: 'avvisi', titolo: 'Avvisi', icona: '🔔', descrizione: 'Soglie, rincari e cose da fare', principale: true, visibile: (r) => puo(r, 'acquisti') },
+  { id: 'resoconto', titolo: 'Resoconto', icona: '📊', descrizione: 'Un evento in numeri: incassi, prodotti, margine', principale: false, visibile: (r) => puo(r, 'report') },
   { id: 'pubblica', titolo: 'Menu e QR', icona: '📱', descrizione: 'Menu pubblico, QR code e cartello da stampare', principale: false, visibile: (r) => puo(r, 'acquisti') },
   { id: 'allergeni', titolo: 'Allergeni', icona: '🌾', descrizione: 'Liste ingredienti e tabella allergeni', principale: false, visibile: (r) => puo(r, 'acquisti') },
   { id: 'cassa', titolo: 'Cassa · prova', icona: '🧪', descrizione: 'Scontrini sul simulatore e credenziali Fisconline', principale: false, visibile: (r) => puo(r, 'scontrini') },

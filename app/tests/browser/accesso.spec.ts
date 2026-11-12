@@ -687,6 +687,19 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await cassa.getByText(/^Chiusure dell'evento/).click();
   await cassa.getByRole('button', { name: 'Chiudi l\'evento' }).click();
   await expect(apri).toContainText('Nessun evento aperto');
+  // resoconto dell'evento (anche chiuso): incassi al netto dell'annullo, prodotti, senza incasso
+  await page.goto('/#/resoconto');
+  const res = page.getByRole('region', { name: 'Resoconto' });
+  await expect(res.getByLabel('Evento del resoconto')).toContainText('Sagra di prova');
+  await expect(res).toContainText('Solo scontrini di prova');
+  await expect(res.getByLabel('Incassi')).toContainText('Incasso13,00 €');
+  await expect(res.getByLabel('Incassi')).toContainText('Contanti8,00 €');
+  await expect(res.getByLabel('Incassi')).toContainText('Scontrini3');
+  await expect(res.getByRole('table', { name: 'Prodotti venduti' }).getByRole('row', { name: /Pane e olio/ })).toContainText('8,00 €');
+  await expect(res.getByRole('table', { name: 'Prodotti venduti' })).toContainText('Importi liberi');
+  await expect(res.getByRole('table', { name: 'Senza incasso' })).toContainText('Omaggio');
+  await expect(res).toContainText('1 annullati (esclusi)');
+  await res.screenshot({ path: 'test-results/resoconto.png' });
 });
 
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {
@@ -694,7 +707,7 @@ test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser })
   await page.addInitScript(() => localStorage.setItem('vegman-oggi', '2026-11-07'));
   await accedi(page, MATTEO);
   await expect(page.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
-  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']) {
+  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'resoconto', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']) {
     await page.goto(`/#/${p}`);
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `pagina ${p}`).toBeLessThanOrEqual(360);
