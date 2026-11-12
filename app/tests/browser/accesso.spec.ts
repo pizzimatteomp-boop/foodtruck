@@ -743,12 +743,48 @@ test('produzione dal telefono → etichetta stampata da sola dalla stazione sul 
   await stazione.screenshot({ path: 'test-results/stazione.png' });
 });
 
+test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, registrazione', async ({ browser }) => {
+  const tel = await (await browser.newContext({ viewport: { width: 360, height: 760 } })).newPage();
+  await accedi(tel, MATTEO);
+  await tel.goto('/#/inventario');
+  const inv = tel.getByRole('region', { name: 'Inventario' });
+  const voci = inv.getByRole('list', { name: 'Voci da contare' });
+  const prima = voci.getByRole('listitem').first();
+  const nome = (await prima.locator('strong').first().textContent())!.trim();
+  // confezione impostata da chi conta
+  await prima.getByRole('button', { name: 'imposta' }).click();
+  await prima.getByLabel(`Nome confezione di ${nome}`).fill('sacco');
+  await prima.getByLabel(`Quantità confezione di ${nome}`).fill('5000');
+  await prima.getByRole('button', { name: 'Salva' }).click();
+  await expect(prima).toContainText('sacco da');
+  await prima.getByRole('button', { name: 'Una in più' }).click();
+  await prima.getByRole('button', { name: 'Una in più' }).click();
+  await prima.getByLabel(`Sfuso di ${nome}`).fill('300');
+  await expect(prima).toContainText('✓');
+  await expect(prima).toContainText('= ');
+  // semilavorati: niente prodotti finiti
+  await inv.getByRole('tab', { name: 'Semilavorati' }).click();
+  await expect(voci).not.toContainText('Pane e olio');
+  await voci.getByRole('listitem', { name: 'Mayo di prova' }).getByLabel('Sfuso di Mayo di prova').fill('800');
+  await expect(inv).toContainText('Contate 2 voci');
+  // la conta resta nel telefono anche ricaricando
+  await tel.reload();
+  await expect(inv).toContainText('Contate 2 voci');
+  tel.once('dialog', (d) => void d.accept());
+  await inv.getByLabel('Nota dell\'inventario').fill('dopo la fiera');
+  await inv.getByRole('button', { name: 'Fine inventario (2)' }).click();
+  await expect(inv.getByRole('status')).toContainText('Inventario registrato: 2 voci');
+  await expect(inv).toContainText('Contate 0 voci');
+  await expect(inv.getByRole('list', { name: 'Inventari registrati' })).toContainText('2 voci · dopo la fiera');
+  await tel.screenshot({ path: 'test-results/inventario.png' });
+});
+
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {
   const page = await (await browser.newContext({ viewport: { width: 360, height: 760 } })).newPage();
   await page.addInitScript(() => localStorage.setItem('vegman-oggi', '2026-11-07'));
   await accedi(page, MATTEO);
   await expect(page.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
-  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'stazione', 'resoconto', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']) {
+  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'inventario', 'stazione', 'resoconto', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']) {
     await page.goto(`/#/${p}`);
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `pagina ${p}`).toBeLessThanOrEqual(360);

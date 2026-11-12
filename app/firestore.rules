@@ -257,6 +257,28 @@ service cloud.firestore {
       allow delete: if titolare();
     }
 
+    // ---------- Magazzino: confezioni di conta e inventari ----------
+    // La confezione con cui si conta una voce (es. «sacco · 5000 g»): la sceglie chi fa l'inventario.
+    match /unitaConta/{chiave} {
+      allow read: if magazzino();
+      allow write: if magazzino()
+        && chiave.matches('^(ingrediente|semilavorato)-[A-Za-z0-9_-]{1,100}$')
+        && nuovo().keys().hasOnly(['nome', 'quantita'])
+        && testo(nuovo().nome) && nuovo().nome.size() <= 30
+        && nuovo().quantita is number && nuovo().quantita > 0;
+    }
+    // Un inventario registrato non si cambia: una correzione è un nuovo inventario.
+    match /inventari/{id} {
+      allow read: if magazzino();
+      allow create: if magazzino() && firmato()
+        && nuovo().keys().hasOnly(['giorno', 'righe', 'nota', 'creatoDa', 'creatoIl'])
+        && nuovo().giorno is string && nuovo().giorno.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && nuovo().righe is list && nuovo().righe.size() > 0 && nuovo().righe.size() <= 1000
+        && (!('nota' in nuovo()) || testo(nuovo().nota));
+      allow update: if false;
+      allow delete: if titolare();
+    }
+
     // ---------- Registro delle operazioni: solo aggiunte ----------
     match /registro/{id} {
       allow read: if titolare();

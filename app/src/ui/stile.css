@@ -385,3 +385,20 @@ input.corto { width: 80px; }
 .produzione-griglia { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 8px; }
 .produzione-griglia button { background: var(--crema); min-height: 72px; font-size: 1rem; }
 .produzione-griglia button.semilavorato { background: var(--menta); }
+/* Inventario */
+.inventario { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.inventario li { border: 1px solid var(--bordo); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.inventario li.contata { border-color: var(--menta); background: color-mix(in srgb, var(--menta) 25%, var(--scheda)); }
+.inventario .nome { display: flex; flex-direction: column; }
+.inventario-conta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.piu-meno { display: flex; align-items: center; gap: 6px; }
+.piu-meno button { width: 44px; height: 44px; font-size: 1.4rem; border-radius: 8px; border: 0; background: var(--menta); color: #000; }
+.piu-meno strong { min-width: 2ch; text-align: center; font-size: 1.2rem; }
+.sfuso { display: flex; align-items: center; gap: 4px; }
+.sfuso input { width: 6em; }
+.inventario .totale { font-weight: 600; }
+.collegamento { background: none; border: 0; padding: 0 2px; color: var(--glaucous-forte); text-decoration: underline; min-height: 0; font-size: inherit; }
+.inventario-fine { position: sticky; bottom: 70px; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--scheda); border-top: 1px solid var(--bordo); }
+.scheda > .schede { display: flex; gap: 6px; overflow-x: auto; margin: 6px 0; }
+.scheda > .schede button { min-height: 40px; padding: 0 12px; white-space: nowrap; background: transparent; border: 1px solid var(--bordo); color: var(--testo); }
+.scheda > .schede button[aria-selected='true'] { background: var(--selezione); color: var(--su-selezione); border-color: var(--selezione); font-weight: 600; }

@@ -539,3 +539,28 @@ describe('produzione del laboratorio e coda delle etichette', () => {
     await assertFails(getDoc(doc(db('marco'), 'scontrini', 's1')));
   });
 });
+
+describe('magazzino: confezioni di conta e inventari', () => {
+  const inv = (chi: Chi, extra: Record<string, unknown> = {}) => ({
+    giorno: '2026-11-12', righe: [{ tipo: 'ingrediente', id: 'i1', nome: 'Ceci', unita: 'g', quantita: 10300, confezioni: 2, sfuso: 300 }], ...firma(chi), ...extra,
+  });
+  it('confezioni: le scelgono magazziniere e titolare', async () => {
+    await assertSucceeds(setDoc(doc(db('marco'), 'unitaConta', 'ingrediente-i1'), { nome: 'sacco', quantita: 5000 }));
+    await assertSucceeds(setDoc(doc(db('matteo'), 'unitaConta', 'semilavorato-r1'), { nome: 'busta', quantita: 1000 }));
+    await assertFails(setDoc(doc(db('luca'), 'unitaConta', 'ingrediente-i1'), { nome: 'sacco', quantita: 5000 }));
+    await assertFails(setDoc(doc(db('marco'), 'unitaConta', 'prodotto-r1'), { nome: 'x', quantita: 1 }));
+    await assertFails(setDoc(doc(db('marco'), 'unitaConta', 'ingrediente-i1'), { nome: 'sacco', quantita: 0 }));
+    await assertSucceeds(getDoc(doc(db('marco'), 'unitaConta', 'ingrediente-i1')));
+    await assertFails(getDoc(doc(db('anna'), 'unitaConta', 'ingrediente-i1')));
+  });
+  it('inventari: li registra il magazziniere, non si cambiano, li cancella solo il titolare', async () => {
+    const ref = await assertSucceeds(addDoc(collection(db('marco'), 'inventari'), inv('marco')));
+    await assertFails(addDoc(collection(db('luca'), 'inventari'), inv('luca')));
+    await assertFails(addDoc(collection(db('marco'), 'inventari'), inv('marco', { righe: [] })));
+    await assertFails(addDoc(collection(db('marco'), 'inventari'), inv('marco', { giorno: 'oggi' })));
+    await assertFails(updateDoc(doc(db('marco'), 'inventari', ref.id), { nota: 'x' }));
+    await assertFails(deleteDoc(doc(db('marco'), 'inventari', ref.id)));
+    await assertSucceeds(getDoc(doc(db('matteo'), 'inventari', ref.id)));
+    await assertSucceeds(deleteDoc(doc(db('matteo'), 'inventari', ref.id)));
+  });
+});

@@ -5,7 +5,7 @@
 import { puo, type Ruolo } from '../firebase/ruoli';
 
 export interface Pagina {
-  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa' | 'cassa' | 'vendi' | 'resoconto' | 'produzione' | 'stazione';
+  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa' | 'cassa' | 'vendi' | 'resoconto' | 'produzione' | 'stazione' | 'inventario';
   titolo: string;
   icona: string;
   /** Una riga per il pannello della Home. */
@@ -23,6 +23,7 @@ export const PAGINE: readonly Pagina[] = [
   { id: 'fatture', titolo: 'Fatture', icona: '🧾', descrizione: 'Carica le fatture, controlla le righe nuove', principale: true, visibile: (r) => puo(r, 'acquisti') },
   { id: 'avvisi', titolo: 'Avvisi', icona: '🔔', descrizione: 'Soglie, rincari e cose da fare', principale: true, visibile: (r) => puo(r, 'acquisti') },
   { id: 'produzione', titolo: 'Produzione', icona: '🏭', descrizione: 'Laboratorio: registra cosa hai fatto e stampa le etichette', principale: false, visibile: (r) => puo(r, 'produzione') },
+  { id: 'inventario', titolo: 'Inventario', icona: '📦', descrizione: 'Conta ingredienti, packaging e semilavorati', principale: false, visibile: (r) => puo(r, 'magazzino') },
   { id: 'stazione', titolo: 'Stazione etichette', icona: '🏷', descrizione: 'Da aprire sul computer della stampante: stampa da sola', principale: false, visibile: (r) => puo(r, 'magazzino') },
   { id: 'resoconto', titolo: 'Resoconto', icona: '📊', descrizione: 'Un evento in numeri: incassi, prodotti, margine', principale: false, visibile: (r) => puo(r, 'report') },
   { id: 'pubblica', titolo: 'Menu e QR', icona: '📱', descrizione: 'Menu pubblico, QR code e cartello da stampare', principale: false, visibile: (r) => puo(r, 'acquisti') },
