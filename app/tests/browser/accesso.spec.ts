@@ -738,6 +738,13 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await expect(voci).not.toContainText('Pane e olio');
   await voci.getByRole('listitem', { name: 'Mayo di prova' }).getByLabel('Sfuso di Mayo di prova').fill('800');
   await expect(inv).toContainText('Contate 2 voci');
+  // «Fine inventario» resta sopra il menu in basso (anche col menu più alto per la barra di Android)
+  await tel.addStyleTag({ content: '.menu { padding-bottom: 48px !important; }' });
+  await tel.waitForTimeout(200);
+  const fineBox = (await inv.getByRole('button', { name: /Fine inventario/ }).boundingBox())!;
+  const menuBox = (await tel.getByRole('navigation', { name: 'Menu' }).boundingBox())!;
+  expect(fineBox.y + fineBox.height).toBeLessThanOrEqual(menuBox.y + 1);
+  await tel.screenshot({ path: 'test-results/inventario-fine.png' });
   // la conta resta nel telefono anche ricaricando
   await tel.reload();
   await expect(inv).toContainText('Contate 2 voci');

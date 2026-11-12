@@ -399,7 +399,7 @@ input.corto { width: 80px; }
 .sfuso input { width: 6em; }
 .inventario .totale { font-weight: 600; }
 .collegamento { background: none; border: 0; padding: 0 2px; color: var(--glaucous-forte); text-decoration: underline; min-height: 0; font-size: inherit; }
-.inventario-fine { position: sticky; bottom: 70px; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--scheda); border-top: 1px solid var(--bordo); }
+.inventario-fine { position: sticky; bottom: var(--altezza-menu, 0px); z-index: 1; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--scheda); border-top: 1px solid var(--bordo); }
 .scheda > .schede { display: flex; gap: 6px; overflow-x: auto; margin: 6px 0; }
 .scheda > .schede button { min-height: 40px; padding: 0 12px; white-space: nowrap; background: transparent; border: 1px solid var(--bordo); color: var(--testo); }
 .scheda > .schede button[aria-selected='true'] { background: var(--selezione); color: var(--su-selezione); border-color: var(--selezione); font-weight: 600; }
