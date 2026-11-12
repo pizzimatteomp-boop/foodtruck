@@ -1,7 +1,7 @@
 /**
  * Cassa (fase «Cassa», C1): impostazione come Billy. Per ora scontrini SOLO sul simulatore dell'Agenzia
  * (l'Agenzia vera arriva al passo C5). In alto le righe, poi totale, descrizione/IVA, pagamenti,
- * e due pagine scorrevoli: tastierino con preferiti, griglia dei prodotti per gruppo.
+ * schermata fissa: righe, prodotti (o tastierino) e pagamenti sempre in vista; il resto nel menu ☰.
  */
 import { Capacitor } from '@capacitor/core';
 import type { Firestore } from 'firebase/firestore';
@@ -214,8 +214,9 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
   const [cerca, setCerca] = useState('');
   const [avviso, setAvviso] = useState<{ testo: string; errore: boolean } | null>(null);
   const [occupato, setOccupato] = useState(false);
-  const [pagina, setPagina] = useState(0);
-  const pagine = useRef<HTMLDivElement>(null);
+  // Telefono: prodotti (1) o tastierino (0), senza scorrere; sul tablet si vedono insieme.
+  const [pagina, setPagina] = useState(1);
+  const [menu, setMenu] = useState(false);
   const [pannello, setPannello] = useState(false);
   const [senza, setSenza] = useState<TipoMovimento>('omaggio');
   const [motivo, setMotivo] = useState('');
@@ -424,6 +425,7 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
     setT(TASTIERINO_VUOTO);
     setDescrizione('');
     setPannello(false);
+    setPagina(1);
     setCliente('');
     setMotivo('');
     setPersona('');
@@ -441,6 +443,8 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
       setUltimo(null);
       svuota();
     } catch (e) {
+      // il foglio si chiude, così il messaggio (sotto) si vede
+      setPannello(false);
       setAvviso({ testo: e instanceof ErroreCassa ? e.message : 'Movimento non registrato: riprova.', errore: true });
     }
     setOccupato(false);
@@ -495,110 +499,111 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
 
   function vaiA(n: number) {
     setPagina(n);
-    pagine.current?.scrollTo({ left: n * pagine.current.clientWidth, behavior: 'smooth' });
   }
 
   const totale = totaleCentesimi(righe);
   const digitato = centesimiDa(t.testo);
 
-  return (
-    <section class="cassa" aria-label="Cassa">
-      {modoVero ? (
-        <p class="vero cassa-banda" role="note"><strong>AGENZIA VERA</strong> · scontrini fiscali veri ·{' '}
-          {collegamento.stato === 'ok' ? 'collegata ✅' : collegamento.stato === 'collego' ? 'mi collego…' : <>non collegata: le vendite vanno nel registro di emergenza ({collegamento.testo}) <button type="button" class="secondario piccolo" onClick={() => setTentativo((x) => x + 1)}>Riprova</button></>}</p>
-      ) : (
-        <p class="simulatore cassa-banda" role="note"><strong>SIMULATORE</strong> · scontrini di prova, l'Agenzia non viene contattata
-          <label class="spunta"><input type="checkbox" checked={senzaRete} onChange={(e) => setSenzaRete(e.currentTarget.checked)} /> Prova senza rete</label></p>
-      )}
-      <RegistroEmergenza registro={registro} evento={evento.id} occupato={occupato} voceAMano={voceAMano} onEmetti={() => void emettiRegistro()} onRisolvi={risolvi} />
-      <div class="cassa-evento">
-        <span>📍 {descriviEvento(evento)} · <strong>{leggiNomeCassa()}</strong> · fondo {euro((leggiApertura()?.fondo ?? 0) / 100)}{leggi(STAMPA_COMANDE) === '1' ? ' · 🖨 comande' : ''}</span>
-        <div class="comandi">
-          <button type="button" class="secondario piccolo" onClick={onCambia}>Cambia</button>
-          <button type="button" class="secondario piccolo" aria-expanded={chiusura} onClick={() => setChiusura(!chiusura)}>Chiudi cassa</button>
-        </div>
-      </div>
-      {chiusura && <ChiusuraCassa db={db} uid={uid} titolare={titolare} evento={evento} occupata={!!attesa || righe.length > 0}
-        inEmergenza={daEmettere(registro, evento.id, leggiNomeCassa()).length} onChiusa={onChiusa} />}
-      {fuoriItalia(evento) && <p class="errore" role="alert">Evento fuori Italia ({evento.paese}): la cassa fiscale italiana non si usa qui.</p>}
-
-      <div class="cassa-corpo">
-      <div class="cassa-scontrino">
-      <ol class="cassa-righe" aria-label="Righe dello scontrino">
-        {righe.length === 0 && <li class="vuota">Tocca i prodotti o scrivi un importo.</li>}
-        {righe.map((r, i) => (
-          <li key={`${r.descrizione}-${i}`}>
-            <span class="nome">{r.descrizione}</span>
-            <span class="qta">{r.quantita} pz × {euro(r.centesimi / 100)}</span>
-            <span class="tot">{euro((r.quantita * r.centesimi) / 100)}</span>
-            <button type="button" class="meno" aria-label={`Togli uno: ${r.descrizione}`} onClick={() => setRighe(togliUno(righe, i))}>−</button>
-          </li>
-        ))}
-      </ol>
-
-      <div class="cassa-totale" aria-label="Totale">
-        <span>Totale ({pezzi(righe)} pz)</span>
-        <strong>{euro(totale / 100)}</strong>
-      </div>
-      {attesa && (
-        <div class="simulatore" role="alert" aria-label="Pagamento con carta">
-          <p><strong>Pagamento con carta in corso · {euro(attesa.centesimi / 100)}</strong><br />
-            In attesa del ritorno da SumUp. Se SumUp si è chiuso senza tornare qui, controlla lì l'esito:</p>
-          <div class="comandi">
-            <button type="button" class="primario piccolo" disabled={occupato} onClick={() => {
-              if (confirm(`SumUp dice che il pagamento di ${euro(attesa.centesimi / 100)} è RIUSCITO? Verrà emesso lo scontrino.`)) void emettiDopoCarta(attesa, '');
-            }}>Pagato: emetti scontrino</button>
-            <button type="button" class="secondario piccolo" disabled={occupato} onClick={() => {
-              if (!confirm('Il pagamento NON è andato a buon fine? Le righe tornano in cassa, nessuno scontrino.')) return;
-              if (!righe.length) setRighe(attesa.righe);
-              void chiudiPagamento(); setAttesa(null); setEsitoSumUp(null);
-            }}>Non pagato</button>
-          </div>
-        </div>
-      )}
+  const aperteEmergenza = daEmettere(registro, evento.id);
+  const infoEvento = `📍 ${descriviEvento(evento)} · `;
+  const esito = (
+    <>
       {avviso && <p role={avviso.errore ? 'alert' : 'status'} class={avviso.errore ? 'esito errore' : 'esito'}>{avviso.testo}</p>}
       {ultimo && !avviso?.errore && (
-        <div class="comandi">
+        <div class="comandi cassa-ultimo">
           <button type="button" class="secondario invia" onClick={() => void invia(ultimo, new Date())}>📤 Invia {ultimo.tipo === 'A' ? 'annullo' : 'scontrino'} {ultimo.progressivo} (WhatsApp, email…)</button>
           {stampanteSalvata() && <button type="button" class="secondario" onClick={() => void stampaRicevuta(ultimo, new Date())}>🖨 Stampa</button>}
         </div>
       )}
       {avvisoStampa && <p class="esito errore" role="alert">{avvisoStampa}</p>}
-
-      {conComande && (
-        <input class="cassa-cliente" aria-label="Nome per la comanda" placeholder="Nome (per chiamare il cliente)" maxLength={30} value={cliente} onInput={(e) => setCliente(e.currentTarget.value)} />
+    </>
+  );
+  return (
+    <section class="cassa" aria-label="Cassa">
+      <div class="cassa-testa">
+        {modoVero
+          ? <span class="cassa-modo vero" role="note">AGENZIA {collegamento.stato === 'ok' ? '✅' : collegamento.stato === 'collego' ? '…' : '❌'}</span>
+          : <span class="cassa-modo simulatore" role="note">SIMULATORE</span>}
+        <span class="cassa-info">{infoEvento}<strong>{leggiNomeCassa()}</strong> · fondo {euro((leggiApertura()?.fondo ?? 0) / 100)}{leggi(STAMPA_COMANDE) === '1' ? ' · 🖨 comande' : ''}</span>
+        <button type="button" class="secondario piccolo cassa-apri-menu" aria-label="Menu della cassa" aria-expanded={menu} onClick={() => setMenu(true)}>☰{aperteEmergenza.length ? <span class="pallino-avviso">{aperteEmergenza.length}</span> : null}</button>
+      </div>
+      {modoVero && collegamento.stato === 'errore' && (
+        <p class="esito errore" role="alert">Agenzia non collegata: le vendite vanno nel registro di emergenza ({collegamento.testo}) <button type="button" class="secondario piccolo" onClick={() => setTentativo((x) => x + 1)}>Riprova</button></p>
       )}
-      <div class="cassa-descrizione">
-        <input aria-label="Descrizione" placeholder="Descrizione" maxLength={60} value={descrizione} onInput={(e) => setDescrizione(e.currentTarget.value)} />
-        <select aria-label="IVA" value={iva} onChange={(e) => setIva(e.currentTarget.value as Aliquota)}>
-          {IVA.map((a) => <option key={a} value={a}>IVA {a}%</option>)}
-        </select>
-      </div>
-      <div class="cassa-display" aria-live="polite">
-        {t.quantita ? <span class="per">{t.quantita} ×</span> : null}
-        <span>{digitato !== null ? euro(digitato / 100) : t.testo || ' '}</span>
-      </div>
+      {aperteEmergenza.length > 0 && !menu && (
+        <p class="esito errore cassa-emergenza-breve">📒 {aperteEmergenza.length} {aperteEmergenza.length === 1 ? 'vendita' : 'vendite'} senza scontrino (registro di emergenza)
+          <button type="button" class="primario piccolo" disabled={occupato} onClick={() => void emettiRegistro()}>Emetti ora</button></p>
+      )}
+      {fuoriItalia(evento) && <p class="errore" role="alert">Evento fuori Italia ({evento.paese}): la cassa fiscale italiana non si usa qui.</p>}
 
-      <div class="cassa-pagamenti">
-        <button type="button" class="cont" disabled={occupato} onClick={() => void paga('contanti')}>CONT</button>
-        <button type="button" class="elet" disabled={occupato} onClick={() => void paga('elettronico')}>{conSumUp ? 'ELET · SumUp' : 'ELET'}</button>
-        <button type="button" class="senza" aria-label="Senza incasso" aria-expanded={pannello} disabled={occupato} onClick={() => setPannello(!pannello)}>🎁</button>
-      </div>
-      {pannello && (
-        <div class="cassa-pannello" role="group" aria-label="Senza incasso">
-          <div class="scelte">
-            {TIPI_MOVIMENTO.map((x) => <label key={x.tipo} class="spunta"><input type="radio" name="senza" checked={senza === x.tipo} onChange={() => setSenza(x.tipo)} /> {x.nome}</label>)}
+      <div class="cassa-corpo" data-vista={pagina === 0 ? 'tastierino' : 'prodotti'}>
+        <div class="cassa-scontrino">
+          <ol class="cassa-righe" aria-label="Righe dello scontrino">
+            {righe.length === 0 && <li class="vuota">Tocca i prodotti o scrivi un importo.</li>}
+            {righe.map((r, i) => (
+              <li key={`${r.descrizione}-${i}`}>
+                <span class="nome">{r.descrizione}<small class="qta">{r.quantita} pz × {euro(r.centesimi / 100)}</small></span>
+                <span class="tot">{euro((r.quantita * r.centesimi) / 100)}</span>
+                <button type="button" class="meno" aria-label={`Togli uno: ${r.descrizione}`} onClick={() => setRighe(togliUno(righe, i))}>−</button>
+              </li>
+            ))}
+          </ol>
+          <div class="cassa-totale" aria-label="Totale">
+            <span>Totale ({pezzi(righe)} pz)</span>
+            <strong>{euro(totale / 100)}</strong>
           </div>
-          <p class="nota">Nessuno scontrino e nessun importo: solo prodotti, scaricati dal magazzino. Se qualcuno paga (anche l'organizzatore) è una vendita: CONT, ELET o fattura.</p>
-          <input aria-label="Motivo" placeholder={`Motivo, facoltativo (${TIPI_MOVIMENTO.find((x) => x.tipo === senza)!.aiuto})`} maxLength={200} value={motivo} onInput={(e) => setMotivo(e.currentTarget.value)} />
-          {senza === 'pasto_staff' && <input aria-label="Persona" placeholder="Chi ha mangiato (facoltativo)" maxLength={60} value={persona} onInput={(e) => setPersona(e.currentTarget.value)} />}
-          <button type="button" class="primario" disabled={occupato} onClick={() => void registraSenzaIncasso(senza)}>Registra</button>
+          {attesa && (
+            <div class="simulatore" role="alert" aria-label="Pagamento con carta">
+              <p><strong>Pagamento con carta in corso · {euro(attesa.centesimi / 100)}</strong><br />
+                In attesa del ritorno da SumUp. Se SumUp si è chiuso senza tornare qui, controlla lì l'esito:</p>
+              <div class="comandi">
+                <button type="button" class="primario piccolo" disabled={occupato} onClick={() => {
+                  if (confirm(`SumUp dice che il pagamento di ${euro(attesa.centesimi / 100)} è RIUSCITO? Verrà emesso lo scontrino.`)) void emettiDopoCarta(attesa, '');
+                }}>Pagato: emetti scontrino</button>
+                <button type="button" class="secondario piccolo" disabled={occupato} onClick={() => {
+                  if (!confirm('Il pagamento NON è andato a buon fine? Le righe tornano in cassa, nessuno scontrino.')) return;
+                  if (!righe.length) setRighe(attesa.righe);
+                  void chiudiPagamento(); setAttesa(null); setEsitoSumUp(null);
+                }}>Non pagato</button>
+              </div>
+            </div>
+          )}
+          {!menu && esito}
+          {conComande && (
+            <input class="cassa-cliente" aria-label="Nome per la comanda" placeholder="Nome (per chiamare il cliente)" maxLength={30} value={cliente} onInput={(e) => setCliente(e.currentTarget.value)} />
+          )}
         </div>
-      )}
 
-      </div>
-      <div class="cassa-pagine" ref={pagine} onScroll={(e) => setPagina(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}>
+        <div class="cassa-pagina pagina-prodotti" role="group" aria-label="Prodotti">
+          <div class="cassa-filtri">
+            <button type="button" class="solo-telefono verso" onClick={() => vaiA(0)}>⌨ {t.quantita ? `${t.quantita} ×` : 'Importo'}</button>
+            <input aria-label="Cerca prodotto" placeholder="🔍" value={cerca} onInput={(e) => setCerca(e.currentTarget.value)} />
+            <div class="schede" role="tablist">
+              <button type="button" role="tab" aria-selected={!gruppo} onClick={() => setGruppo('')}>Tutte</button>
+              {gruppi.map((g) => <button key={g} type="button" role="tab" aria-selected={gruppo === g} onClick={() => setGruppo(g)}>{g}</button>)}
+            </div>
+          </div>
+          <div class="griglia-prodotti">
+            {!pro.caricato ? <p class="nota">Carico…</p> : griglia.map((p) => (
+              <button key={p.id} type="button" style={{ background: coloreGruppo(p.gruppo || 'Altro', gruppi) }} onClick={() => prodotto(p)}>
+                <span>{p.nome}</span><small>{euro(p.prezzo)}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div class="cassa-pagina pagina-tastierino" role="group" aria-label="Tastierino">
+          <div class="cassa-descrizione">
+            <button type="button" class="solo-telefono verso" onClick={() => vaiA(1)}>◀ Prodotti</button>
+            <input aria-label="Descrizione" placeholder="Descrizione" maxLength={60} value={descrizione} onInput={(e) => setDescrizione(e.currentTarget.value)} />
+            <select aria-label="IVA" value={iva} onChange={(e) => setIva(e.currentTarget.value as Aliquota)}>
+              {IVA.map((a) => <option key={a} value={a}>IVA {a}%</option>)}
+            </select>
+          </div>
+          <div class="cassa-display" aria-live="polite">
+            {t.quantita ? <span class="per">{t.quantita} ×</span> : null}
+            <span>{digitato !== null ? euro(digitato / 100) : t.testo || ' '}</span>
+          </div>
           <div class="tastierino">
             {TASTI.map((fila, i) => (
               <Fragment key={i}>
@@ -613,31 +618,47 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
             <button type="button" class="tasto aggiungi" onClick={libera}>+ importo</button>
           </div>
         </div>
-        <div class="cassa-pagina pagina-prodotti" role="group" aria-label="Prodotti">
-          <div class="cassa-filtri">
-            <input aria-label="Cerca prodotto" placeholder="🔍 Cerca" value={cerca} onInput={(e) => setCerca(e.currentTarget.value)} />
-            <div class="schede" role="tablist">
-              <button type="button" role="tab" aria-selected={!gruppo} onClick={() => setGruppo('')}>Tutte</button>
-              {gruppi.map((g) => <button key={g} type="button" role="tab" aria-selected={gruppo === g} onClick={() => setGruppo(g)}>{g}</button>)}
-            </div>
-          </div>
-          <div class="griglia-prodotti">
-            {!pro.caricato ? <p class="nota">Carico…</p> : griglia.map((p) => (
-              <button key={p.id} type="button" style={{ background: coloreGruppo(p.gruppo || 'Altro', gruppi) }} onClick={() => prodotto(p)}>
-                <span>{p.nome}</span><small>{euro(p.prezzo)}</small>
-              </button>
-            ))}
-          </div>
+
+        <div class="cassa-pagamenti">
+          <button type="button" class="cont" disabled={occupato} onClick={() => void paga('contanti')}>CONT</button>
+          <button type="button" class="elet" disabled={occupato} onClick={() => void paga('elettronico')}>{conSumUp ? 'ELET · SumUp' : 'ELET'}</button>
+          <button type="button" class="senza" aria-label="Senza incasso" aria-expanded={pannello} disabled={occupato} onClick={() => setPannello(!pannello)}>🎁</button>
         </div>
       </div>
-      <div class="pallini" role="tablist" aria-label="Pagine">
-        <button type="button" role="tab" aria-selected={pagina === 0} aria-label="Tastierino" onClick={() => vaiA(0)} />
-        <button type="button" role="tab" aria-selected={pagina === 1} aria-label="Prodotti" onClick={() => vaiA(1)} />
-      </div>
-      </div>
-      <ScontriniEvento db={db} evento={evento.id} puoAnnullare={(s) => !!cassa && (cassa.ambiente === 'agenzia' ? s.ambiente === 'agenzia' : cassa.scontrini.some((x) => x.idtrx === s.idtrx && !x.annullato))} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} onStampa={(s, q) => void stampaRicevuta(s, q)} />
-      {titolare && <MovimentiEvento db={db} evento={evento.id} />}
-      {titolare && <QuadratureEvento db={db} evento={evento} />}
+
+      {pannello && (
+        <div class="cassa-foglio" role="group" aria-label="Senza incasso">
+          <div class="foglio-testa"><strong>🎁 Senza incasso · {pezzi(righe)} pz</strong>
+            <button type="button" class="secondario piccolo" onClick={() => setPannello(false)}>Annulla</button></div>
+          <div class="scelte">
+            {TIPI_MOVIMENTO.map((x) => <label key={x.tipo} class="spunta"><input type="radio" name="senza" checked={senza === x.tipo} onChange={() => setSenza(x.tipo)} /> {x.nome}</label>)}
+          </div>
+          <p class="nota">Nessuno scontrino e nessun importo: solo prodotti, scaricati dal magazzino. Se qualcuno paga (anche l'organizzatore) è una vendita: CONT, ELET o fattura.</p>
+          <input aria-label="Motivo" placeholder={`Motivo, facoltativo (${TIPI_MOVIMENTO.find((x) => x.tipo === senza)!.aiuto})`} maxLength={200} value={motivo} onInput={(e) => setMotivo(e.currentTarget.value)} />
+          {senza === 'pasto_staff' && <input aria-label="Persona" placeholder="Chi ha mangiato (facoltativo)" maxLength={60} value={persona} onInput={(e) => setPersona(e.currentTarget.value)} />}
+          <button type="button" class="primario" disabled={occupato} onClick={() => void registraSenzaIncasso(senza)}>Registra</button>
+        </div>
+      )}
+
+      {menu && (
+        <div class="cassa-menu" role="dialog" aria-label="Menu della cassa">
+          <div class="foglio-testa"><strong>☰ Cassa</strong>
+            <button type="button" class="primario piccolo" aria-label="Torna alla cassa" onClick={() => { setMenu(false); setChiusura(false); }}>✕ Torna alla cassa</button></div>
+          <p class="nota">{infoEvento}{leggiNomeCassa()} · fondo {euro((leggiApertura()?.fondo ?? 0) / 100)}</p>
+          {esito}
+          <div class="comandi">
+            <button type="button" class="secondario" onClick={onCambia}>Cambia evento o cassa</button>
+            <button type="button" class="secondario" aria-expanded={chiusura} onClick={() => setChiusura(!chiusura)}>Chiudi cassa</button>
+          </div>
+          {chiusura && <ChiusuraCassa db={db} uid={uid} titolare={titolare} evento={evento} occupata={!!attesa || righe.length > 0}
+            inEmergenza={aperteEmergenza.length} onChiusa={onChiusa} />}
+          {!modoVero && <label class="spunta"><input type="checkbox" checked={senzaRete} onChange={(e) => setSenzaRete(e.currentTarget.checked)} /> Prova senza rete (simulatore)</label>}
+          <RegistroEmergenza registro={registro} evento={evento.id} occupato={occupato} voceAMano={voceAMano} onEmetti={() => void emettiRegistro()} onRisolvi={risolvi} />
+          <ScontriniEvento db={db} evento={evento.id} puoAnnullare={(s) => !!cassa && (cassa.ambiente === 'agenzia' ? s.ambiente === 'agenzia' : cassa.scontrini.some((x) => x.idtrx === s.idtrx && !x.annullato))} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} onStampa={(s, q) => void stampaRicevuta(s, q)} />
+          {titolare && <MovimentiEvento db={db} evento={evento.id} />}
+          {titolare && <QuadratureEvento db={db} evento={evento} />}
+        </div>
+      )}
     </section>
   );
 }

@@ -59,10 +59,10 @@ async function apri(page: Page, titolo: string): Promise<void> {
   await page.locator('.pannello-pagine').getByRole('link', { name: new RegExp(titolo) }).click();
 }
 
-/** Sul telefono tastierino e prodotti sono due pagine da scorrere; sul tablet stanno insieme e i pallini non ci sono. */
+/** Sul telefono si passa tra prodotti e tastierino con «⌨» e «◀ Prodotti»; sul tablet stanno insieme. */
 async function vaiPagina(cassa: Locator, nome: 'Prodotti' | 'Tastierino'): Promise<void> {
-  const pallino = cassa.getByRole('tab', { name: nome });
-  if (await pallino.isVisible()) await pallino.click();
+  const tasto = nome === 'Tastierino' ? cassa.getByRole('button', { name: /^⌨/ }) : cassa.getByRole('button', { name: '◀ Prodotti' });
+  if (await tasto.isVisible()) await tasto.click();
 }
 
 async function accedi(page: Page, u: typeof MATTEO): Promise<void> {
@@ -492,9 +492,14 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   const cassa = page.getByRole('region', { name: 'Cassa', exact: true });
   await expect(cassa).toContainText('📍 Sagra di prova · 07/11 · Osimo · Cassa 1');
   await expect(cassa.getByRole('note')).toContainText('SIMULATORE');
+  // tutto ciò che non serve a vendere sta nel menu ☰ della cassa
+  const menu = cassa.getByRole('dialog', { name: 'Menu della cassa' });
+  const apriMenu = async () => { if (!(await menu.isVisible())) await cassa.getByRole('button', { name: 'Menu della cassa' }).click(); };
+  const chiudiMenu = () => menu.getByRole('button', { name: 'Torna alla cassa' }).click();
   const tastierino = cassa.getByRole('group', { name: 'Tastierino' });
   const prodotti = cassa.getByRole('group', { name: 'Prodotti' });
   // 3 × Pane e olio
+  await vaiPagina(cassa, 'Tastierino');
   await tastierino.getByRole('button', { name: '3', exact: true }).click();
   await tastierino.getByRole('button', { name: 'Per (quantità)' }).click();
   await vaiPagina(cassa, 'Prodotti');
@@ -520,6 +525,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   expect(file.suggestedFilename()).toMatch(/^VegMan-DCW2026-9999-\d+\.png$/);
   await file.saveAs('test-results/ricevuta.png');
   // importo digitato e subito carta, senza righe (come Billy)
+  await vaiPagina(cassa, 'Tastierino');
   await tastierino.getByRole('button', { name: '5', exact: true }).click();
   await cassa.getByRole('button', { name: 'ELET', exact: true }).click();
   await expect(cassa.getByRole('status')).toContainText('5,00 € · carta');
@@ -527,6 +533,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
   await expect(cassa.getByRole('alert')).toContainText('vuoto');
   // archivio: scontrini di oggi con totali; annullo del primo
+  await apriMenu();
   await cassa.getByText(/^Scontrini dell'evento · 2 · 21,50 €/).click();
   const oggi = cassa.getByRole('list', { name: 'Scontrini dell\'evento' });
   await expect(oggi.getByRole('listitem')).toHaveCount(2);
@@ -538,6 +545,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await expect(oggi.getByRole('listitem')).toHaveCount(3);
   await expect(oggi).toContainText('Annullo di DCW2026/9999-');
   await expect(oggi.getByRole('button', { name: '📤 Invia' })).toHaveCount(3);
+  await chiudiMenu();
   // C4 · omaggio: movimento interno, niente scontrino né Agenzia
   await vaiPagina(cassa, 'Prodotti');
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
@@ -566,6 +574,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await senza.getByRole('button', { name: 'Registra' }).click();
   await expect(cassa.getByRole('alert')).toContainText('solo prodotti');
   await righe.getByRole('button', { name: /^Togli uno/ }).click();
+  await apriMenu();
   await expect(cassa.getByText(/^Scontrini dell'evento · 1 · 5,00 €/)).toBeVisible();
   await cassa.getByText(/^Senza incasso dell'evento · 2 pz/).click();
   await expect(cassa.getByText('Omaggio: 1× Pane e olio')).toBeVisible();
@@ -573,23 +582,29 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await expect(cassa.getByRole('list', { name: 'Movimenti senza incasso' })).toContainText('pranzo · Luca');
   await cassa.screenshot({ path: 'test-results/cassa-senza-incasso.png' });
   // C7 · senza rete: la vendita va nel registro di emergenza, la cassa non si chiude, poi si emette
-  await cassa.getByLabel('Prova senza rete').check();
+  await cassa.getByLabel('Prova senza rete (simulatore)').check();
+  await chiudiMenu();
   await vaiPagina(cassa, 'Prodotti');
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
   await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
   await expect(cassa.getByRole('status')).toContainText('vendita di 4,00 € annotata nel registro di emergenza (n. 1)');
   await expect(righe).toContainText('Tocca i prodotti');
+  // l'avviso resta in vista anche col menu chiuso
+  await expect(cassa).toContainText('📒 1 vendita senza scontrino');
+  await apriMenu();
   const registro = cassa.getByRole('group', { name: 'Registro di emergenza' });
   await expect(registro).toContainText('1 da emettere · 4,00 €');
   await expect(registro).toContainText('1× Pane e olio · Rete assente · DA EMETTERE');
+  await apriMenu();
   await cassa.getByRole('button', { name: 'Chiudi cassa' }).click();
   await cassa.getByRole('form', { name: 'Chiusura cassa' }).getByRole('button', { name: 'Registra chiusura' }).click();
   await expect(cassa.getByRole('form', { name: 'Chiusura cassa' }).getByRole('alert')).toContainText('Prima emetti la vendita del registro di emergenza');
+  await apriMenu();
   await cassa.getByRole('button', { name: 'Chiudi cassa' }).click();
   await registro.getByRole('button', { name: 'Emetti ora' }).click();
   await expect(cassa.getByRole('alert')).toContainText('Ancora senza rete');
   await cassa.screenshot({ path: 'test-results/cassa-emergenza.png' });
-  await cassa.getByLabel('Prova senza rete').uncheck();
+  await cassa.getByLabel('Prova senza rete (simulatore)').uncheck();
   await registro.getByRole('button', { name: 'Emetti ora' }).click();
   await expect(cassa.getByRole('status')).toContainText('Registro di emergenza: 1 scontrino emesso');
   await expect(registro).toContainText('tutto emesso');
@@ -597,6 +612,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   // Stampante Bluetooth scelta in passato (qui finta: nel browser di prova non c'è Bluetooth) e comande attive
   await page.evaluate(() => localStorage.setItem('vegman-stampante', JSON.stringify({ id: 'x', nome: 'Stampante finta', servizio: 's', caratteristica: 'c', senzaRisposta: false })));
   // cambia: si torna all'apertura, l'evento creato è proposto
+  await apriMenu();
   await cassa.getByRole('button', { name: 'Cambia' }).click();
   await expect(apri.getByLabel('Evento', { exact: true })).toContainText('Sagra di prova');
   // le impostazioni del telefono stanno in un riquadro chiuso; nel browser niente credenziali né chiave SumUp
@@ -611,12 +627,14 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await expect(cassa).toContainText('🖨 comande');
   await expect(cassa).toContainText('· Furgone · fondo 50,00 €');
   // riaprendo la stessa cassa il fondo scritto prima è proposto e si può correggere
+  await apriMenu();
   await cassa.getByRole('button', { name: 'Cambia' }).click();
   await expect(apri.getByLabel('Fondo cassa (contanti all\'inizio)')).toHaveValue('50,00');
   await expect(apri).toContainText('Questa cassa è già aperta su questo evento');
   await apri.getByLabel('Fondo cassa (contanti all\'inizio)').fill('60');
   await apri.getByRole('button', { name: 'Apri cassa' }).click();
   await expect(cassa).toContainText('fondo 60,00 €');
+  await apriMenu();
   await cassa.getByRole('button', { name: 'Cambia' }).click();
   await apri.getByLabel('Fondo cassa (contanti all\'inizio)').fill('50');
   await apri.getByRole('button', { name: 'Apri cassa' }).click();
@@ -632,13 +650,18 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await expect(cassa.getByRole('alert')).toContainText('Comanda 1 non stampata');
   await expect(cassa.getByRole('button', { name: '🖨 Stampa' })).toBeVisible();
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
+  await apriMenu();
   await cassa.getByRole('button', { name: 'Chiudi cassa' }).click();
   const chiusura = cassa.getByRole('form', { name: 'Chiusura cassa' });
   await expect(chiusura).toContainText('fondo 50,00 €');
   await chiusura.getByLabel('Contanti contati (fondo compreso)').fill('50');
   await chiusura.getByRole('button', { name: 'Registra chiusura' }).click();
   await expect(chiusura.getByRole('alert')).toContainText('svuota lo scontrino');
+  await chiudiMenu();
   await righe.getByRole('button', { name: /^Togli uno/ }).click();
+  await apriMenu();
+  await cassa.getByRole('button', { name: 'Chiudi cassa' }).click();
+  await chiusura.getByLabel('Contanti contati (fondo compreso)').fill('50');
   await chiusura.getByLabel('Carta (POS): totale del lettore').fill('abc');
   await chiusura.getByRole('button', { name: 'Registra chiusura' }).click();
   await expect(chiusura.getByRole('alert')).toContainText('Carta (POS): scrivi un importo');
@@ -650,6 +673,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   // il titolare vede il confronto nella cassa e tra gli avvisi
   await apri.getByLabel('Nome di questa cassa').fill('Furgone');
   await apri.getByRole('button', { name: 'Apri cassa' }).click();
+  await apriMenu();
   await cassa.getByText(/^Chiusure dell'evento · 1 · ⚠ 1 non quadrano/).click();
   const chiusure = cassa.getByRole('list', { name: 'Chiusure dell\'evento' });
   await expect(chiusure).toContainText('Contanti: contati 50,00 € · attesi 54,00 € (fondo 50,00 €) · ⚠ −4,00 €');
@@ -661,6 +685,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   // chiusura dell'evento: non si può più aprire
   await page.goto('/#/vendi');
   page.once('dialog', (d) => void d.accept());
+  await apriMenu();
   await cassa.getByText(/^Chiusure dell'evento/).click();
   await cassa.getByRole('button', { name: 'Chiudi l\'evento' }).click();
   await expect(apri).toContainText('Nessun evento aperto');
@@ -836,4 +861,49 @@ test('cassa sul tablet: una sola schermata, prodotti grandi a destra, tastierino
     await page.screenshot({ path: `test-results/cassa-tablet-${nome}.png` });
     await page.context().close();
   }
+});
+
+test('cassa sul telefono: schermata fissa, prodotti e righe in vista, il resto nel menu ☰', async ({ browser }) => {
+  const page = await (await browser.newContext({ viewport: { width: 360, height: 760 } })).newPage();
+  await page.addInitScript(() => localStorage.setItem('vegman-oggi', '2026-11-07'));
+  await accedi(page, MATTEO);
+  await page.goto('/#/vendi');
+  const apri = page.getByRole('region', { name: 'Apri la cassa' });
+  await expect(apri.getByRole('button', { name: /^(Apri cassa|Crea e apri la cassa)$/ }).first()).toBeVisible();
+  if (await apri.getByRole('button', { name: 'Crea e apri la cassa' }).isVisible()) {
+    await apri.getByLabel('Nome dell\'evento').fill('Fiera col telefono');
+    await apri.getByRole('button', { name: 'Crea e apri la cassa' }).click();
+  } else await apri.getByRole('button', { name: 'Apri cassa' }).click();
+  const cassa = page.getByRole('region', { name: 'Cassa', exact: true });
+  const prodotti = cassa.getByRole('group', { name: 'Prodotti' });
+  const tastierino = cassa.getByRole('group', { name: 'Tastierino' });
+  await expect(prodotti).toBeVisible();
+  await expect(tastierino).toBeHidden();
+  for (let i = 0; i < 6; i++) await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
+  await prodotti.getByRole('button', { name: /^Wrap di prova/ }).click();
+  // la pagina non scorre: CONT e le righe restano dentro lo schermo
+  const altezza = await page.evaluate(() => window.innerHeight);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(altezza);
+  const cont = (await cassa.getByRole('button', { name: 'CONT', exact: true }).boundingBox())!;
+  expect(cont.y + cont.height).toBeLessThanOrEqual(altezza);
+  await expect(cassa.getByRole('list', { name: 'Righe dello scontrino' })).toContainText('Wrap di prova');
+  await expect(cassa.getByRole('button', { name: 'Cambia' })).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/cassa-telefono.png' });
+  // tastierino a richiesta, poi di nuovo i prodotti
+  await prodotti.getByRole('button', { name: /⌨/ }).click();
+  await expect(tastierino).toBeVisible();
+  await expect(prodotti).toBeHidden();
+  await page.screenshot({ path: 'test-results/cassa-telefono-tastierino.png' });
+  await tastierino.getByRole('button', { name: '◀ Prodotti' }).click();
+  await expect(prodotti).toBeVisible();
+  // menu ☰: cambia, chiudi cassa, scontrini dell'evento
+  await cassa.getByRole('button', { name: 'Menu della cassa' }).click();
+  const menu = cassa.getByRole('dialog', { name: 'Menu della cassa' });
+  await expect(menu.getByRole('button', { name: 'Cambia evento o cassa' })).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Chiudi cassa' })).toBeVisible();
+  await expect(menu).toContainText('Scontrini dell\'evento');
+  await page.screenshot({ path: 'test-results/cassa-telefono-menu.png' });
+  await menu.getByRole('button', { name: 'Torna alla cassa' }).click();
+  await expect(menu).toHaveCount(0);
+  await page.context().close();
 });
