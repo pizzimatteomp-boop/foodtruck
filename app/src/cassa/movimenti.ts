@@ -25,7 +25,8 @@ export interface Movimento {
   prodotto: string;
   descrizione: string;
   quantita: number;
-  motivo: string;
+  /** Facoltativo (deciso da Matteo il 13/11/2026: durante l'evento scriverlo è troppo lento). */
+  motivo?: string;
   /** Chi ha consumato (facoltativo; chi registra è sempre annotato a parte). */
   persona?: string;
   evento: string;
@@ -36,15 +37,14 @@ export interface Movimento {
   gruppo: string;
 }
 
-/** Un movimento per prodotto. Solo prodotti (niente righe a importo libero), motivo obbligatorio. */
+/** Un movimento per prodotto. Solo prodotti (niente righe a importo libero); motivo e persona facoltativi. */
 export function preparaMovimenti(righe: readonly Riga[], a: {
-  tipo: TipoMovimento; motivo: string; persona?: string; evento: string; cassa: string; giorno: string; gruppo: string;
+  tipo: TipoMovimento; motivo?: string; persona?: string; evento: string; cassa: string; giorno: string; gruppo: string;
 }): Movimento[] {
   if (!TIPI_MOVIMENTO.some((x) => x.tipo === a.tipo)) throw new ErroreCassa('Tipo di movimento non ammesso.');
   if (!righe.length) throw new ErroreCassa('Scegli almeno un prodotto.');
   if (righe.some((r) => !r.prodotto)) throw new ErroreCassa('Nei movimenti senza incasso vanno solo prodotti, non importi.');
-  const motivo = a.motivo.trim().slice(0, 200);
-  if (!motivo) throw new ErroreCassa('Scrivi il motivo.');
+  const motivo = a.motivo?.trim().slice(0, 200);
   const persona = a.persona?.trim().slice(0, 60);
   // Stesso prodotto su più righe: una sola registrazione con la somma.
   const perProdotto = new Map<string, Riga & { prodotto: string }>();
@@ -53,7 +53,7 @@ export function preparaMovimenti(righe: readonly Riga[], a: {
     perProdotto.set(r.prodotto!, g ? { ...g, quantita: g.quantita + r.quantita } : { ...r, prodotto: r.prodotto! });
   }
   return [...perProdotto.values()].map((r) => ({
-    tipo: a.tipo, prodotto: r.prodotto, descrizione: r.descrizione, quantita: r.quantita, motivo,
+    tipo: a.tipo, prodotto: r.prodotto, descrizione: r.descrizione, quantita: r.quantita, ...(motivo ? { motivo } : {}),
     ...(persona ? { persona } : {}), evento: a.evento, cassa: a.cassa, giorno: a.giorno, gruppo: a.gruppo,
   }));
 }

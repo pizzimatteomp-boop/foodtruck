@@ -193,7 +193,7 @@ service cloud.firestore {
         && testo(nuovo().prodotto)
         && testo(nuovo().descrizione)
         && nuovo().quantita is int && nuovo().quantita > 0 && nuovo().quantita <= 1000
-        && testo(nuovo().motivo)
+        && (!('motivo' in nuovo()) || testo(nuovo().motivo))
         && (!('persona' in nuovo()) || testo(nuovo().persona))
         && testo(nuovo().evento)
         && testo(nuovo().cassa)

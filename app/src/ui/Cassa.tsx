@@ -567,7 +567,7 @@ function Vendita({ db, uid, titolare, evento, onCambia, onChiusa }: { db: Firest
             {TIPI_MOVIMENTO.map((x) => <label key={x.tipo} class="spunta"><input type="radio" name="senza" checked={senza === x.tipo} onChange={() => setSenza(x.tipo)} /> {x.nome}</label>)}
           </div>
           <p class="nota">Nessuno scontrino e nessun importo: solo prodotti, scaricati dal magazzino. Se qualcuno paga (anche l'organizzatore) è una vendita: CONT, ELET o fattura.</p>
-          <input aria-label="Motivo" placeholder={`Motivo (${TIPI_MOVIMENTO.find((x) => x.tipo === senza)!.aiuto})`} maxLength={200} value={motivo} onInput={(e) => setMotivo(e.currentTarget.value)} />
+          <input aria-label="Motivo" placeholder={`Motivo, facoltativo (${TIPI_MOVIMENTO.find((x) => x.tipo === senza)!.aiuto})`} maxLength={200} value={motivo} onInput={(e) => setMotivo(e.currentTarget.value)} />
           {senza === 'pasto_staff' && <input aria-label="Persona" placeholder="Chi ha mangiato (facoltativo)" maxLength={60} value={persona} onInput={(e) => setPersona(e.currentTarget.value)} />}
           <button type="button" class="primario" disabled={occupato} onClick={() => void registraSenzaIncasso(senza)}>Registra</button>
         </div>
@@ -672,7 +672,7 @@ function MovimentiEvento({ db, evento }: { db: Firestore; evento: string }) {
         {elenco.map((x) => (
           <li key={x.id}>
             <div class="nome"><strong>{nomeMovimento(x.tipo)}</strong> <small>{ora(x)} · {x.cassa}</small></div>
-            <small class="dettaglio">{x.quantita}× {x.descrizione} · {x.motivo}{x.persona ? ` · ${x.persona}` : ''}</small>
+            <small class="dettaglio">{x.quantita}× {x.descrizione}{x.motivo ? ` · ${x.motivo}` : ''}{x.persona ? ` · ${x.persona}` : ''}</small>
           </li>
         ))}
       </ul>

@@ -262,6 +262,8 @@ describe('movimenti senza incasso', () => {
   it('solo i tipi previsti, con motivo e quantità', async () => {
     await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { tipo: 'vendita' })));
     await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { motivo: '' })));
+    const { motivo: _m, ...senzaMotivo } = movimento('anna');
+    await assertSucceeds(addDoc(collection(db('anna'), 'movimenti'), senzaMotivo));
     await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { quantita: 0 })));
     await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { quantita: 1.5 })));
     await assertFails(addDoc(collection(db('anna'), 'movimenti'), movimento('anna', { scontrino: 's1' })));

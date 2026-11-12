@@ -17,9 +17,11 @@ describe('movimenti senza incasso', () => {
     expect(JSON.stringify(m)).not.toMatch(/centesimi|prezzo|importo/);
   });
 
-  it('rifiuta righe libere, motivo vuoto, carrello vuoto e tipi non ammessi', () => {
+  it('motivo facoltativo; rifiuta righe libere, carrello vuoto e tipi non ammessi', () => {
     expect(() => preparaMovimenti([{ descrizione: 'Varie', quantita: 1, centesimi: 100, aliquota: '10' }], BASE)).toThrow(/solo prodotti/);
-    expect(() => preparaMovimenti([K], { ...BASE, motivo: '  ' })).toThrow(/motivo/);
+    expect(preparaMovimenti([K], { ...BASE, motivo: '  ' })[0]).not.toHaveProperty('motivo');
+    const { motivo: _m, ...senza } = BASE;
+    expect(preparaMovimenti([K], senza)[0]).not.toHaveProperty('motivo');
     expect(() => preparaMovimenti([], BASE)).toThrow(/almeno/);
     expect(() => preparaMovimenti([K], { ...BASE, tipo: 'vendita' as never })).toThrow(/non ammesso/);
   });

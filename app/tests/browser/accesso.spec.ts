@@ -568,9 +568,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await cassa.getByRole('button', { name: 'Senza incasso' }).click();
   const senza = cassa.getByRole('group', { name: 'Senza incasso' });
   await expect(senza.getByLabel('Omaggio')).toBeChecked();
-  await senza.getByRole('button', { name: 'Registra' }).click();
-  await expect(cassa.getByRole('alert')).toContainText('Scrivi il motivo');
-  await senza.getByLabel('Motivo').fill('Artista');
+  // il motivo è facoltativo: bastano due tocchi
   await senza.getByRole('button', { name: 'Registra' }).click();
   await expect(cassa.getByRole('status')).toContainText('Omaggio: 1 pz registrati (nessuno scontrino)');
   await expect(cassa.getByRole('button', { name: 'Non riscosso' })).toHaveCount(0);
