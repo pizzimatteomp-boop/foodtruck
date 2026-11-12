@@ -99,3 +99,20 @@ export function leggiBozza(testo: string | null, giorno: string): Bozza {
   } catch { /* bozza illeggibile: si riparte */ }
   return { giorno, conte: {} };
 }
+
+/**
+ * Voci da contare scelte dal titolare (per non spaventare il magazziniere con l'elenco intero).
+ * Senza scelta (null) si conta tutto; le voci nuove compaiono solo quando il titolare le spunta.
+ */
+export function daContare(voci: readonly VoceMagazzino[], scelta: readonly string[] | null): VoceMagazzino[] {
+  if (!scelta) return [...voci];
+  const si = new Set(scelta);
+  return voci.filter((v) => si.has(v.chiave));
+}
+
+/** Spunta o toglie delle voci; dalla scelta «tutto» (null) si parte con tutte le voci esistenti. Solo chiavi esistenti, ordinate. */
+export function cambiaScelta(voci: readonly VoceMagazzino[], scelta: readonly string[] | null, chiavi: readonly string[], si: boolean): string[] {
+  const s = new Set(scelta ?? voci.map((v) => v.chiave));
+  for (const k of chiavi) { if (si) s.add(k); else s.delete(k); }
+  return voci.map((v) => v.chiave).filter((k) => s.has(k));
+}

@@ -62,7 +62,7 @@ export function App({ servizi, ambiente }: { servizi: Servizi; ambiente: Ambient
         : pagina.id === 'resoconto' ? <Resoconto db={servizi.db} />
         : pagina.id === 'produzione' ? <Produzione db={servizi.db} uid={stato.uid} />
         : pagina.id === 'stazione' ? <Stazione db={servizi.db} />
-        : pagina.id === 'inventario' ? <Inventario db={servizi.db} uid={stato.uid} />
+        : pagina.id === 'inventario' ? <Inventario db={servizi.db} uid={stato.uid} titolare={stato.profilo.ruolo === 'titolare'} />
         : pagina.id === 'magazzino' ? <Magazzino db={servizi.db} />
         : pagina.id === 'pubblica' ? <GestioneMenu db={servizi.db} uid={stato.uid} parametro={parametroDa(hash)} />
         : pagina.id === 'allergeni' ? <Allergeni db={servizi.db} />

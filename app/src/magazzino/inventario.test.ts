@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Ingrediente, Prodotto } from '../foodcost/modello';
-import { chiave, leggiBozza, numero, preparaInventario, preparaUnita, totale, vociMagazzino } from './inventario';
+import { cambiaScelta, chiave, daContare, leggiBozza, numero, preparaInventario, preparaUnita, totale, vociMagazzino } from './inventario';
 
 const ING: Ingrediente[] = [
   { id: 'c', nome: 'Ceci secchi', categoria: 'alimentare', unita: 'g', gruppo: '', confezione: 5000 },
@@ -47,5 +47,17 @@ describe('inventario del magazzino', () => {
     expect(leggiBozza(null, '2026-11-12')).toEqual({ giorno: '2026-11-12', conte: {} });
     expect(leggiBozza('{rotto', 'g')).toEqual({ giorno: 'g', conte: {} });
     expect(leggiBozza(JSON.stringify({ giorno: '2026-11-11', conte: { x: { confezioni: 1, sfuso: 0 } } }), 'g').giorno).toBe('2026-11-11');
+  });
+
+  it('voci da contare scelte dal titolare: senza scelta tutto, poi solo le spuntate (le nuove restano fuori)', () => {
+    const voci = vociMagazzino(ING, PRO, new Map());
+    const tutte = voci.map((v) => v.chiave);
+    expect(daContare(voci, null).map((v) => v.chiave)).toEqual(tutte);
+    const una = cambiaScelta(voci, null, tutte.slice(1), false);
+    expect(una).toEqual([tutte[0]]);
+    expect(daContare(voci, una).map((v) => v.chiave)).toEqual([tutte[0]]);
+    expect(cambiaScelta(voci, una, [tutte[1]!, 'ingrediente-sparito'], true)).toEqual(tutte.slice(0, 2));
+    expect(cambiaScelta(voci, [], tutte, true)).toEqual(tutte);
+    expect(daContare(voci, [])).toEqual([]);
   });
 });

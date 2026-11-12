@@ -8,19 +8,21 @@ import { oggi } from '../dati/oggi';
 import { useRaccolta } from '../dati/useRaccolta.db';
 import type { Ingrediente, Prodotto } from '../foodcost/modello';
 import {
-  ErroreInventario, leggiBozza, NOMI_SEZIONE, numero, preparaInventario, preparaUnita, totale, vociMagazzino, type Bozza, type Conta, type Sezione, type VoceMagazzino,
+  cambiaScelta, daContare, ErroreInventario, leggiBozza, NOMI_SEZIONE, numero, preparaInventario, preparaUnita, totale, vociMagazzino, type Bozza, type Conta, type Sezione, type VoceMagazzino,
 } from '../magazzino/inventario';
-import { registraInventario, salvaUnita, useInventari, useUnitaConta } from '../magazzino/inventario.db';
+import { registraInventario, salvaSceltaInventario, salvaUnita, useInventari, useSceltaInventario, useUnitaConta } from '../magazzino/inventario.db';
 import { quantitaLeggibile } from '../produzione/produzione';
 
 const BOZZA = 'vegman-inventario-bozza';
 const leggi = () => { try { return localStorage.getItem(BOZZA); } catch { return null; } };
 const scrivi = (b: Bozza | null) => { try { if (b) localStorage.setItem(BOZZA, JSON.stringify(b)); else localStorage.removeItem(BOZZA); } catch { /* solo comodità */ } };
 
-export function Inventario({ db, uid }: { db: Firestore; uid: string }) {
+export function Inventario({ db, uid, titolare }: { db: Firestore; uid: string; titolare: boolean }) {
   const ing = useRaccolta<Ingrediente>(db, 'ingredienti');
   const pro = useRaccolta<Prodotto>(db, 'prodotti');
   const unita = useUnitaConta(db);
+  const scelta = useSceltaInventario(db);
+  const [scegli, setScegli] = useState(false);
   const passati = useInventari(db, 5);
   const [bozza, setBozzaStato] = useState<Bozza>(() => leggiBozza(leggi(), oggi()));
   const setBozza = (b: Bozza) => { scrivi(b); setBozzaStato(b); };
@@ -30,9 +32,18 @@ export function Inventario({ db, uid }: { db: Firestore; uid: string }) {
   const [esito, setEsito] = useState<{ testo: string; errore: boolean } | null>(null);
   const [invio, setInvio] = useState(false);
 
-  const voci = useMemo(() => vociMagazzino(ing.dati, pro.dati, unita), [ing.dati, pro.dati, unita]);
+  const tutte = useMemo(() => vociMagazzino(ing.dati, pro.dati, unita), [ing.dati, pro.dati, unita]);
+  // Il magazziniere conta solo le voci scelte dal titolare; il titolare, scegliendo, le vede tutte.
+  const voci = useMemo(() => (scegli ? tutte : daContare(tutte, scelta ?? null)), [tutte, scelta, scegli]);
+  const scelte = new Set(daContare(tutte, scelta ?? null).map((v) => v.chiave));
   const visibili = voci.filter((v) => (cerca.trim() ? v.nome.toLowerCase().includes(cerca.trim().toLowerCase()) : v.sezione === sezione));
   const contate = voci.filter((v) => bozza.conte[v.chiave]).length;
+
+  async function spunta(chiavi: string[], si: boolean) {
+    try { await salvaSceltaInventario(db, cambiaScelta(tutte, scelta ?? null, chiavi, si)); } catch {
+      setEsito({ testo: 'Scelta non salvata: riprova.', errore: true });
+    }
+  }
 
   function conta(v: VoceMagazzino, c: Conta | null) {
     const conte = { ...bozza.conte };
@@ -57,11 +68,19 @@ export function Inventario({ db, uid }: { db: Firestore; uid: string }) {
     setInvio(false);
   }
 
-  if (!ing.caricato || !pro.caricato) return <section class="scheda"><p>Carico…</p></section>;
+  if (!ing.caricato || !pro.caricato || scelta === undefined) return <section class="scheda"><p>Carico…</p></section>;
   return (
     <section class="scheda" aria-label="Inventario">
       <h1>Inventario</h1>
-      <p class="nota">Contate <strong>{contate}</strong> voci su {voci.length}. La conta resta nel telefono finché non premi «Fine inventario».</p>
+      {titolare && (
+        <div class="comandi">
+          <p class="nota">{scelta ? `Il magazziniere conta ${scelte.size} voci su ${tutte.length}.` : 'Il magazziniere vede tutte le voci.'}</p>
+          <button type="button" class={scegli ? 'primario piccolo' : 'secondario piccolo'} aria-pressed={scegli} onClick={() => setScegli(!scegli)}>{scegli ? 'Fatto' : 'Scegli cosa contare'}</button>
+        </div>
+      )}
+      {scegli
+        ? <p class="nota">Spunta le voci da contare: le altre il magazziniere non le vede. Gli ingredienti nuovi restano fuori finché non li spunti.</p>
+        : <p class="nota">Contate <strong>{contate}</strong> voci su {voci.length}. La conta resta nel telefono finché non premi «Fine inventario».</p>}
       {esito && <p class={esito.errore ? 'esito errore' : 'esito'} role={esito.errore ? 'alert' : 'status'}>{esito.testo}</p>}
       <input aria-label="Cerca nel magazzino" placeholder="🔍 Cerca" value={cerca} onInput={(e) => setCerca(e.currentTarget.value)} />
       {!cerca.trim() && (
@@ -71,14 +90,26 @@ export function Inventario({ db, uid }: { db: Firestore; uid: string }) {
           ))}
         </div>
       )}
-      <ul class="inventario" aria-label="Voci da contare">
-        {visibili.map((v) => <RigaVoce key={v.chiave} db={db} v={v} c={bozza.conte[v.chiave] ?? null} onConta={(c) => conta(v, c)} />)}
-      </ul>
-      {!visibili.length && <p class="nota">Niente da contare qui.</p>}
-      <div class="inventario-fine">
+      {scegli ? (<>
+        <div class="comandi">
+          <button type="button" class="secondario piccolo" onClick={() => void spunta(visibili.map((v) => v.chiave), true)}>Tutte</button>
+          <button type="button" class="secondario piccolo" onClick={() => void spunta(visibili.map((v) => v.chiave), false)}>Nessuna</button>
+        </div>
+        <ul class="inventario" aria-label="Scelta delle voci">
+          {visibili.map((v) => (
+            <li key={v.chiave}><label class="spunta"><input type="checkbox" checked={scelte.has(v.chiave)} onChange={(e) => void spunta([v.chiave], e.currentTarget.checked)} /> {v.nome}</label></li>
+          ))}
+        </ul>
+      </>) : (
+        <ul class="inventario" aria-label="Voci da contare">
+          {visibili.map((v) => <RigaVoce key={v.chiave} db={db} v={v} c={bozza.conte[v.chiave] ?? null} onConta={(c) => conta(v, c)} />)}
+        </ul>
+      )}
+      {!visibili.length && <p class="nota">{scelta && !scegli ? 'Niente da contare qui: il titolare non ha scelto voci di questa sezione.' : 'Niente da contare qui.'}</p>}
+      {!scegli && <div class="inventario-fine">
         <input aria-label="Nota dell'inventario" placeholder="Nota (facoltativa, es. dopo la fiera)" maxLength={300} value={nota} onInput={(e) => setNota(e.currentTarget.value)} />
         <button type="button" class="primario" disabled={invio || !contate} onClick={() => void fine()}>Fine inventario ({contate})</button>
-      </div>
+      </div>}
       {passati.dati.length > 0 && (<>
         <h2>Inventari registrati</h2>
         <ul class="persone" aria-label="Inventari registrati">

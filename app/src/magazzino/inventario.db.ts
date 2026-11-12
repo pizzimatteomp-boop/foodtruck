@@ -25,3 +25,14 @@ export function useInventari(db: Firestore, quanti = 10): { dati: InventarioSalv
     () => setS((x) => ({ ...x, caricato: true }))), [db, quanti]);
   return s;
 }
+
+/** Voci da contare scelte dal titolare: null = nessuna scelta (si conta tutto); undefined = in caricamento. */
+export function useSceltaInventario(db: Firestore): readonly string[] | null | undefined {
+  const [s, setS] = useState<readonly string[] | null | undefined>(undefined);
+  useEffect(() => onSnapshot(doc(db, 'impostazioni', 'inventario'), (d) => setS(d.exists() ? (d.data() as { voci: string[] }).voci : null), () => setS(null)), [db]);
+  return s;
+}
+
+export async function salvaSceltaInventario(db: Firestore, voci: readonly string[]): Promise<void> {
+  await setDoc(doc(db, 'impostazioni', 'inventario'), { voci: [...voci] });
+}

@@ -555,6 +555,14 @@ describe('magazzino: confezioni di conta e inventari', () => {
     await assertSucceeds(getDoc(doc(db('marco'), 'unitaConta', 'ingrediente-i1')));
     await assertFails(getDoc(doc(db('anna'), 'unitaConta', 'ingrediente-i1')));
   });
+  it('voci da contare: le sceglie solo il titolare, il magazziniere le legge', async () => {
+    await assertSucceeds(setDoc(doc(db('matteo'), 'impostazioni', 'inventario'), { voci: ['ingrediente-i1', 'semilavorato-r1'] }));
+    await assertFails(setDoc(doc(db('marco'), 'impostazioni', 'inventario'), { voci: [] }));
+    await assertFails(setDoc(doc(db('matteo'), 'impostazioni', 'inventario'), { voci: 'tutte' }));
+    await assertFails(setDoc(doc(db('matteo'), 'impostazioni', 'inventario'), { voci: [], altro: 1 }));
+    await assertSucceeds(getDoc(doc(db('marco'), 'impostazioni', 'inventario')));
+    await assertFails(getDoc(doc(db('anna'), 'impostazioni', 'inventario')));
+  });
   it('inventari: li registra il magazziniere, non si cambiano, li cancella solo il titolare', async () => {
     const ref = await assertSucceeds(addDoc(collection(db('marco'), 'inventari'), inv('marco')));
     await assertFails(addDoc(collection(db('luca'), 'inventari'), inv('luca')));

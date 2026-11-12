@@ -267,6 +267,12 @@ service cloud.firestore {
         && testo(nuovo().nome) && nuovo().nome.size() <= 30
         && nuovo().quantita is number && nuovo().quantita > 0;
     }
+    // Voci da contare scelte dal titolare (chiavi «ingrediente-…» / «semilavorato-…»); senza documento si conta tutto.
+    match /impostazioni/inventario {
+      allow read: if magazzino();
+      allow write: if titolare() && nuovo().keys().hasOnly(['voci'])
+        && nuovo().voci is list && nuovo().voci.size() <= 3000;
+    }
     // Un inventario registrato non si cambia: una correzione è un nuovo inventario.
     match /inventari/{id} {
       allow read: if magazzino();

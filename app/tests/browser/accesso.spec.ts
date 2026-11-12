@@ -762,6 +762,22 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await tel.goto('/#/magazzino');
   await expect(mag.getByRole('table', { name: 'Differenze dell\'inventario' }).getByRole('row', { name: /Mayo di prova/ })).toContainText(/−300.*\(-37,5%\)/);
   await mag.screenshot({ path: 'test-results/magazzino.png' });
+  // il titolare sceglie cosa far contare: solo i semilavorati
+  await tel.goto('/#/inventario');
+  await expect(inv).toContainText('Il magazziniere vede tutte le voci');
+  await inv.getByRole('button', { name: 'Scegli cosa contare' }).click();
+  await inv.getByRole('button', { name: 'Nessuna' }).click();
+  await inv.getByRole('tab', { name: 'Packaging' }).click();
+  await inv.getByRole('button', { name: 'Nessuna' }).click();
+  await inv.getByRole('tab', { name: 'Semilavorati' }).click();
+  await expect(inv.getByRole('list', { name: 'Scelta delle voci' }).getByLabel('Mayo di prova')).toBeChecked();
+  await expect(inv).toContainText(/Il magazziniere conta \d+ voci su \d+/);
+  await tel.screenshot({ path: 'test-results/inventario-scelta.png' });
+  await inv.getByRole('button', { name: 'Fatto' }).click();
+  await expect(voci.getByRole('listitem', { name: 'Mayo di prova' })).toBeVisible();
+  await inv.getByRole('tab', { name: 'Ingredienti' }).click();
+  await expect(voci.getByRole('listitem')).toHaveCount(0);
+  await expect(inv).toContainText('il titolare non ha scelto voci di questa sezione');
 });
 
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {
