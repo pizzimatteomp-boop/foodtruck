@@ -91,11 +91,11 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
   const [id, setId] = useState(lista[0]?.id ?? '');
   const [nome, setNome] = useState(leggiNomeCassa());
   const [comande, setComande] = useState(leggi(STAMPA_COMANDE) === '1');
-  const [vero, setVero] = useState(leggi(MODO) === 'agenzia' && titolare && NATIVA);
-  function sceltaVero(si: boolean) {
-    if (si && prompt('Da ora gli scontrini saranno VERI, trasmessi all\'Agenzia delle Entrate. Scrivi VERO per confermare.')?.trim().toUpperCase() !== 'VERO') return;
-    setVero(si);
-  }
+  // Scontrini veri: spunta + «VERO» scritto in un campo della pagina (la finestra prompt() sul telefono non compare).
+  const giaVero = leggi(MODO) === 'agenzia' && titolare && NATIVA;
+  const [spuntaVero, setSpuntaVero] = useState(giaVero);
+  const [confermaVero, setConfermaVero] = useState(giaVero ? 'VERO' : '');
+  const vero = spuntaVero && confermaVero.trim().toUpperCase() === 'VERO';
   const [fondo, setFondo] = useState(() => fondoProposto(leggiApertura(), lista[0]?.id ?? '', leggiNomeCassa()));
   // Cassa già aperta su questo evento con questo nome: si propone il fondo scritto allora (si può correggere).
   const giaAperta = (() => { const a = leggiApertura(); return a && a.evento === id && a.cassa === nomeCassa(nome) ? a : null; })();
@@ -106,6 +106,7 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
   const apri = (x: string) => {
     let f: number;
     try { f = centesimi(fondo, 'Fondo cassa'); } catch (e) { setErrore((e as Error).message); return; }
+    if (spuntaVero && !vero) { setErrore('Per gli scontrini veri scrivi VERO nel campo di conferma (oppure togli la spunta).'); return; }
     const n = nomeCassa(nome);
     scrivi(NOME_CASSA, n);
     scrivi(STAMPA_COMANDE, comande ? '1' : '0');
@@ -139,7 +140,14 @@ function AperturaCassa({ db, eventi, titolare, messaggio, onApri }: { db: Firest
           <label class="spunta"><input type="checkbox" checked={comande} onChange={(e) => setComande(e.currentTarget.checked)} /> Stampa le comande per la cucina</label>
           <Stampante />
           {titolare && NATIVA && (
-            <label class={vero ? 'spunta vero' : 'spunta'}><input type="checkbox" checked={vero} onChange={(e) => sceltaVero(e.currentTarget.checked)} /> Scontrini VERI (Agenzia delle Entrate)</label>
+            <>
+              <label class={spuntaVero ? 'spunta vero' : 'spunta'}><input type="checkbox" checked={spuntaVero} onChange={(e) => { const si = e.currentTarget.checked; setSpuntaVero(si); if (!si) setConfermaVero(''); }} /> Scontrini VERI (Agenzia delle Entrate)</label>
+              {spuntaVero && (
+                <label class="campo"><span>{vero ? '✅ Scontrini veri: trasmessi all\'Agenzia delle Entrate' : 'Scrivi VERO per confermare: gli scontrini saranno trasmessi all\'Agenzia'}</span>
+                  <input aria-label="Conferma scontrini veri" autoCapitalize="characters" placeholder="VERO" value={confermaVero} onInput={(e) => setConfermaVero(e.currentTarget.value)} />
+                </label>
+              )}
+            </>
           )}
           {titolare && !NATIVA && <p class="nota">Gli scontrini veri si emettono solo dall'app Android: qui la cassa usa il simulatore.</p>}
           <button type="button" class="primario" disabled={!id} onClick={() => apri(id)}>Apri cassa</button>
