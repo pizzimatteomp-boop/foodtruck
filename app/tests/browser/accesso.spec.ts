@@ -56,7 +56,7 @@ test.beforeAll(async () => {
 /** Apre una pagina dal pannello della Home (sul telefono non tutte sono nel menu in basso). */
 async function apri(page: Page, titolo: string): Promise<void> {
   await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Home' }).click();
-  await page.getByRole('navigation', { name: 'Pagine' }).getByRole('link', { name: new RegExp(titolo) }).click();
+  await page.locator('.pannello-pagine').getByRole('link', { name: new RegExp(titolo) }).click();
 }
 
 async function accedi(page: Page, u: typeof MATTEO): Promise<void> {
@@ -78,7 +78,9 @@ test('persona nuova → abilitata dal titolare → entra con il ruolo cassa', as
   const matteo = await (await browser.newContext()).newPage();
   await accedi(matteo, MATTEO);
   await expect(matteo.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
-  await expect(matteo.getByText('Ruolo: Titolare')).toBeVisible();
+  // Home del titolare: pagine divise per argomento.
+  await expect(matteo.getByRole('navigation', { name: 'Vendite' }).getByRole('link')).toHaveText([/Cassa/, /Resoconto/]);
+  await expect(matteo.getByRole('navigation', { name: 'Laboratorio e magazzino' })).toBeVisible();
   await apri(matteo, 'Persone');
   await expect(matteo).toHaveURL(/#\/persone$/);
   const persone = matteo.getByRole('region', { name: 'Persone' });
@@ -93,14 +95,14 @@ test('persona nuova → abilitata dal titolare → entra con il ruolo cassa', as
 
   // 3. Giulia ricarica: ora entra con il ruolo Cassa e non vede il pannello Persone.
   await giulia.reload();
-  await expect(giulia.getByRole('heading', { name: 'Ciao Giulia' })).toBeVisible();
-  await expect(giulia.getByText('Ruolo: Cassa')).toBeVisible();
+  // La cassa entra direttamente nella Cassa: niente Home, niente menu, niente pagine del titolare.
+  await expect(giulia.getByRole('region', { name: 'Apri la cassa' })).toBeVisible();
   await expect(giulia.getByRole('region', { name: 'Persone' })).toHaveCount(0);
-  // La cassa vede solo Home e la cassa di prova, niente pagine del titolare.
-  await expect(giulia.getByRole('navigation', { name: 'Pagine' }).getByRole('link')).toHaveText([/Vendi:/, /Cassa · prova/]);
+  await expect(giulia.getByRole('navigation', { name: 'Menu' })).toHaveCount(0);
+  await expect(giulia.getByText('Credenziali Fisconline')).toHaveCount(0);
   // Anche scrivendo l'indirizzo a mano, la cassa non entra nella pagina Persone.
   await giulia.goto('/#/persone');
-  await expect(giulia.getByRole('heading', { name: 'Ciao Giulia' })).toBeVisible();
+  await expect(giulia.getByRole('region', { name: 'Apri la cassa' })).toBeVisible();
   await expect(giulia.getByRole('region', { name: 'Persone' })).toHaveCount(0);
 
   // 4. Il titolare la disattiva: al rientro torna «in attesa».
@@ -472,38 +474,6 @@ test('storico, grafici e avvisi: fotografia di ottobre, rincari, soglie', async 
   await andamento.screenshot({ path: 'test-results/andamento-prezzo.png' });
 });
 
-test('cassa di prova: scontrini sul simulatore, risposta persa recuperata, annullo; credenziali solo su Android', async ({ page }) => {
-  await accedi(page, MATTEO);
-  await apri(page, 'Cassa · prova');
-  const cassa = page.getByRole('region', { name: 'Cassa di prova' });
-  await expect(cassa.getByRole('note').first()).toContainText('SIMULATORE');
-  await cassa.getByRole('button', { name: /^Pane e olio/ }).click();
-  await cassa.getByRole('button', { name: /^Pane e olio/ }).click();
-  await expect(cassa).toContainText('2 × Pane e olio');
-  await expect(cassa).toContainText('Totale 8,00 €');
-  await cassa.getByRole('button', { name: 'Emetti scontrino di prova' }).click();
-  await expect(cassa.getByRole('status').first()).toHaveText(/^Emesso DCW2026\/9999-\d+\.$/);
-
-  // Risposta persa: lo scontrino c'è, si recupera senza doppioni.
-  await cassa.getByRole('button', { name: /^Pane e olio/ }).click();
-  await cassa.getByLabel('Guasto da simulare').selectOption('rete-dopo');
-  await cassa.getByRole('button', { name: 'Emetti scontrino di prova' }).click();
-  await expect(cassa.getByRole('status').first()).toContainText('recuperato');
-  await expect(cassa.getByRole('heading', { name: /Emessi in questa prova/ })).toContainText('(2)');
-
-  // Rete assente: non emesso.
-  await cassa.getByRole('button', { name: /^Pane e olio/ }).click();
-  await cassa.getByLabel('Guasto da simulare').selectOption('rete-prima');
-  await cassa.getByRole('button', { name: 'Emetti scontrino di prova' }).click();
-  await expect(cassa.getByRole('status').first()).toContainText('Non emesso');
-
-  await cassa.getByRole('button', { name: 'Annulla' }).last().click();
-  await expect(cassa.getByRole('status').first()).toContainText('Annullato con');
-  await expect(cassa).toContainText('Si inseriscono solo nell\'app Android');
-  await expect(cassa.getByLabel('Password Fisconline')).toHaveCount(0);
-  await cassa.screenshot({ path: 'test-results/cassa-prova.png' });
-});
-
 test('cassa come Billy: quantità con ×, importo libero, contanti; importo digitato e carta (simulatore)', async ({ page }) => {
   await accedi(page, MATTEO);
   await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: /Cassa$/ }).click();
@@ -623,7 +593,10 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   // cambia: si torna all'apertura, l'evento creato è proposto
   await cassa.getByRole('button', { name: 'Cambia' }).click();
   await expect(apri.getByLabel('Evento', { exact: true })).toContainText('Sagra di prova');
+  // le impostazioni del telefono stanno in un riquadro chiuso; nel browser niente credenziali né chiave SumUp
+  await apri.getByText('⚙ Impostazioni di questo telefono').click();
   await expect(apri.getByRole('group', { name: 'Stampante' })).toContainText('Stampante finta');
+  await expect(apri.getByLabel('Password Fisconline')).toHaveCount(0);
   await apri.getByLabel('Stampa le comande per la cucina').check();
   await apri.getByLabel('Nome di questa cassa').fill('Furgone');
   await apri.getByLabel('Fondo cassa (contanti all\'inizio)').fill('50');
@@ -796,7 +769,7 @@ test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser })
   await page.addInitScript(() => localStorage.setItem('vegman-oggi', '2026-11-07'));
   await accedi(page, MATTEO);
   await expect(page.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
-  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'inventario', 'magazzino', 'stazione', 'resoconto', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']) {
+  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'inventario', 'magazzino', 'stazione', 'resoconto', 'pubblica', 'allergeni', 'persone', 'importa']) {
     await page.goto(`/#/${p}`);
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `pagina ${p}`).toBeLessThanOrEqual(360);

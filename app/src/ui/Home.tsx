@@ -1,24 +1,26 @@
-/** Home: saluto e, per chi ne ha, il pannello con tutte le pagine. */
-import { indirizzo, pagineVisibili } from '../app/navigazione';
-import { NOME_RUOLO, type Ruolo } from '../firebase/ruoli';
-
+/** Home del titolare: saluto e tutte le pagine, divise per argomento. Gli altri ruoli entrano direttamente nella loro pagina. */
+import { GRUPPI, indirizzo, pagineVisibili } from '../app/navigazione';
+import type { Ruolo } from '../firebase/ruoli';
 
 export function Home({ nome, ruolo }: { nome: string; ruolo: Ruolo }) {
   const pagine = pagineVisibili(ruolo).filter((p) => p.id !== 'home');
   return (
     <section class="scheda">
       <h1>Ciao {nome}</h1>
-      <p>Ruolo: {NOME_RUOLO[ruolo]}</p>
-      {pagine.length === 0 ? <p>Le prossime funzioni arriveranno qui.</p> : (
-        <nav class="pannello-pagine" aria-label="Pagine">
-          {pagine.map((p) => (
-            <a key={p.id} href={indirizzo(p)}>
-              <span class="icona" aria-hidden="true">{p.icona}</span>
-              <span><strong>{p.titolo}</strong><small>{p.descrizione}</small></span>
-            </a>
-          ))}
-        </nav>
-      )}
+      {GRUPPI.map((g) => {
+        const qui = pagine.filter((p) => p.gruppo === g);
+        return qui.length ? (
+          <nav key={g} class="pannello-pagine" aria-label={g}>
+            <h2>{g}</h2>
+            {qui.map((p) => (
+              <a key={p.id} href={indirizzo(p)}>
+                <span class="icona" aria-hidden="true">{p.icona}</span>
+                <span><strong>{p.titolo}</strong><small>{p.descrizione}</small></span>
+              </a>
+            ))}
+          </nav>
+        ) : null;
+      })}
     </section>
   );
 }
