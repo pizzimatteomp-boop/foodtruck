@@ -1,8 +1,7 @@
 /** Home: saluto e, per chi ne ha, il pannello con tutte le pagine. */
 import { indirizzo, pagineVisibili } from '../app/navigazione';
-import type { Ruolo } from '../firebase/ruoli';
+import { NOME_RUOLO, type Ruolo } from '../firebase/ruoli';
 
-const NOME_RUOLO: Record<Ruolo, string> = { titolare: 'Titolare', cassa: 'Cassa', team: 'Team' };
 
 export function Home({ nome, ruolo }: { nome: string; ruolo: Ruolo }) {
   const pagine = pagineVisibili(ruolo).filter((p) => p.id !== 'home');

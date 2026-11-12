@@ -702,12 +702,50 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await res.screenshot({ path: 'test-results/resoconto.png' });
 });
 
+test('produzione dal telefono → etichetta stampata da sola dalla stazione sul computer', async ({ browser }) => {
+  // computer della stampante: stazione aperta, la stampa del browser è contata (con --kiosk-printing parte da sola)
+  const pc = await (await browser.newContext()).newPage();
+  await pc.addInitScript(() => { (window as unknown as { stampe: number }).stampe = 0; window.print = () => { (window as unknown as { stampe: number }).stampe++; }; });
+  await accedi(pc, MATTEO);
+  await pc.goto('/#/stazione');
+  const stazione = pc.getByRole('region', { name: 'Stazione etichette' });
+  await expect(stazione.getByRole('status')).toContainText('In attesa');
+  await stazione.getByLabel('Misura etichetta').fill('100x50');
+  // telefono del laboratorio
+  const tel = await (await browser.newContext({ viewport: { width: 360, height: 760 } })).newPage();
+  await accedi(tel, MATTEO);
+  await tel.goto('/#/produzione');
+  const prod = tel.getByRole('region', { name: 'Produzione' });
+  await prod.getByLabel('Cerca prodotto').fill('pane');
+  await prod.getByRole('button', { name: /Pane e olio/ }).click();
+  const form = prod.getByRole('form', { name: 'Nuova produzione' });
+  await form.getByLabel(/Quantità prodotta/).fill('0');
+  await form.getByLabel('Etichette').fill('3');
+  await form.getByRole('button', { name: 'Registra e stampa' }).click();
+  await expect(prod.getByRole('alert')).toContainText('quanto hai prodotto');
+  await form.getByLabel(/Quantità prodotta/).fill('12');
+  await form.getByLabel('Nota').fill('cassetta 1');
+  await expect(form.getByLabel('Anteprima etichetta')).toContainText('Pane e olio12 pz');
+  await expect(form.getByLabel('Anteprima etichetta')).toContainText('cassetta 1');
+  await tel.screenshot({ path: 'test-results/produzione.png' });
+  await form.getByRole('button', { name: 'Registra e stampa' }).click();
+  await expect(prod.getByRole('status')).toContainText(/Pane e olio · 12 pz · lotto PAN-\d{6}-\d{4} · 3 etichette alla stampante/);
+  // la stazione la stampa da sola e il telefono lo vede
+  await expect(stazione.getByRole('status')).toContainText('Stampate 3 × Pane e olio');
+  expect(await pc.evaluate(() => (window as unknown as { stampe: number }).stampe)).toBe(1);
+  await expect(prod.getByRole('list', { name: 'Ultime etichette' })).toContainText('✅ stampata');
+  // ristampa dal telefono: un'altra stampa
+  await prod.getByRole('button', { name: 'Ristampa 1' }).first().click();
+  await expect.poll(() => pc.evaluate(() => (window as unknown as { stampe: number }).stampe)).toBe(2);
+  await stazione.screenshot({ path: 'test-results/stazione.png' });
+});
+
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {
   const page = await (await browser.newContext({ viewport: { width: 360, height: 760 } })).newPage();
   await page.addInitScript(() => localStorage.setItem('vegman-oggi', '2026-11-07'));
   await accedi(page, MATTEO);
   await expect(page.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
-  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'resoconto', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']) {
+  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'stazione', 'resoconto', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']) {
     await page.goto(`/#/${p}`);
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `pagina ${p}`).toBeLessThanOrEqual(360);

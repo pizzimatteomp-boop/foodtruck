@@ -1,7 +1,7 @@
 /**
  * Cosa mostrare nella schermata di accesso, in base allo stato. Funzione pura: testata in schermata.test.ts.
  */
-import type { Ruolo } from '../firebase/ruoli';
+import { NOME_RUOLO, type Ruolo } from '../firebase/ruoli';
 
 export type StatoSchermata =
   | { stato: 'avvio' }
@@ -20,7 +20,6 @@ export interface Vista {
   errore?: string;
 }
 
-const NOME_RUOLO: Record<Ruolo, string> = { titolare: 'Titolare', cassa: 'Cassa', team: 'Team' };
 
 /** Traduce i codici d'errore di Firebase in frasi comprensibili. */
 export function messaggioErrore(codice: string): string {

@@ -367,3 +367,21 @@ input.corto { width: 80px; }
 .riquadri small { color: var(--tenue); font-size: 0.8rem; }
 .riquadri strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 .resoconto .tabella th[scope='row'] small { font-weight: 400; color: var(--tenue); white-space: normal; }
+/* Etichette di produzione (misure in mm: la stessa per anteprima e stampa) */
+.etichetta { box-sizing: border-box; padding: 2.5mm 3mm; background: #fff; color: #000; font-family: system-ui, sans-serif; overflow: hidden; display: flex; flex-direction: column; gap: 1mm; border: 0.2mm solid #999; }
+.etichetta-testa { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; }
+.etichetta-nome { font-size: 5.5mm; line-height: 1.05; text-transform: uppercase; overflow-wrap: anywhere; }
+.etichetta-qta { font-size: 3.5mm; font-weight: 700; white-space: nowrap; }
+.etichetta-dati { font-size: 3mm; }
+.etichetta-ingredienti { line-height: 1.15; overflow: hidden; }
+.anteprima-etichetta { overflow-x: auto; padding: 4px 0; }
+#stampa-etichette { display: none; }
+@media print {
+  body * { visibility: hidden !important; }
+  #stampa-etichette, #stampa-etichette * { visibility: visible !important; }
+  #stampa-etichette { display: block !important; position: absolute; left: 0; top: 0; }
+  #stampa-etichette .etichetta { border: 0; break-after: page; page-break-after: always; }
+}
+.produzione-griglia { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 8px; }
+.produzione-griglia button { background: var(--crema); min-height: 72px; font-size: 1rem; }
+.produzione-griglia button.semilavorato { background: var(--menta); }

@@ -16,10 +16,20 @@ describe('permessi per ruolo', () => {
     expect(puo('cassa', 'report')).toBe(false);
   });
 
-  it('il team legge eventi e ricette e basta', () => {
+  it('il team legge eventi e ricette e registra la produzione', () => {
     expect(puo('team', 'eventi:leggi')).toBe(true);
+    expect(puo('team', 'produzione')).toBe(true);
     expect(puo('team', 'eventi:modifica')).toBe(false);
     expect(puo('team', 'comande')).toBe(false);
+    expect(puo('team', 'magazzino')).toBe(false);
+  });
+
+  it('il magazziniere: produzione, etichette e magazzino; niente cassa né acquisti', () => {
+    expect(puo('magazziniere', 'produzione')).toBe(true);
+    expect(puo('magazziniere', 'magazzino')).toBe(true);
+    expect(puo('magazziniere', 'scontrini')).toBe(false);
+    expect(puo('magazziniere', 'acquisti')).toBe(false);
+    expect(eRuolo('magazziniere')).toBe(true);
   });
 
   it('senza ruolo non si può nulla', () => {

@@ -2,11 +2,10 @@
 import type { Firestore } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import type { Profilo } from '../firebase/profilo';
-import { RUOLI, type Ruolo } from '../firebase/ruoli';
+import { RUOLI, type Ruolo, NOME_RUOLO } from '../firebase/ruoli';
 import { ErrorePersona, preparaPersona } from '../persone/persone';
 import { elencaPersone, salvaPersona } from '../persone/persone.db';
 
-const NOME_RUOLO: Record<Ruolo, string> = { titolare: 'Titolare', cassa: 'Cassa', team: 'Team' };
 type Esito = { testo: string; errore: boolean } | null;
 
 function messaggio(e: unknown): string {

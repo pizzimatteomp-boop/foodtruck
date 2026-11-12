@@ -41,7 +41,7 @@ export function preparaPersona(
   return { uid, dati: { ruolo: input.ruolo, attivo, nome, email } };
 }
 
-const ORDINE: Record<Ruolo, number> = { titolare: 0, cassa: 1, team: 2 };
+const ORDINE: Record<Ruolo, number> = { titolare: 0, cassa: 1, magazziniere: 2, team: 3 };
 
 /** Ordine dell'elenco: prima gli attivi, poi per ruolo, poi per nome. */
 export function ordinaPersone(persone: Profilo[]): Profilo[] {

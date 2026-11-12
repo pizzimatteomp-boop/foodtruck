@@ -25,7 +25,9 @@ service cloud.firestore {
     function ruolo() { return profilo().ruolo; }
     function titolare() { return attivo() && ruolo() == 'titolare'; }
     function cassa()    { return attivo() && ruolo() in ['titolare', 'cassa']; }
-    function team()     { return attivo() && ruolo() in ['titolare', 'cassa', 'team']; }
+    function team()     { return attivo() && ruolo() in ['titolare', 'cassa', 'magazziniere', 'team']; }
+    function magazzino() { return attivo() && ruolo() in ['titolare', 'magazziniere']; }
+    function produzione() { return attivo() && ruolo() in ['titolare', 'magazziniere', 'team']; }
 
     // ---------- Controlli sui dati ----------
     function nuovo() { return request.resource.data; }
@@ -40,7 +42,7 @@ service cloud.firestore {
       allow read: if titolare() || (attivo() && request.auth.uid == uid);
       allow create, update: if titolare()
         && nuovo().keys().hasOnly(['ruolo', 'attivo', 'nome', 'email'])
-        && nuovo().ruolo in ['titolare', 'cassa', 'team']
+        && nuovo().ruolo in ['titolare', 'cassa', 'magazziniere', 'team']
         && nuovo().attivo is bool
         // il titolare non può togliersi da solo il ruolo o disattivarsi (resterebbe chiuso fuori)
         && (uid != request.auth.uid || (nuovo().ruolo == 'titolare' && nuovo().attivo == true));
@@ -219,6 +221,40 @@ service cloud.firestore {
         && nuovo().annulli is int && nuovo().annulli >= 0
         && (!('nota' in nuovo()) || testo(nuovo().nota));
       allow update, delete: if false;
+    }
+
+    // ---------- Produzione del laboratorio ----------
+    // La registra chi produce (titolare, magazziniere, team); resta come traccia: la cancella solo il titolare.
+    match /produzioni/{id} {
+      allow read: if produzione();
+      allow create: if produzione() && firmato()
+        && nuovo().keys().hasOnly(['prodotto', 'nome', 'quantita', 'unita', 'copie', 'lotto', 'giorno', 'nota', 'creatoDa', 'creatoIl'])
+        && testo(nuovo().prodotto) && testo(nuovo().nome) && testo(nuovo().unita) && testo(nuovo().lotto)
+        && nuovo().quantita is number && nuovo().quantita > 0 && nuovo().quantita <= 1000000
+        && nuovo().copie is int && nuovo().copie >= 0 && nuovo().copie <= 50
+        && nuovo().giorno is string && nuovo().giorno.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && (!('nota' in nuovo()) || testo(nuovo().nota));
+      allow update: if false;
+      allow delete: if titolare();
+    }
+
+    // ---------- Coda delle etichette da stampare ----------
+    // Il telefono la riempie; la «Stazione etichette» (computer con la stampante) la prende e la segna stampata.
+    match /etichette/{id} {
+      allow read: if produzione();
+      allow create: if produzione() && firmato()
+        && nuovo().keys().hasOnly(['contenuto', 'copie', 'stato', 'produzione', 'creatoDa', 'creatoIl'])
+        && nuovo().contenuto is map && nuovo().contenuto.size() <= 20
+        && nuovo().copie is int && nuovo().copie >= 1 && nuovo().copie <= 50
+        && nuovo().stato == 'da_stampare'
+        && testo(nuovo().produzione);
+      // La stazione cambia solo lo stato (e chi/quando): il contenuto non si tocca.
+      allow update: if magazzino()
+        && nuovo().diff(resource.data).affectedKeys().hasOnly(['stato', 'stazione', 'stampataIl'])
+        && ((resource.data.stato == 'da_stampare' && nuovo().stato == 'in_stampa' && testo(nuovo().stazione))
+            || (resource.data.stato == 'in_stampa' && nuovo().stato == 'stampata' && nuovo().stampataIl == request.time)
+            || (resource.data.stato in ['in_stampa', 'stampata'] && nuovo().stato == 'da_stampare'));
+      allow delete: if titolare();
     }
 
     // ---------- Registro delle operazioni: solo aggiunte ----------

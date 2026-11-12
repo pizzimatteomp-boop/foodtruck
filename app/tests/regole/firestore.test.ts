@@ -32,6 +32,7 @@ const PERSONE = {
   matteo: { ruolo: 'titolare', attivo: true, nome: 'Matteo' },
   anna: { ruolo: 'cassa', attivo: true, nome: 'Anna' },
   luca: { ruolo: 'team', attivo: true, nome: 'Luca' },
+  marco: { ruolo: 'magazziniere', attivo: true, nome: 'Marco' },
   ex: { ruolo: 'cassa', attivo: false, nome: 'Ex' },
 } as const;
 type Chi = keyof typeof PERSONE | 'nuovo' | (string & {});
@@ -310,7 +311,7 @@ describe('gestione persone dall\'app (modulo persone.ts)', () => {
 
   it('il titolare vede tutti in ordine e abilita una persona nuova', async () => {
     const prima = await elencaPersone(db('matteo'));
-    expect(prima.map((p) => p.nome)).toEqual(['Matteo', 'Anna', 'Luca', 'Ex']);
+    expect(prima.map((p) => p.nome)).toEqual(['Matteo', 'Anna', 'Marco', 'Luca', 'Ex']);
     const { uid, dati } = preparaPersona({ codice: UID_NUOVO, nome: 'Giulia', ruolo: 'cassa' }, 'matteo');
     await salvaPersona(db('matteo'), uid, dati);
     expect(await leggiProfilo(db(UID_NUOVO as Chi), UID_NUOVO)).toMatchObject({ ruolo: 'cassa', attivo: true, nome: 'Giulia' });
@@ -491,5 +492,50 @@ describe('eliminare un ingrediente con fonti, spunta «in menu» immediata', () 
     await impostaInMenu(m, p, true);
     expect((await getDoc(doc(m, 'prodotti', p))).data()!.inMenu).toBe(true);
     await assertFails(impostaInMenu(db('anna'), p, false));
+  });
+});
+
+describe('produzione del laboratorio e coda delle etichette', () => {
+  const produzione = (chi: Chi, extra: Record<string, unknown> = {}) => ({
+    prodotto: 'r1', nome: 'Mayo', quantita: 5600, unita: 'g', copie: 4, lotto: 'MAY-121126-1530', giorno: '2026-11-12', ...firma(chi), ...extra,
+  });
+  const etichetta = (chi: Chi, extra: Record<string, unknown> = {}) => ({
+    contenuto: { prodotto: 'Mayo', data: '12/11/2026', lotto: 'MAY-121126-1530' }, copie: 4, stato: 'da_stampare', produzione: 'p1', ...firma(chi), ...extra,
+  });
+
+  it('la registrano titolare, magazziniere e team; la cassa no; la cancella solo il titolare', async () => {
+    for (const chi of ['matteo', 'marco', 'luca'] as const) await assertSucceeds(addDoc(collection(db(chi), 'produzioni'), produzione(chi)));
+    await assertFails(addDoc(collection(db('anna'), 'produzioni'), produzione('anna')));
+    await assertFails(addDoc(collection(db('luca'), 'produzioni'), produzione('luca', { quantita: 0 })));
+    await assertFails(addDoc(collection(db('luca'), 'produzioni'), produzione('luca', { copie: 1.5 })));
+    await assertFails(addDoc(collection(db('luca'), 'produzioni'), produzione('luca', { prezzo: 3 })));
+    const ref = await addDoc(collection(db('luca'), 'produzioni'), produzione('luca'));
+    await assertFails(updateDoc(doc(db('matteo'), 'produzioni', ref.id), { quantita: 1 }));
+    await assertFails(deleteDoc(doc(db('marco'), 'produzioni', ref.id)));
+    await assertSucceeds(deleteDoc(doc(db('matteo'), 'produzioni', ref.id)));
+  });
+
+  it('etichette: il telefono le mette in coda, la stazione le prende e le segna stampate; il contenuto non cambia', async () => {
+    const ref = await assertSucceeds(addDoc(collection(db('luca'), 'etichette'), etichetta('luca')));
+    await assertFails(addDoc(collection(db('luca'), 'etichette'), etichetta('luca', { stato: 'stampata' })));
+    await assertFails(addDoc(collection(db('anna'), 'etichette'), etichetta('anna')));
+    // il team non fa da stazione
+    await assertFails(updateDoc(doc(db('luca'), 'etichette', ref.id), { stato: 'in_stampa', stazione: 'PC' }));
+    await assertFails(updateDoc(doc(db('marco'), 'etichette', ref.id), { stato: 'stampata', stampataIl: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(db('marco'), 'etichette', ref.id), { stato: 'in_stampa', stazione: 'PC laboratorio' }));
+    await assertFails(updateDoc(doc(db('marco'), 'etichette', ref.id), { stato: 'stampata', stampataIl: serverTimestamp(), copie: 9 }));
+    await assertFails(updateDoc(doc(db('marco'), 'etichette', ref.id), { 'contenuto.prodotto': 'Altro' }));
+    await assertSucceeds(updateDoc(doc(db('marco'), 'etichette', ref.id), { stato: 'stampata', stampataIl: serverTimestamp() }));
+    // ristampa: torna in coda
+    await assertSucceeds(updateDoc(doc(db('matteo'), 'etichette', ref.id), { stato: 'da_stampare' }));
+    await assertSucceeds(getDoc(doc(db('luca'), 'etichette', ref.id)));
+    await assertFails(getDoc(doc(db('anna'), 'etichette', ref.id)));
+  });
+
+  it('il magazziniere legge prodotti e ingredienti ma non acquisti né scontrini', async () => {
+    await assertSucceeds(getDoc(doc(db('marco'), 'prodotti', 'r1')));
+    await assertSucceeds(getDoc(doc(db('marco'), 'ingredienti', 'i1')));
+    await assertFails(getDoc(doc(db('marco'), 'acquisti', 'a1')));
+    await assertFails(getDoc(doc(db('marco'), 'scontrini', 's1')));
   });
 });

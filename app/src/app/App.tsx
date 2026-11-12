@@ -7,6 +7,8 @@ import { Accesso } from '../ui/Accesso';
 import { Allergeni } from '../ui/Allergeni';
 import { Avvisi, FotografiaAutomatica } from '../ui/Avvisi';
 import { Resoconto } from '../ui/Resoconto';
+import { Produzione } from '../ui/Produzione';
+import { Stazione } from '../ui/Stazione';
 import { Fatture } from '../ui/Fatture';
 import { GestioneMenu } from '../ui/GestioneMenu';
 import { MenuPubblico } from '../ui/MenuPubblico';
@@ -58,6 +60,8 @@ export function App({ servizi, ambiente }: { servizi: Servizi; ambiente: Ambient
         : pagina.id === 'prodotti' ? <Prodotti db={servizi.db} parametro={parametroDa(hash)} />
         : pagina.id === 'avvisi' ? <Avvisi db={servizi.db} />
         : pagina.id === 'resoconto' ? <Resoconto db={servizi.db} />
+        : pagina.id === 'produzione' ? <Produzione db={servizi.db} uid={stato.uid} />
+        : pagina.id === 'stazione' ? <Stazione db={servizi.db} />
         : pagina.id === 'pubblica' ? <GestioneMenu db={servizi.db} uid={stato.uid} parametro={parametroDa(hash)} />
         : pagina.id === 'allergeni' ? <Allergeni db={servizi.db} />
         : pagina.id === 'fatture' ? <Fatture db={servizi.db} uid={stato.uid} />
