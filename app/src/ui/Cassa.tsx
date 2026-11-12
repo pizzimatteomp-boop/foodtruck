@@ -35,7 +35,6 @@ import { condividiScontrino } from './condividi';
 import { comandaTermica, ricevutaTermica } from '../stampa/escpos';
 import { contenutoRicevuta } from '../cassa/ricevuta';
 import { collegaStampante, dimenticaStampante, ErroreStampa, stampa, stampanteSalvata } from './stampanteBluetooth';
-import { logoTermico } from './logoTermico';
 import { ImpostazioniTelefono } from './ImpostazioniTelefono';
 import { deposito } from './portaleTelefono';
 import type { Ambiente } from '../firebase/config';
@@ -347,7 +346,7 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
   }
 
   async function stampaRicevuta(s: ScontrinoArchivio, quando: Date) {
-    try { await stampa(ricevutaTermica(contenutoRicevuta(s, quando), logoTermico() ?? undefined)); setAvvisoStampa(''); } catch (e) {
+    try { await stampa(ricevutaTermica(contenutoRicevuta(s, quando))); setAvvisoStampa(''); } catch (e) {
       setAvvisoStampa(`🖨 Ricevuta non stampata: ${e instanceof ErroreStampa ? e.message : 'errore della stampante'}`);
     }
   }
@@ -356,7 +355,7 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
   async function invia(s: ScontrinoArchivio, quando: Date) {
     let pdf: Uint8Array | undefined;
     if (s.ambiente === 'agenzia' && cassa?.ambiente === 'agenzia') {
-      try { pdf = await cassa.pdf(s.idtrx); } catch (e) { setAvviso({ testo: `PDF dell'Agenzia non scaricato (${messaggio(e)}): mando solo la ricevuta, riprova dopo per il PDF.`, errore: true }); }
+      try { pdf = await cassa.pdf(s.idtrx); } catch (e) { setAvviso({ testo: `PDF dell'Agenzia non scaricato (${messaggio(e)}): mando la ricevuta in testo; riprova dopo per il PDF.`, errore: true }); }
     }
     try { await condividiScontrino(s, quando, pdf); } catch (e) {
       if (!/cancel/i.test((e as Error)?.message ?? '')) setAvviso({ testo: `Invio non riuscito: ${messaggio(e)}`, errore: true });
@@ -510,9 +509,9 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
     <>
       {avviso && <p role={avviso.errore ? 'alert' : 'status'} class={avviso.errore ? 'esito errore' : 'esito'}>{avviso.testo}</p>}
       {ultimo && !avviso?.errore && (
-        <div class="comandi cassa-ultimo">
-          <button type="button" class="secondario invia" onClick={() => void invia(ultimo, new Date())}>📤 Invia {ultimo.tipo === 'A' ? 'annullo' : 'scontrino'} {ultimo.progressivo} (WhatsApp, email…)</button>
-          {stampanteSalvata() && <button type="button" class="secondario" onClick={() => void stampaRicevuta(ultimo, new Date())}>🖨 Stampa</button>}
+        <div class="cassa-ultimo">
+          <button type="button" class="primario" aria-label={`Invia ${ultimo.tipo === 'A' ? 'annullo' : 'scontrino'} ${ultimo.progressivo}`} onClick={() => void invia(ultimo, new Date())}>📤 Invia</button>
+          {stampanteSalvata() && <button type="button" class="primario" aria-label="🖨 Stampa" onClick={() => void stampaRicevuta(ultimo, new Date())}>🖨 Stampa</button>}
         </div>
       )}
       {avvisoStampa && <p class="esito errore" role="alert">{avvisoStampa}</p>}

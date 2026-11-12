@@ -1,6 +1,7 @@
 /**
- * Ricevuta di cortesia VegMan (fase «Cassa», C2b): accompagna il PDF dell'Agenzia, che è il documento
- * fiscale e non si modifica. Qui solo i contenuti; il disegno col marchio è in ui/ricevutaImmagine.ts.
+ * Ricevuta per il cliente, in testo semplice (inviata o stampata). Il documento fiscale è il PDF
+ * dell'Agenzia: con gli scontrini veri si invia quello; il testo serve al simulatore, alla stampa e
+ * come riserva se il PDF non si scarica.
  */
 import type { ScontrinoArchivio } from './archivio';
 
@@ -43,6 +44,23 @@ export function messaggioInvio(s: ScontrinoArchivio): string {
 }
 
 /** Nome dei file da allegare (solo lettere, cifre e trattini). */
-export function nomeFile(s: Pick<ScontrinoArchivio, 'progressivo'>, estensione: 'png' | 'pdf'): string {
+export function nomeFile(s: Pick<ScontrinoArchivio, 'progressivo'>, estensione: 'txt' | 'pdf'): string {
   return `VegMan-${s.progressivo.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')}.${estensione}`;
+}
+
+/** Ricevuta in testo semplice (WhatsApp, email, SMS): niente grafica, si legge ovunque. */
+export function testoRicevuta(s: ScontrinoArchivio, quando: Date): string {
+  const c = contenutoRicevuta(s, quando);
+  return [
+    `VegMan · ${c.titolo.toLowerCase()} ${s.progressivo}`,
+    c.quando,
+    '',
+    ...c.righe.map((r) => `${r.testo}  ${r.importo}`),
+    '',
+    `TOTALE ${c.totale}`,
+    `Pagamento: ${c.pagamento}`,
+    ...(s.ambiente === 'simulatore' ? ['PROVA: non è un documento fiscale.'] : []),
+    '',
+    FRASE,
+  ].join('\n');
 }

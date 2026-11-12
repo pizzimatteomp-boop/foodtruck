@@ -518,12 +518,17 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
   await expect(cassa.getByRole('status')).toContainText(/DCW2026\/9999-\d+ · 16,50 € · contanti/);
   await expect(righe).toContainText('Tocca i prodotti');
-  // invio: nel browser senza condivisione si scarica la ricevuta VegMan
+  // invio: ricevuta in testo semplice (nel browser senza condivisione si scarica)
   const scarico = page.waitForEvent('download');
   await cassa.getByRole('button', { name: /Invia scontrino DCW2026\/9999-/ }).click();
   const file = await scarico;
-  expect(file.suggestedFilename()).toMatch(/^VegMan-DCW2026-9999-\d+\.png$/);
-  await file.saveAs('test-results/ricevuta.png');
+  expect(file.suggestedFilename()).toMatch(/^VegMan-DCW2026-9999-\d+\.txt$/);
+  await file.saveAs('test-results/ricevuta.txt');
+  const { readFile } = await import('node:fs/promises');
+  const ricevuta = await readFile('test-results/ricevuta.txt', 'utf8');
+  expect(ricevuta).toContain('TOTALE 16,50 €');
+  expect(ricevuta).toContain('3 × Pane e olio  12,00 €');
+  expect(ricevuta).toContain('PROVA: non è un documento fiscale.');
   // importo digitato e subito carta, senza righe (come Billy)
   await vaiPagina(cassa, 'Tastierino');
   await tastierino.getByRole('button', { name: '5', exact: true }).click();

@@ -429,8 +429,8 @@ input.corto { width: 80px; }
 .cassa-righe .meno { min-height: 40px; font-size: 1.2rem; }
 .cassa-totale { flex: none; padding: 8px 16px; font-size: 1.25rem; }
 .cassa-scontrino .esito { margin: 0; }
-.cassa-ultimo { flex-wrap: nowrap; }
-.cassa-ultimo .invia { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cassa-ultimo { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
+.cassa-ultimo button { min-height: 48px; font-size: 1.1rem; }
 .cassa-pagina { grid-area: pagina; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 .cassa-corpo[data-vista='prodotti'] .pagina-tastierino, .cassa-corpo[data-vista='tastierino'] .pagina-prodotti { display: none; }
 .cassa-filtri { flex: none; flex-direction: row; align-items: center; gap: 6px; margin: 0; overflow-x: auto; scrollbar-width: none; }
