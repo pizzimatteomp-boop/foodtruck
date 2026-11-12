@@ -522,6 +522,8 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
         inEmergenza={daEmettere(registro, evento.id, leggiNomeCassa()).length} onChiusa={onChiusa} />}
       {fuoriItalia(evento) && <p class="errore" role="alert">Evento fuori Italia ({evento.paese}): la cassa fiscale italiana non si usa qui.</p>}
 
+      <div class="cassa-corpo">
+      <div class="cassa-scontrino">
       <ol class="cassa-righe" aria-label="Righe dello scontrino">
         {righe.length === 0 && <li class="vuota">Tocca i prodotti o scrivi un importo.</li>}
         {righe.map((r, i) => (
@@ -594,8 +596,9 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
         </div>
       )}
 
+      </div>
       <div class="cassa-pagine" ref={pagine} onScroll={(e) => setPagina(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}>
-        <div class="cassa-pagina" role="group" aria-label="Tastierino">
+        <div class="cassa-pagina pagina-tastierino" role="group" aria-label="Tastierino">
           <div class="tastierino">
             {TASTI.map((fila, i) => (
               <Fragment key={i}>
@@ -610,7 +613,7 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
             <button type="button" class="tasto aggiungi" onClick={libera}>+ importo</button>
           </div>
         </div>
-        <div class="cassa-pagina" role="group" aria-label="Prodotti">
+        <div class="cassa-pagina pagina-prodotti" role="group" aria-label="Prodotti">
           <div class="cassa-filtri">
             <input aria-label="Cerca prodotto" placeholder="🔍 Cerca" value={cerca} onInput={(e) => setCerca(e.currentTarget.value)} />
             <div class="schede" role="tablist">
@@ -630,6 +633,7 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
       <div class="pallini" role="tablist" aria-label="Pagine">
         <button type="button" role="tab" aria-selected={pagina === 0} aria-label="Tastierino" onClick={() => vaiA(0)} />
         <button type="button" role="tab" aria-selected={pagina === 1} aria-label="Prodotti" onClick={() => vaiA(1)} />
+      </div>
       </div>
       <ScontriniEvento db={db} evento={evento.id} puoAnnullare={(s) => !!cassa && (cassa.ambiente === 'agenzia' ? s.ambiente === 'agenzia' : cassa.scontrini.some((x) => x.idtrx === s.idtrx && !x.annullato))} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} onStampa={(s, q) => void stampaRicevuta(s, q)} />
       {titolare && <MovimentiEvento db={db} evento={evento.id} />}

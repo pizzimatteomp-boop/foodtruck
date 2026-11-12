@@ -32,7 +32,7 @@ export function Struttura({ servizi, ambiente, profilo, pagina, children }: {
     return () => { o?.disconnect(); window.removeEventListener('resize', misura); radice.style.removeProperty('--altezza-menu'); };
   }, [pagine.length]);
   return (
-    <div class="struttura">
+    <div class={pagina.id === 'vendi' ? 'struttura in-cassa' : 'struttura'}>
       <header class="testata">
         <a class="marchio" href="#/" aria-label="VegMan, Home"><LogoV />VEGMAN</a>
         {ambiente === 'prova' && <span class="badge-prova" title="Ambiente di PROVA · dati non reali">PROVA</span>}
@@ -47,7 +47,7 @@ export function Struttura({ servizi, ambiente, profilo, pagina, children }: {
           ))}
         </nav>
       )}
-      <main class="contenuto">{children}</main>
+      <main class={pagina.id === 'vendi' ? 'contenuto larga' : 'contenuto'}>{children}</main>
     </div>
   );
 }

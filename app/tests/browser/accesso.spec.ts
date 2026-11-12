@@ -3,7 +3,7 @@
  * una persona nuova entra e vede il suo codice → il titolare la abilita come cassa → lei rientra e vede il ruolo.
  */
 import { createRequire } from 'node:module';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const richiedi = createRequire(import.meta.url);
 
@@ -57,6 +57,12 @@ test.beforeAll(async () => {
 async function apri(page: Page, titolo: string): Promise<void> {
   await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: 'Home' }).click();
   await page.locator('.pannello-pagine').getByRole('link', { name: new RegExp(titolo) }).click();
+}
+
+/** Sul telefono tastierino e prodotti sono due pagine da scorrere; sul tablet stanno insieme e i pallini non ci sono. */
+async function vaiPagina(cassa: Locator, nome: 'Prodotti' | 'Tastierino'): Promise<void> {
+  const pallino = cassa.getByRole('tab', { name: nome });
+  if (await pallino.isVisible()) await pallino.click();
 }
 
 async function accedi(page: Page, u: typeof MATTEO): Promise<void> {
@@ -491,12 +497,12 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   // 3 × Pane e olio
   await tastierino.getByRole('button', { name: '3', exact: true }).click();
   await tastierino.getByRole('button', { name: 'Per (quantità)' }).click();
-  await cassa.getByRole('tab', { name: 'Prodotti' }).click();
+  await vaiPagina(cassa, 'Prodotti');
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
   const righe = cassa.getByRole('list', { name: 'Righe dello scontrino' });
   await expect(righe).toContainText('3 pz × 4,00 €');
   // riga a importo libero: 4,50 € «Speciale» IVA 10%
-  await cassa.getByRole('tab', { name: 'Tastierino' }).click();
+  await vaiPagina(cassa, 'Tastierino');
   for (const k of ['4', '.', '5']) await tastierino.getByRole('button', { name: k, exact: true }).click();
   await cassa.getByLabel('Descrizione').fill('Speciale');
   await tastierino.getByRole('button', { name: '+ importo' }).click();
@@ -533,7 +539,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await expect(oggi).toContainText('Annullo di DCW2026/9999-');
   await expect(oggi.getByRole('button', { name: '📤 Invia' })).toHaveCount(3);
   // C4 · omaggio: movimento interno, niente scontrino né Agenzia
-  await cassa.getByRole('tab', { name: 'Prodotti' }).click();
+  await vaiPagina(cassa, 'Prodotti');
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
   await cassa.getByRole('button', { name: 'Senza incasso' }).click();
   const senza = cassa.getByRole('group', { name: 'Senza incasso' });
@@ -551,7 +557,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await senza.getByRole('button', { name: 'Registra' }).click();
   await expect(cassa.getByRole('status')).toContainText('Pasto staff: 1 pz registrati (nessuno scontrino)');
   // una riga a importo libero non è un prodotto: rifiutata
-  await cassa.getByRole('tab', { name: 'Tastierino' }).click();
+  await vaiPagina(cassa, 'Tastierino');
   await tastierino.getByRole('button', { name: '2', exact: true }).click();
   await tastierino.getByRole('button', { name: '+ importo' }).click();
   await cassa.getByRole('button', { name: 'Senza incasso' }).click();
@@ -568,7 +574,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await cassa.screenshot({ path: 'test-results/cassa-senza-incasso.png' });
   // C7 · senza rete: la vendita va nel registro di emergenza, la cassa non si chiude, poi si emette
   await cassa.getByLabel('Prova senza rete').check();
-  await cassa.getByRole('tab', { name: 'Prodotti' }).click();
+  await vaiPagina(cassa, 'Prodotti');
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
   await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
   await expect(cassa.getByRole('status')).toContainText('vendita di 4,00 € annotata nel registro di emergenza (n. 1)');
@@ -617,7 +623,7 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await expect(cassa).toContainText('fondo 50,00 €');
   await cassa.getByLabel('Nome per la comanda').fill('Giulia');
   // C6 · chiusura: vendita 4 € in contanti, nel cassetto se ne contano 50 (fondo) → mancano 4 €
-  await cassa.getByRole('tab', { name: 'Prodotti' }).click();
+  await vaiPagina(cassa, 'Prodotti');
   await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
   await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
   await expect(cassa.getByRole('status')).toContainText('4,00 € · contanti · comanda 1 (Giulia)');
@@ -796,5 +802,38 @@ test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser })
     await page.goto(`/#/${p}`);
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `pagina ${p}`).toBeLessThanOrEqual(360);
+  }
+});
+
+test('cassa sul tablet: una sola schermata, prodotti grandi a destra, tastierino piccolo a sinistra', async ({ browser }) => {
+  test.setTimeout(90_000);
+  for (const [nome, w, h] of [['orizzontale', 1280, 800], ['verticale', 800, 1280]] as const) {
+    const page = await (await browser.newContext({ viewport: { width: w, height: h } })).newPage();
+    await page.addInitScript(() => localStorage.setItem('vegman-oggi', '2026-11-07'));
+    await accedi(page, MATTEO);
+    await page.goto('/#/vendi');
+    const apri = page.getByRole('region', { name: 'Apri la cassa' });
+    await expect(apri.getByRole('button', { name: /^(Apri cassa|Crea e apri la cassa)$/ }).first()).toBeVisible();
+    if (await apri.getByRole('button', { name: 'Crea e apri la cassa' }).isVisible()) {
+      await apri.getByLabel('Nome dell\'evento').fill('Fiera col tablet');
+      await apri.getByRole('button', { name: 'Crea e apri la cassa' }).click();
+    } else await apri.getByRole('button', { name: 'Apri cassa' }).click();
+    const cassa = page.getByRole('region', { name: 'Cassa', exact: true });
+    const prodotti = cassa.getByRole('group', { name: 'Prodotti' });
+    const tastierino = cassa.getByRole('group', { name: 'Tastierino' });
+    await expect(prodotti).toBeVisible();
+    await expect(tastierino).toBeVisible();
+    await expect(cassa.getByRole('tablist', { name: 'Pagine' })).toBeHidden();
+    // prodotti a destra dello scontrino e più larghi del tastierino
+    const p = (await prodotti.boundingBox())!;
+    const t = (await tastierino.boundingBox())!;
+    const tot = (await cassa.getByLabel('Totale').boundingBox())!;
+    expect(p.x).toBeGreaterThan(tot.x + tot.width - 1);
+    expect(p.width).toBeGreaterThan(t.width);
+    await prodotti.getByRole('button', { name: /^Pane e olio/ }).click();
+    await expect(cassa.getByRole('list', { name: 'Righe dello scontrino' })).toContainText('Pane e olio');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(w);
+    await page.screenshot({ path: `test-results/cassa-tablet-${nome}.png` });
+    await page.context().close();
   }
 });
