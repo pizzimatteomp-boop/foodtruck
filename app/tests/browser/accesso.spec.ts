@@ -716,22 +716,25 @@ test('produzione dal telefono → etichetta stampata da sola dalla stazione sul 
   await accedi(tel, MATTEO);
   await tel.goto('/#/produzione');
   const prod = tel.getByRole('region', { name: 'Produzione' });
+  // solo i semilavorati (i prodotti finiti non si producono in laboratorio)
   await prod.getByLabel('Cerca prodotto').fill('pane');
-  await prod.getByRole('button', { name: /Pane e olio/ }).click();
+  await expect(prod).toContainText('Nessun semilavorato con questo nome');
+  await prod.getByLabel('Cerca prodotto').fill('mayo');
+  await prod.getByRole('button', { name: /Mayo di prova/ }).click();
   const form = prod.getByRole('form', { name: 'Nuova produzione' });
   await form.getByLabel(/Quantità prodotta/).fill('0');
   await form.getByLabel('Etichette').fill('3');
   await form.getByRole('button', { name: 'Registra e stampa' }).click();
   await expect(prod.getByRole('alert')).toContainText('quanto hai prodotto');
-  await form.getByLabel(/Quantità prodotta/).fill('12');
+  await form.getByLabel(/Quantità prodotta/).fill('1200');
   await form.getByLabel('Nota').fill('cassetta 1');
-  await expect(form.getByLabel('Anteprima etichetta')).toContainText('Pane e olio12 pz');
+  await expect(form.getByLabel('Anteprima etichetta')).toContainText('Mayo di prova');
   await expect(form.getByLabel('Anteprima etichetta')).toContainText('cassetta 1');
   await tel.screenshot({ path: 'test-results/produzione.png' });
   await form.getByRole('button', { name: 'Registra e stampa' }).click();
-  await expect(prod.getByRole('status')).toContainText(/Pane e olio · 12 pz · lotto PAN-\d{6}-\d{4} · 3 etichette alla stampante/);
+  await expect(prod.getByRole('status')).toContainText(/Mayo di prova · .+ · lotto MAY-\d{6}-\d{4} · 3 etichette alla stampante/);
   // la stazione la stampa da sola e il telefono lo vede
-  await expect(stazione.getByRole('status')).toContainText('Stampate 3 × Pane e olio');
+  await expect(stazione.getByRole('status')).toContainText('Stampate 3 × Mayo di prova');
   expect(await pc.evaluate(() => (window as unknown as { stampe: number }).stampe)).toBe(1);
   await expect(prod.getByRole('list', { name: 'Ultime etichette' })).toContainText('✅ stampata');
   // ristampa dal telefono: un'altra stampa

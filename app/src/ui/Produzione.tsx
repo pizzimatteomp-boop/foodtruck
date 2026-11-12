@@ -25,8 +25,8 @@ export function Produzione({ db, uid }: { db: Firestore; uid: string }) {
   const [invio, setInvio] = useState(false);
   const misura = leggiMisura((() => { try { return localStorage.getItem(MISURA_CHIAVE); } catch { return null; } })());
 
-  // Prima i semilavorati (si fanno in laboratorio), poi gli altri; in ordine di nome.
-  const elenco = useMemo(() => [...pro.dati].sort((a, b) => (a.tipo === b.tipo ? a.nome.localeCompare(b.nome, 'it') : a.tipo === 'semilavorato' ? -1 : 1)), [pro.dati]);
+  // Solo i semilavorati: si fanno in laboratorio (i prodotti finiti si assemblano all'evento). Deciso da Matteo il 12/11/2026.
+  const elenco = useMemo(() => pro.dati.filter((p) => p.tipo === 'semilavorato').sort((a, b) => a.nome.localeCompare(b.nome, 'it')), [pro.dati]);
   const visibili = elenco.filter((p) => !cerca.trim() || p.nome.toLowerCase().includes(cerca.trim().toLowerCase()));
   const mappe = useMemo(() => ({ prodotti: new Map(pro.dati.map((p) => [p.id, p] as const)), ingredienti: new Map(ing.dati.map((i) => [i.id, i] as const)) }), [pro.dati, ing.dati]);
 
@@ -93,12 +93,12 @@ export function Produzione({ db, uid }: { db: Firestore; uid: string }) {
           <input aria-label="Cerca prodotto" placeholder="🔍 Cerca" value={cerca} onInput={(e) => setCerca(e.currentTarget.value)} />
           <div class="griglia-prodotti produzione-griglia">
             {visibili.map((p) => (
-              <button key={p.id} type="button" class={p.tipo === 'semilavorato' ? 'semilavorato' : ''} onClick={() => scegli(p)}>
-                <span>{p.nome}</span><small>{p.tipo === 'semilavorato' ? 'semilavorato' : 'prodotto'}</small>
+              <button key={p.id} type="button" class="semilavorato" onClick={() => scegli(p)}>
+                <span>{p.nome}</span><small>{p.resa.quantita ? `ricetta: ${quantitaLeggibile(p.resa.quantita, p.resa.unita)}` : 'semilavorato'}</small>
               </button>
             ))}
           </div>
-          {!visibili.length && <p class="nota">Nessun prodotto.</p>}
+          {!visibili.length && <p class="nota">Nessun semilavorato{cerca.trim() ? ' con questo nome' : ': si creano nella pagina Prodotti (tipo «semilavorato»)'}.</p>}
         </>
       )}
       <h2>Ultime etichette</h2>
