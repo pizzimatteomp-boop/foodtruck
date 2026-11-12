@@ -402,3 +402,5 @@ input.corto { width: 80px; }
 .scheda > .schede { display: flex; gap: 6px; overflow-x: auto; margin: 6px 0; }
 .scheda > .schede button { min-height: 40px; padding: 0 12px; white-space: nowrap; background: transparent; border: 1px solid var(--bordo); color: var(--testo); }
 .scheda > .schede button[aria-selected='true'] { background: var(--selezione); color: var(--su-selezione); border-color: var(--selezione); font-weight: 600; }
+.tabella tr.fuori-soglia th, .tabella tr.fuori-soglia td { color: var(--errore); }
+.tabella td.negativo { color: var(--errore); }

@@ -2,7 +2,7 @@ import { indirizzo, paginaDa, pagineVisibili, parametroDa } from './navigazione'
 
 describe('pagine per ruolo', () => {
   it('il titolare vede tutte le pagine; la cassa anche la cassa di prova, il team la produzione, il magazziniere anche la stazione', () => {
-    expect(pagineVisibili('titolare').map((p) => p.id)).toEqual(['home', 'vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'inventario', 'stazione', 'resoconto', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']);
+    expect(pagineVisibili('titolare').map((p) => p.id)).toEqual(['home', 'vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'inventario', 'magazzino', 'stazione', 'resoconto', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']);
     expect(pagineVisibili('titolare').filter((p) => p.principale).map((p) => p.id)).toEqual(['home', 'vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi']);
     expect(pagineVisibili('cassa').map((p) => p.id)).toEqual(['home', 'vendi', 'cassa']);
     expect(pagineVisibili('team').map((p) => p.id)).toEqual(['home', 'produzione']);
@@ -31,6 +31,6 @@ describe('pagine per ruolo', () => {
   });
 
   it('indirizzi', () => {
-    expect(pagineVisibili('titolare').map(indirizzo)).toEqual(['#/', '#/vendi', '#/prodotti', '#/ingredienti', '#/fatture', '#/avvisi', '#/produzione', '#/inventario', '#/stazione', '#/resoconto', '#/pubblica', '#/allergeni', '#/cassa', '#/persone', '#/importa']);
+    expect(pagineVisibili('titolare').map(indirizzo)).toEqual(['#/', '#/vendi', '#/prodotti', '#/ingredienti', '#/fatture', '#/avvisi', '#/produzione', '#/inventario', '#/magazzino', '#/stazione', '#/resoconto', '#/pubblica', '#/allergeni', '#/cassa', '#/persone', '#/importa']);
   });
 });

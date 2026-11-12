@@ -777,6 +777,20 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await expect(inv).toContainText('Contate 0 voci');
   await expect(inv.getByRole('list', { name: 'Inventari registrati' })).toContainText('2 voci · dopo la fiera');
   await tel.screenshot({ path: 'test-results/inventario.png' });
+  // magazzino (titolare): primo inventario = punto di partenza; al secondo si vedono le differenze
+  await tel.goto('/#/magazzino');
+  const mag = tel.getByRole('region', { name: 'Magazzino' });
+  await expect(mag.getByRole('table', { name: 'Stock teorico' })).toContainText('Mayo di prova');
+  await expect(mag).toContainText('serve un inventario precedente');
+  await tel.goto('/#/inventario');
+  await inv.getByRole('tab', { name: 'Semilavorati' }).click();
+  await voci.getByRole('listitem', { name: 'Mayo di prova' }).getByLabel('Sfuso di Mayo di prova').fill('500');
+  tel.once('dialog', (d) => void d.accept());
+  await inv.getByRole('button', { name: 'Fine inventario (1)' }).click();
+  await expect(inv.getByRole('status')).toContainText('Inventario registrato: 1 voci');
+  await tel.goto('/#/magazzino');
+  await expect(mag.getByRole('table', { name: 'Differenze dell\'inventario' }).getByRole('row', { name: /Mayo di prova/ })).toContainText(/−300.*\(-37,5%\)/);
+  await mag.screenshot({ path: 'test-results/magazzino.png' });
 });
 
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {
@@ -784,7 +798,7 @@ test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser })
   await page.addInitScript(() => localStorage.setItem('vegman-oggi', '2026-11-07'));
   await accedi(page, MATTEO);
   await expect(page.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
-  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'inventario', 'stazione', 'resoconto', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']) {
+  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'inventario', 'magazzino', 'stazione', 'resoconto', 'pubblica', 'allergeni', 'cassa', 'persone', 'importa']) {
     await page.goto(`/#/${p}`);
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `pagina ${p}`).toBeLessThanOrEqual(360);

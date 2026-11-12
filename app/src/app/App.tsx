@@ -10,6 +10,7 @@ import { Resoconto } from '../ui/Resoconto';
 import { Produzione } from '../ui/Produzione';
 import { Stazione } from '../ui/Stazione';
 import { Inventario } from '../ui/Inventario';
+import { Magazzino } from '../ui/Magazzino';
 import { Fatture } from '../ui/Fatture';
 import { GestioneMenu } from '../ui/GestioneMenu';
 import { MenuPubblico } from '../ui/MenuPubblico';
@@ -64,6 +65,7 @@ export function App({ servizi, ambiente }: { servizi: Servizi; ambiente: Ambient
         : pagina.id === 'produzione' ? <Produzione db={servizi.db} uid={stato.uid} />
         : pagina.id === 'stazione' ? <Stazione db={servizi.db} />
         : pagina.id === 'inventario' ? <Inventario db={servizi.db} uid={stato.uid} />
+        : pagina.id === 'magazzino' ? <Magazzino db={servizi.db} />
         : pagina.id === 'pubblica' ? <GestioneMenu db={servizi.db} uid={stato.uid} parametro={parametroDa(hash)} />
         : pagina.id === 'allergeni' ? <Allergeni db={servizi.db} />
         : pagina.id === 'fatture' ? <Fatture db={servizi.db} uid={stato.uid} />
