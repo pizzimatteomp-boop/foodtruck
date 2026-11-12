@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collegaAgenzia, conRiaccesso } from './cassaAgenzia';
+import { collegaAgenzia, conRiaccesso, RINNOVA_DOPO_MS } from './cassaAgenzia';
 import { archivioInMemoria, NonEmesso } from './emissione';
 import { SimulatoreAgenzia } from './simulatore';
 import { SessioneScaduta, type Richiesta, type Trasporto } from './trasporto';
@@ -58,6 +58,26 @@ describe('cassa collegata all\'Agenzia (provata su un\'Agenzia finta)', () => {
     sim.sessioneValida = false;
     await Promise.all([c.mantieniViva(), c.mantieniViva(), c.mantieniViva()]);
     expect(accessi).toBe(2);
+  });
+
+  it('la sessione si rinnova prima dei 2 ore (dopo 100 minuti), altrimenti basta una lettura', async () => {
+    const { t, chiamate } = agenziaFinta();
+    let accessi = 0;
+    let ora = Date.parse('2026-11-12T11:00:00Z');
+    const tr = conRiaccesso(t, async () => { accessi++; }, ora);
+    const c = await collegaAgenzia(tr, archivioInMemoria(), () => new Date(ora));
+    ora += 50 * 60 * 1000;
+    expect(await c.mantieniViva()).toBe('viva');
+    expect(accessi).toBe(0);
+    ora += RINNOVA_DOPO_MS - 50 * 60 * 1000;
+    const prima = chiamate.length;
+    expect(await c.mantieniViva()).toBe('rinnovata');
+    expect(accessi).toBe(1);
+    expect(chiamate.length).toBe(prima);
+    expect(tr.eta(Date.now())).toBeLessThan(1000);
+    // senza trasporto con riaccesso: solo la lettura
+    const semplice = await collegaAgenzia(t, archivioInMemoria(), () => new Date(ora + 10 * RINNOVA_DOPO_MS));
+    expect(await semplice.mantieniViva()).toBe('viva');
   });
 
   it('se dopo il nuovo accesso è ancora scaduta: niente emesso, si dice', async () => {
