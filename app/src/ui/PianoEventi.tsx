@@ -12,7 +12,9 @@ import {
   daCaricare, ErrorePrevisione, NOMI_SEZIONE_CARICO, numeroPrevisione, percentualiReali, pezziPrevisti, pianoDiCarico,
   previsioneDiBase, SCORTA_BASE, sommaPercentuali, testoManca, type Modo, type Previsione,
 } from '../eventi/carico';
-import { salvaBasePrevisione, salvaCarico, salvaPrevisione, useBasePrevisione, usePrevisione, type BasePrevisione, type PrevisioneEvento } from '../eventi/carico.db';
+import { salvaBasePrevisione, salvaCalendario, salvaCarico, salvaPrevisione, useBasePrevisione, useCalendario, usePrevisione, type BasePrevisione, type PrevisioneEvento } from '../eventi/carico.db';
+import { eventiDalCalendario, eventiNuovi, indirizzoValido, leggiCsv, type EventoCalendario } from '../eventi/calendario';
+import { scaricaCalendario } from './calendarioRete';
 import { descriviEvento, ErroreEvento, eventiPerCassa, preparaEvento, type Evento } from '../eventi/eventi';
 import { creaEvento } from '../eventi/eventi.db';
 import type { Prodotto } from '../foodcost/modello';
@@ -42,6 +44,7 @@ export function PianoEventi({ db }: { db: Firestore }) {
         </label>
       ) : <p class="nota">Nessun evento aperto: creane uno qui sotto.</p>}
       <NuovoEvento db={db} onCreato={setScelto} aperto={!lista.length} />
+      <Calendario db={db} esistenti={ev.dati} scorta={base?.scorta ?? SCORTA_BASE} />
       {evento && base !== undefined && prev !== undefined && <Previsione key={id} db={db} evento={evento} base={base} salvata={prev} />}
     </section>
   );
@@ -206,5 +209,83 @@ function Previsione({ db, evento, base, salvata }: { db: Firestore; evento: Even
       {esito && <p class={esito.errore ? 'esito errore' : 'esito'} role={esito.errore ? 'alert' : 'status'}>{esito.testo}</p>}
       <button type="button" class="primario" disabled={occupato || !piano?.length} onClick={() => void prepara()}>Salva e prepara il piano di carico</button>
     </div>
+  );
+}
+
+/** Calendario Google (P5): la scheda «App» di «CALENDARIO 2027» pubblicata come CSV; aggiunge solo gli eventi nuovi. */
+function Calendario({ db, esistenti, scorta }: { db: Firestore; esistenti: readonly Evento[]; scorta: number }) {
+  const cal = useCalendario(db);
+  const [url, setUrl] = useState('');
+  const [modifica, setModifica] = useState(false);
+  const [letti, setLetti] = useState<{ nuovi: EventoCalendario[]; gia: number; scartate: string[] } | null>(null);
+  const [esito, setEsito] = useState<{ testo: string; errore: boolean } | null>(null);
+  const [occupato, setOccupato] = useState(false);
+  const [aperto, setAperto] = useState<boolean | null>(null);
+  if (cal === undefined) return null;
+  const salvato = cal?.url ?? '';
+  // aperto la prima volta se il calendario non è ancora collegato; poi decide chi lo usa
+
+  async function salva() {
+    if (!indirizzoValido(url)) { setEsito({ testo: 'Serve l\'indirizzo della scheda pubblicata come CSV (File › Condividi › Pubblica sul web › scheda «App» › CSV).', errore: true }); return; }
+    await salvaCalendario(db, url);
+    setModifica(false); setUrl('');
+    setEsito({ testo: '✅ Calendario collegato.', errore: false });
+  }
+  async function leggi() {
+    setOccupato(true); setEsito(null);
+    try {
+      const { eventi, scartate } = eventiDalCalendario(leggiCsv(await scaricaCalendario(salvato)));
+      const nuovi = eventiNuovi(eventi, esistenti);
+      setLetti({ nuovi, gia: eventi.length - nuovi.length, scartate });
+    } catch (e) {
+      setEsito({ testo: `Calendario non letto (${(e as Error)?.message || 'errore di rete'}): controlla la rete e che la scheda sia pubblicata.`, errore: true });
+    }
+    setOccupato(false);
+  }
+  async function aggiungi() {
+    if (!letti) return;
+    setOccupato(true);
+    let fatti = 0;
+    try {
+      for (const e of letti.nuovi) {
+        const id = await creaEvento(db, { nome: e.nome, dal: e.dal, al: e.al, ...(e.luogo ? { luogo: e.luogo } : {}), paese: e.paese, stato: 'aperto' });
+        if (e.fatturato > 0) await salvaPrevisione(db, id, { fatturato: e.fatturato, scorta, voci: {} });
+        fatti++;
+      }
+      setEsito({ testo: `✅ Aggiunti ${fatti} eventi dal calendario.`, errore: false });
+      setLetti(null);
+    } catch {
+      setEsito({ testo: `Aggiunti ${fatti} eventi, poi un errore: premi di nuovo «Leggi il calendario» (i già aggiunti non si ripetono).`, errore: true });
+    }
+    setOccupato(false);
+  }
+  const data = (g: string) => g.split('-').reverse().join('/');
+  return (
+    <details open={aperto ?? !salvato} onToggle={(e) => setAperto((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary>📅 Calendario Google</summary>
+      <div class="nuova">
+        {salvato && !modifica ? (
+          <div class="comandi">
+            <button type="button" class="primario" disabled={occupato} onClick={() => void leggi()}>{occupato ? 'Leggo…' : 'Leggi il calendario'}</button>
+            <button type="button" class="secondario piccolo" onClick={() => setModifica(true)}>Cambia indirizzo</button>
+          </div>
+        ) : (<>
+          <p class="nota">Incolla l'indirizzo della scheda «App» pubblicata come CSV: in Google Fogli File › Condividi › Pubblica sul web, scegli la scheda «App» e «Valori separati da virgola (.csv)».</p>
+          <input aria-label="Indirizzo del calendario" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?…output=csv" value={url} onInput={(e) => setUrl(e.currentTarget.value)} />
+          <button type="button" class="secondario" onClick={() => void salva()}>Collega il calendario</button>
+        </>)}
+        {letti && (<>
+          <p class="nota" aria-label="Lettura del calendario">{letti.nuovi.length ? `${letti.nuovi.length} eventi nuovi` : 'Nessun evento nuovo'}{letti.gia ? ` · ${letti.gia} già nell'app` : ''}{letti.scartate.length ? ` · ${letti.scartate.length} righe saltate` : ''}.</p>
+          {letti.nuovi.length > 0 && (
+            <ul class="persone" aria-label="Eventi nuovi dal calendario">
+              {letti.nuovi.map((e) => <li key={`${e.nome}-${e.dal}`}><div class="nome"><strong>{e.nome}</strong> <small>{data(e.dal)}{e.al !== e.dal ? `–${data(e.al)}` : ''}{e.luogo ? ` · ${e.luogo}` : ''}{e.paese !== 'IT' ? ` · ${e.paese}` : ''}{e.fatturato ? ` · ${euro(e.fatturato)} previsti` : ''}</small></div></li>)}
+            </ul>
+          )}
+          {letti.scartate.length > 0 && <p class="nota">Saltate: {letti.scartate.join('; ')}.</p>}
+          {letti.nuovi.length > 0 && <button type="button" class="primario" disabled={occupato} onClick={() => void aggiungi()}>Aggiungi {letti.nuovi.length} eventi</button>}
+        </>)}
+        {esito && <p class={esito.errore ? 'esito errore' : 'esito'} role={esito.errore ? 'alert' : 'status'}>{esito.testo}</p>}
+      </div>
+    </details>
   );
 }

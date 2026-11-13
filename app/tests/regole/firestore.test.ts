@@ -590,6 +590,13 @@ describe('magazzino: confezioni di conta e inventari', () => {
     await assertFails(updateDoc(doc(db('anna'), 'carichi', 'e1'), { caricate: ['x'] }));
     await assertFails(deleteDoc(doc(db('marco'), 'carichi', 'e1')));
   });
+  it('indirizzo del calendario: solo il titolare, solo Google Fogli pubblicato', async () => {
+    const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-x/pub?gid=1&single=true&output=csv';
+    await assertSucceeds(setDoc(doc(db('matteo'), 'impostazioni', 'calendario'), { url }));
+    await assertFails(setDoc(doc(db('matteo'), 'impostazioni', 'calendario'), { url: 'https://esempio.it/x.csv' }));
+    await assertFails(setDoc(doc(db('marco'), 'impostazioni', 'calendario'), { url }));
+    await assertFails(getDoc(doc(db('marco'), 'impostazioni', 'calendario')));
+  });
   it('inventari: li registra il magazziniere, non si cambiano, li cancella solo il titolare', async () => {
     const ref = await assertSucceeds(addDoc(collection(db('marco'), 'inventari'), inv('marco')));
     await assertFails(addDoc(collection(db('luca'), 'inventari'), inv('luca')));

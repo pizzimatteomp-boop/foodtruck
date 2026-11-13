@@ -283,6 +283,12 @@ service cloud.firestore {
       allow read: if titolare();
       allow write: if titolare() && nuovo().keys().hasOnly(['voci', 'scorta']) && nuovo().voci is map && nuovo().scorta is number && nuovo().scorta >= 0 && nuovo().scorta <= 100;
     }
+    // Indirizzo della scheda «App» del calendario pubblicata come CSV (non va nel repository, che è pubblico).
+    match /impostazioni/calendario {
+      allow read: if titolare();
+      allow write: if titolare() && nuovo().keys().hasOnly(['url']) && nuovo().url is string
+        && nuovo().url.matches('^https://docs[.]google[.]com/spreadsheets/d/e/.*') && nuovo().url.size() <= 500;
+    }
     match /previsioni/{evento} {
       allow read, delete: if titolare();
       allow write: if titolare() && nuovo().keys().hasOnly(['fatturato', 'scorta', 'voci'])

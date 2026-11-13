@@ -838,6 +838,26 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await piano.getByRole('button', { name: 'Salva e prepara il piano di carico' }).click();
   await expect(piano.getByRole('status')).toContainText('Piano di carico pronto');
   await tel.screenshot({ path: 'test-results/piano-eventi.png', fullPage: true });
+  // calendario Google (scheda «App» pubblicata come CSV, qui finta): aggiunge solo gli eventi nuovi
+  await tel.route('https://docs.google.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/csv', body:
+    'Evento,Dal,Al,Luogo per la mappa,Fatturato previsto 2027,Incasso nel calendario 2026 (€)\r\nFiera Prova Uno,13/02/2027,14/02/2027,Forlì (FC),,"3.196 €"\r\nFiera Prova Due,17/04/2027,18/04/2027,San Marino (RSM),5000,\r\nSenza date,,,,,' }));
+  await piano.getByLabel('Indirizzo del calendario').fill('https://esempio.it/x.csv');
+  await piano.getByRole('button', { name: 'Collega il calendario' }).click();
+  await expect(piano.getByRole('alert')).toContainText('pubblicata come CSV');
+  await piano.getByLabel('Indirizzo del calendario').fill('https://docs.google.com/spreadsheets/d/e/2PACX-prova/pub?gid=1&single=true&output=csv');
+  await piano.getByRole('button', { name: 'Collega il calendario' }).click();
+  await piano.getByRole('button', { name: 'Leggi il calendario' }).click();
+  await expect(piano.getByLabel('Lettura del calendario')).toContainText('2 eventi nuovi · 1 righe saltate');
+  const nuoviCal = piano.getByRole('list', { name: 'Eventi nuovi dal calendario' });
+  await expect(nuoviCal).toContainText('Fiera Prova Uno');
+  await expect(nuoviCal).toContainText('3.196,00 € previsti');
+  await expect(nuoviCal).toContainText('San Marino (RSM) · SM · 5.000,00 € previsti');
+  await piano.getByRole('button', { name: 'Aggiungi 2 eventi' }).click();
+  await expect(piano.getByRole('status').filter({ hasText: 'Aggiunti' })).toContainText('Aggiunti 2 eventi dal calendario');
+  await piano.getByLabel('Evento da pianificare').selectOption({ label: 'Fiera Prova Uno · 13/02–14/02 · Forlì (FC)' });
+  await expect(piano.getByLabel('Fatturato previsto')).toHaveValue('3196');
+  await piano.getByRole('button', { name: 'Leggi il calendario' }).click();
+  await expect(piano.getByLabel('Lettura del calendario')).toContainText('Nessun evento nuovo · 2 già nell\'app');
   // carico: lo vede chi carica il furgone, con le spunte
   await tel.goto('/#/carico');
   const carico = tel.getByRole('region', { name: 'Carico' });

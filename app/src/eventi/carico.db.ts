@@ -53,3 +53,9 @@ export function useCarichi(db: Firestore): { dati: Carico[]; caricato: boolean }
 export async function segnaCaricata(db: Firestore, evento: string, chiave: string, si: boolean): Promise<void> {
   await updateDoc(doc(db, 'carichi', evento), { caricate: si ? arrayUnion(chiave) : arrayRemove(chiave) });
 }
+
+/** Indirizzo del calendario (scheda «App» pubblicata come CSV). */
+export const useCalendario = (db: Firestore) => useDoc<{ url: string }>(db, 'impostazioni', ['calendario']);
+export async function salvaCalendario(db: Firestore, url: string): Promise<void> {
+  await setDoc(doc(db, 'impostazioni', 'calendario'), { url: url.trim() });
+}
