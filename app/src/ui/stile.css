@@ -477,3 +477,8 @@ input.corto { width: 80px; }
   .struttura.in-cassa { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: 'testata' 'contenuto'; }
   .struttura.in-cassa .menu { display: none; }
 }
+
+/* Scorte minime */
+.scorte li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.scorta { display: flex; align-items: center; gap: 6px; flex: none; }
+.scorta input { width: 5em; text-align: right; }

@@ -9,6 +9,7 @@ import { useMenuPubblicato } from '../menu/menu.db';
 import { avvisiFoodCost, fotografia, fotografiaDaSalvare, nomeMese, type Avviso } from '../storico/storico';
 import { salvaFotografia, salvaSogliaRincaro, useFotografie, useSogliaRincaro } from '../storico/storico.db';
 import { avvisiQuadrature } from '../cassa/quadratura';
+import { useStockMagazzino } from './stockMagazzino';
 import { useQuadrature } from '../cassa/quadratura.db';
 import type { Evento } from '../eventi/eventi';
 
@@ -41,6 +42,7 @@ export function FotografiaAutomatica({ db, uid }: { db: Firestore; uid: string }
 }
 
 export function Avvisi({ db }: { db: Firestore }) {
+  const magazzino = useStockMagazzino(db);
   const { dati, caricato, errore } = useDatiFoodCost(db);
   const { fotografie } = useFotografie(db);
   const soglia = useSogliaRincaro(db);
@@ -60,6 +62,7 @@ export function Avvisi({ db }: { db: Firestore }) {
     daControllare > 0 && { testo: `${daControllare} ${daControllare === 1 ? 'articolo' : 'articoli'} delle fatture da controllare`, link: '#/fatture' },
     menu.bloccanti.length > 0 && { testo: `Menu: ${menu.bloccanti.length} dati da sistemare prima di pubblicare`, link: '#/pubblica' },
     menuDaPubblicare && { testo: 'Menu: ci sono modifiche non ancora pubblicate', link: '#/pubblica' },
+    ...(magazzino?.sotto ?? []).map((x) => ({ testo: `${x.azione === 'da produrre' ? '🏭' : '🛒'} ${x.testo}`, link: '#/magazzino' })),
     ...avvisiQuadrature(quadrature.dati, (id) => eventi.dati.find((e) => e.id === id)?.nome ?? 'evento').map((testo) => ({ testo, link: '#/vendi' })),
   ].filter(Boolean) as { testo: string; link: string }[];
   const totale = foodCost.length + altri.length;

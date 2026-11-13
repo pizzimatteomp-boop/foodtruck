@@ -563,6 +563,14 @@ describe('magazzino: confezioni di conta e inventari', () => {
     await assertSucceeds(getDoc(doc(db('marco'), 'impostazioni', 'inventario')));
     await assertFails(getDoc(doc(db('anna'), 'impostazioni', 'inventario')));
   });
+  it('scorte minime: solo il titolare', async () => {
+    await assertSucceeds(setDoc(doc(db('matteo'), 'impostazioni', 'scorte'), { voci: { 'ingrediente-i1': 10000 } }));
+    await assertSucceeds(getDoc(doc(db('matteo'), 'impostazioni', 'scorte')));
+    await assertFails(setDoc(doc(db('marco'), 'impostazioni', 'scorte'), { voci: {} }));
+    await assertFails(getDoc(doc(db('marco'), 'impostazioni', 'scorte')));
+    await assertFails(setDoc(doc(db('matteo'), 'impostazioni', 'scorte'), { voci: [] }));
+    await assertFails(setDoc(doc(db('matteo'), 'impostazioni', 'scorte'), { voci: {}, x: 1 }));
+  });
   it('inventari: li registra il magazziniere, non si cambiano, li cancella solo il titolare', async () => {
     const ref = await assertSucceeds(addDoc(collection(db('marco'), 'inventari'), inv('marco')));
     await assertFails(addDoc(collection(db('luca'), 'inventari'), inv('luca')));

@@ -273,6 +273,11 @@ service cloud.firestore {
       allow write: if titolare() && nuovo().keys().hasOnly(['voci'])
         && nuovo().voci is list && nuovo().voci.size() <= 3000;
     }
+    // Scorte minime (chiave della voce → minimo nell'unità di base): solo il titolare, che vede lo stock.
+    match /impostazioni/scorte {
+      allow read: if titolare();
+      allow write: if titolare() && nuovo().keys().hasOnly(['voci']) && nuovo().voci is map && nuovo().voci.size() <= 3000;
+    }
     // Un inventario registrato non si cambia: una correzione è un nuovo inventario.
     match /inventari/{id} {
       allow read: if magazzino();

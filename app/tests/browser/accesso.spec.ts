@@ -805,6 +805,17 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await tel.goto('/#/magazzino');
   await expect(mag.getByRole('table', { name: 'Differenze dell\'inventario' }).getByRole('row', { name: /Mayo di prova/ })).toContainText(/−300.*\(-37,5%\)/);
   await mag.screenshot({ path: 'test-results/magazzino.png' });
+  // scorte minime: Mayo sotto la soglia → «da produrre» in Magazzino e negli Avvisi
+  await mag.getByText(/^Scorte minime · 0 impostate/).click();
+  await mag.getByLabel('Cerca nelle scorte').fill('mayo');
+  await mag.getByLabel('Scorta minima di Mayo di prova').fill('1000');
+  await mag.getByLabel('Scorta minima di Mayo di prova').press('Tab');
+  await expect(mag.getByRole('status')).toContainText('Mayo di prova: minimo 1 kg');
+  await expect(mag.getByRole('list', { name: 'Sotto scorta' })).toContainText('Mayo di prova da produrre: ne hai 500 g, minimo 1 kg');
+  await expect(mag).toContainText('Scorte minime · 1 impostate');
+  await tel.goto('/#/avvisi');
+  await expect(tel.getByRole('list', { name: 'Da fare' })).toContainText('Mayo di prova da produrre');
+  await tel.goto('/#/magazzino');
   // il titolare sceglie cosa far contare: solo i semilavorati
   await tel.goto('/#/inventario');
   await expect(inv).toContainText('Il magazziniere vede tutte le voci');

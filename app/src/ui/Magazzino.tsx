@@ -1,72 +1,22 @@
 /**
- * Pagina «Magazzino» (titolare): stock teorico di ogni voce e confronto dell'ultimo inventario con l'atteso.
- * Usa fatture, scontrini e movimenti senza incasso (che vede solo il titolare).
+ * Pagina «Magazzino» (titolare): da ricomprare / da produrre (scorte minime), confronto dell'ultimo
+ * inventario con l'atteso, stock teorico di ogni voce e impostazione delle scorte minime.
  */
 import type { Firestore } from 'firebase/firestore';
-import { useMemo } from 'preact/hooks';
-import type { ScontrinoArchivio } from '../cassa/archivio';
-import type { Movimento } from '../cassa/movimenti';
-import { oggi } from '../dati/oggi';
-import { useRaccolta } from '../dati/useRaccolta.db';
-import { foodCost } from '../foodcost/calcolo';
-import type { Acquisto, Articolo, Ingrediente, Prodotto } from '../foodcost/modello';
-import { NOMI_SEZIONE, vociMagazzino } from '../magazzino/inventario';
-import { useInventari, useUnitaConta } from '../magazzino/inventario.db';
-import { confronto, eventi, stockTeorico, type InventarioConOra } from '../magazzino/stock';
+import { useState } from 'preact/hooks';
+import { NOMI_SEZIONE, type VoceMagazzino } from '../magazzino/inventario';
+import { salvaScorte } from '../magazzino/inventario.db';
+import { cambiaScorta, ErroreScorta, inConfezioni, preparaScorta, testoScorta, type Scorte } from '../magazzino/scorte';
 import { quantitaLeggibile } from '../produzione/produzione';
 import { euro } from './formato';
-import { FINESTRA_GIORNI } from './Ingredienti';
+import { useStockMagazzino } from './stockMagazzino';
 
-type ConOra = { creatoIl?: { toMillis?: () => number } };
-const ms = (x: ConOra) => x.creatoIl?.toMillis?.() ?? Date.now();
 const segno = (n: number, unita: string) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${quantitaLeggibile(Math.abs(n), unita)}`;
 
 export function Magazzino({ db }: { db: Firestore }) {
-  const ing = useRaccolta<Ingrediente>(db, 'ingredienti');
-  const pro = useRaccolta<Prodotto>(db, 'prodotti');
-  const art = useRaccolta<Articolo>(db, 'articoli');
-  const acq = useRaccolta<Acquisto>(db, 'acquisti');
-  const prod = useRaccolta<{ id: string; prodotto: string; quantita: number } & ConOra>(db, 'produzioni');
-  const sc = useRaccolta<ScontrinoArchivio & { id: string } & ConOra>(db, 'scontrini');
-  const mov = useRaccolta<Movimento & { id: string } & ConOra>(db, 'movimenti');
-  const inv = useInventari(db, 50);
-  const unita = useUnitaConta(db);
-  const pronto = ing.caricato && pro.caricato && art.caricato && acq.caricato && prod.caricato && sc.caricato && mov.caricato && inv.caricato;
-
-  const calcolo = useMemo(() => {
-    if (!pronto) return null;
-    const voci = vociMagazzino(ing.dati, pro.dati, unita);
-    // come nel resoconto: con scontrini veri si usano solo quelli
-    const veri = sc.dati.some((s) => s.ambiente === 'agenzia');
-    const scontrini = sc.dati.filter((s) => s.ambiente === (veri ? 'agenzia' : 'simulatore'));
-    const annullati = new Set(scontrini.filter((s) => s.tipo === 'A' && s.idtrxOriginale).map((s) => s.idtrxOriginale!));
-    const uscite = [
-      ...scontrini.filter((s) => s.tipo === 'V' && !annullati.has(s.idtrx))
-        .flatMap((s) => s.righe.filter((r) => r.prodotto).map((r) => ({ prodotto: r.prodotto!, quantita: r.quantita, ms: s.emergenza ?? ms(s), causa: 'vendita' as const }))),
-      ...mov.dati.map((m) => ({ prodotto: m.prodotto, quantita: m.quantita, ms: ms(m), causa: 'senza incasso' as const })),
-    ];
-    const ev = eventi({
-      prodotti: new Map(pro.dati.map((p) => [p.id, p] as const)), articoli: art.dati, acquisti: acq.dati,
-      produzioni: prod.dati.map((p) => ({ prodotto: p.prodotto, quantita: p.quantita, ms: ms(p) })), uscite,
-    });
-    const inventari: InventarioConOra[] = inv.dati.map((x) => ({ ms: x.creatoIl?.toDate?.()?.getTime() ?? Date.now(), giorno: x.giorno, righe: x.righe }));
-    const stock = stockTeorico(voci, inventari, ev, Date.now());
-    const ultimo = [...inventari].sort((a, b) => b.ms - a.ms)[0];
-    const diff = ultimo ? confronto(voci, inventari, ev, ultimo) : [];
-    // valore delle differenze ai prezzi di oggi
-    const fc = foodCost({ prodotti: pro.dati, ingredienti: ing.dati, articoli: art.dati, acquisti: acq.dati }, { finestraGiorni: FINESTRA_GIORNI, oggi: oggi() });
-    const prezzo = (chiave: string): number | null => {
-      const [tipo, ...resto] = chiave.split('-');
-      const id = resto.join('-');
-      if (tipo === 'ingrediente') return fc.prezzi.get(id)?.prezzo?.toNumber() ?? null;
-      const c = fc.prodotti.get(id);
-      return c?.completo ? c.costoUnitario.toNumber() : null;
-    };
-    return { voci, stock, ultimo, diff, prezzo, prova: !veri && scontrini.length > 0 };
-  }, [pronto, ing.dati, pro.dati, art.dati, acq.dati, prod.dati, sc.dati, mov.dati, inv.dati, unita]);
-
+  const calcolo = useStockMagazzino(db);
   if (!calcolo) return <section class="scheda"><p>Carico…</p></section>;
-  const { voci, stock, ultimo, diff, prezzo, prova } = calcolo;
+  const { voci, stock, ultimo, diff, prezzo, prova, scorte, sotto } = calcolo;
   const perChiave = new Map(voci.map((v) => [v.chiave, v] as const));
   const contate = stock.filter((s) => s.teorico !== null);
   const valoreDiff = diff.reduce((t, d) => t + d.differenza * (prezzo(d.chiave) ?? 0), 0);
@@ -74,6 +24,10 @@ export function Magazzino({ db }: { db: Firestore }) {
     <section class="scheda" aria-label="Magazzino">
       <h1>Magazzino</h1>
       {prova && <p class="simulatore" role="note">Le vendite usate sono scontrini di <strong>prova</strong> (simulatore).</p>}
+      {sotto.length > 0 && (<>
+        <h2>Sotto la scorta minima</h2>
+        <ul class="elenco" aria-label="Sotto scorta">{sotto.map((x) => <li key={x.chiave}><span class="nome">{x.azione === 'da produrre' ? '🏭' : '🛒'} {x.testo}</span></li>)}</ul>
+      </>)}
       {ultimo ? (<>
         <h2>Ultimo inventario · {ultimo.giorno.split('-').reverse().join('/')}</h2>
         {diff.length ? (<>
@@ -97,7 +51,7 @@ export function Magazzino({ db }: { db: Firestore }) {
           const v = perChiave.get(s.chiave)!;
           return (
             <tr key={s.chiave}>
-              <th scope="row">{v.nome}<br /><small>{NOMI_SEZIONE[v.sezione]} · {s.base!.giorno.split('-').reverse().slice(0, 2).join('/')}</small></th>
+              <th scope="row">{v.nome}<br /><small>{NOMI_SEZIONE[v.sezione]} · {s.base!.giorno.split('-').reverse().slice(0, 2).join('/')}{scorte[v.chiave] ? ` · min ${inConfezioni(scorte[v.chiave]!, v)}` : ''}</small></th>
               <td>{quantitaLeggibile(s.base!.quantita, v.unita)}</td>
               <td>{s.entrate ? `+${quantitaLeggibile(s.entrate, v.unita)}` : ''}{s.entrate && s.uscite ? ' ' : ''}{s.uscite ? `−${quantitaLeggibile(s.uscite, v.unita)}` : ''}{!s.entrate && !s.uscite ? '—' : ''}</td>
               <td class={s.teorico! < 0 ? 'negativo' : ''}><strong>{quantitaLeggibile(s.teorico!, v.unita)}</strong></td>
@@ -107,6 +61,42 @@ export function Magazzino({ db }: { db: Firestore }) {
       </table>
       {stock.some((s) => s.teorico !== null && s.teorico < 0) && <p class="errore" role="note">Stock negativo: manca una fattura o una produzione registrata, oppure la ricetta non corrisponde.</p>}
       <p class="nota">{stock.length - contate.length} voci mai contate: entrano nello stock dal primo inventario. Le fatture con la stessa data dell'inventario, se l'inventario è del pomeriggio, si considerano già contate.</p>
+      <ScorteMinime db={db} voci={voci} scorte={scorte} />
     </section>
+  );
+}
+
+/** Scorte minime: per ogni voce un numero, in confezioni se la voce ne ha una. Si salva uscendo dal campo. */
+function ScorteMinime({ db, voci, scorte }: { db: Firestore; voci: readonly VoceMagazzino[]; scorte: Scorte }) {
+  const [cerca, setCerca] = useState('');
+  const [esito, setEsito] = useState<{ testo: string; errore: boolean } | null>(null);
+  const impostate = Object.keys(scorte).length;
+  const elenco = voci.filter((v) => !cerca.trim() || v.nome.toLowerCase().includes(cerca.trim().toLowerCase()));
+  async function salva(v: VoceMagazzino, testo: string) {
+    try {
+      const minimo = preparaScorta(testo, v);
+      if ((minimo ?? undefined) === scorte[v.chiave]) return;
+      await salvaScorte(db, cambiaScorta(scorte, v.chiave, minimo));
+      setEsito({ testo: minimo ? `✅ ${v.nome}: minimo ${inConfezioni(minimo, v)}` : `✅ ${v.nome}: nessuna scorta minima`, errore: false });
+    } catch (e) {
+      setEsito({ testo: e instanceof ErroreScorta ? e.message : 'Non salvata: riprova.', errore: true });
+    }
+  }
+  return (
+    <details class="scontrini-oggi">
+      <summary>Scorte minime · {impostate} impostate</summary>
+      <p class="nota">Sotto la scorta minima la voce compare qui sopra e negli Avvisi: da ricomprare (ingredienti, packaging) o da produrre (semilavorati). Si scrive in confezioni se la voce ne ha una; vuoto = nessuna soglia. Vale per le voci già contate almeno una volta.</p>
+      <input aria-label="Cerca nelle scorte" placeholder="🔍 Cerca" value={cerca} onInput={(e) => setCerca(e.currentTarget.value)} />
+      {esito && <p class={esito.errore ? 'esito errore' : 'esito'} role={esito.errore ? 'alert' : 'status'}>{esito.testo}</p>}
+      <ul class="persone scorte" aria-label="Scorte minime">
+        {elenco.map((v) => (
+          <li key={v.chiave}>
+            <div class="nome"><strong>{v.nome}</strong> <small>{NOMI_SEZIONE[v.sezione]}</small></div>
+            <label class="scorta"><input aria-label={`Scorta minima di ${v.nome}`} inputMode="decimal" placeholder="—" defaultValue={testoScorta(scorte[v.chiave], v)}
+              onChange={(e) => void salva(v, e.currentTarget.value)} /> <small>{v.conta ? v.conta.nome : v.unita}</small></label>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

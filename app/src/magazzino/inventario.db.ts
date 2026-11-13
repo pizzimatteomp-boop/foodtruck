@@ -36,3 +36,14 @@ export function useSceltaInventario(db: Firestore): readonly string[] | null | u
 export async function salvaSceltaInventario(db: Firestore, voci: readonly string[]): Promise<void> {
   await setDoc(doc(db, 'impostazioni', 'inventario'), { voci: [...voci] });
 }
+
+/** Scorte minime (solo titolare): undefined = in caricamento. */
+export function useScorte(db: Firestore): Readonly<Record<string, number>> | undefined {
+  const [s, setS] = useState<Readonly<Record<string, number>> | undefined>(undefined);
+  useEffect(() => onSnapshot(doc(db, 'impostazioni', 'scorte'), (d) => setS(d.exists() ? (d.data() as { voci: Record<string, number> }).voci : {}), () => setS({})), [db]);
+  return s;
+}
+
+export async function salvaScorte(db: Firestore, voci: Readonly<Record<string, number>>): Promise<void> {
+  await setDoc(doc(db, 'impostazioni', 'scorte'), { voci: { ...voci } });
+}
