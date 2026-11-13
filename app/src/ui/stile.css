@@ -502,10 +502,22 @@ input.corto { width: 80px; }
 .carico-lista li.fatto { opacity: 0.55; }
 .carico-lista li.fatto .nome { text-decoration: line-through; }
 .carico-lista .manca { display: block; margin-left: 42px; }
+.carico-stampa { display: none; }
+/* Stampa del carico: un foglio A4 compatto (tabella su due colonne, 9 pt), al posto delle schede del telefono. */
 @media print {
-  .carico-pagina .no-stampa { display: none !important; }
-  .carico-lista li { background: none; border-bottom: 1px solid #999; border-radius: 0; break-inside: avoid; }
-  .carico-lista li.fatto { opacity: 1; }
+  .carico-pagina { box-shadow: none; padding: 0; border-radius: 0; }
+  .carico-pagina > :not(.carico-stampa) { display: none !important; }
+  .carico-stampa { display: block; color: #000; font-size: 9pt; line-height: 1.25; }
+  .carico-stampa-testa { display: flex; justify-content: space-between; align-items: baseline; gap: 8mm; border-bottom: 1.5pt solid #000; padding-bottom: 1.5mm; margin-bottom: 2mm; }
+  .carico-stampa-testa strong { font-size: 13pt; }
+  .carico-stampa-manca { margin: 0 0 2mm; font-weight: 700; }
+  .carico-stampa-colonne { column-count: 2; column-gap: 7mm; }
+  .carico-stampa table { width: 100%; border-collapse: collapse; margin-bottom: 2.5mm; break-inside: auto; }
+  .carico-stampa th { text-align: left; font-size: 10pt; border-bottom: 1pt solid #000; padding: 0.8mm 0; break-after: avoid; }
+  .carico-stampa td { border-bottom: 0.5pt solid #bbb; padding: 0.7mm 1mm 0.7mm 0; vertical-align: top; }
+  .carico-stampa tr { break-inside: avoid; }
+  .carico-stampa td.box { width: 5mm; font-size: 11pt; line-height: 1; }
+  .carico-stampa td.q { text-align: right; white-space: nowrap; font-weight: 700; }
 }
 
 /* Tabelle larghe: scorrono dentro la loro casella, la pagina resta larga quanto il telefono */

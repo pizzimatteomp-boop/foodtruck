@@ -65,6 +65,24 @@ export function Carico({ db }: { db: Firestore }) {
         </div>
       ))}
       <button type="button" class="secondario no-stampa" onClick={() => stampaPagina(`Carico ${carico.evento}`)}>🖨 Stampa</button>
+      {/* Foglio di stampa: tabella compatta su due colonne, caselle da spuntare a penna; si vede solo in stampa. */}
+      <div class="carico-stampa" aria-hidden="true">
+        <div class="carico-stampa-testa">
+          <strong>CARICO · {carico.evento}</strong>
+          <span>{data(carico.dal)}{carico.al !== carico.dal ? `–${data(carico.al)}` : ''} · {totali} voci · caricato da ____________</span>
+        </div>
+        {mancano.length > 0 && <p class="carico-stampa-manca">⚠ Non basta in magazzino: {mancano.map((r) => `${r.nome} (${testoManca(r)})`).join(', ')}</p>}
+        <div class="carico-stampa-colonne">
+          {sezioni.map(({ s, righe }) => (
+            <table key={s}>
+              <thead><tr><th colSpan={3}>{NOMI_SEZIONE_CARICO[s]}</th></tr></thead>
+              <tbody>{righe.map((r) => (
+                <tr key={r.chiave}><td class="box">☐</td><td>{r.nome}{r.manca ? ' ⚠' : ''}</td><td class="q">{daCaricare(r)}</td></tr>
+              ))}</tbody>
+            </table>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

@@ -869,8 +869,11 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await tel.screenshot({ path: 'test-results/carico.png', fullPage: true });
   // in stampa il carico si vede (prima una regola delle etichette lasciava i fogli bianchi), senza menu né pulsanti
   await tel.emulateMedia({ media: 'print' });
-  await expect(carico.getByRole('heading', { name: /Fiera del carico/ })).toBeVisible();
-  await expect(carico.getByRole('checkbox').first()).toBeVisible();
+  // foglio compatto: tabella su due colonne al posto delle schede del telefono
+  await expect(tel.locator('.carico-stampa')).toBeVisible();
+  await expect(tel.locator('.carico-stampa')).toContainText('CARICO · Fiera del carico');
+  await expect(tel.locator('.carico-stampa table').first()).toContainText('Cibo');
+  await expect(carico.getByRole('checkbox').first()).toBeHidden();
   await expect(tel.getByRole('navigation', { name: 'Menu' })).toBeHidden();
   await expect(carico.getByRole('button', { name: '🖨 Stampa' })).toBeHidden();
   await tel.pdf({ path: 'test-results/carico.pdf', format: 'A4' }).catch(() => undefined);
