@@ -867,6 +867,14 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await carico.getByRole('checkbox').first().check();
   await expect(carico.getByLabel('Avanzamento')).toContainText('Caricate 1 di');
   await tel.screenshot({ path: 'test-results/carico.png', fullPage: true });
+  // in stampa il carico si vede (prima una regola delle etichette lasciava i fogli bianchi), senza menu né pulsanti
+  await tel.emulateMedia({ media: 'print' });
+  await expect(carico.getByRole('heading', { name: /Fiera del carico/ })).toBeVisible();
+  await expect(carico.getByRole('checkbox').first()).toBeVisible();
+  await expect(tel.getByRole('navigation', { name: 'Menu' })).toBeHidden();
+  await expect(carico.getByRole('button', { name: '🖨 Stampa' })).toBeHidden();
+  await tel.pdf({ path: 'test-results/carico.pdf', format: 'A4' }).catch(() => undefined);
+  await tel.emulateMedia({ media: 'screen' });
   // lista di produzione: la Mayo che manca al piano compare in Produzione, già compilata; prodotta, sparisce
   await tel.goto('/#/produzione');
   const prodLab = tel.getByRole('region', { name: 'Produzione' });

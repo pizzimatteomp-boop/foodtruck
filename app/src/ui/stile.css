@@ -377,8 +377,10 @@ input.corto { width: 80px; }
 .etichetta-ingredienti { line-height: 1.15; overflow: hidden; }
 .anteprima-etichetta { overflow-x: auto; padding: 4px 0; }
 #stampa-etichette { display: none; }
+/* Solo nella pagina Stazione (dove c'è #stampa-etichette): in stampa si vedono solo le etichette.
+   Senza :has() la regola nascondeva tutto anche nelle altre stampe (Carico, Menu e QR: fogli bianchi). */
 @media print {
-  body * { visibility: hidden !important; }
+  body:has(#stampa-etichette) * { visibility: hidden !important; }
   #stampa-etichette, #stampa-etichette * { visibility: visible !important; }
   #stampa-etichette { display: block !important; position: absolute; left: 0; top: 0; }
   #stampa-etichette .etichetta { border: 0; break-after: page; page-break-after: always; }
