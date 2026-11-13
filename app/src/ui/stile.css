@@ -505,3 +505,7 @@ input.corto { width: 80px; }
   .carico-lista li { background: none; border-bottom: 1px solid #999; border-radius: 0; break-inside: avoid; }
   .carico-lista li.fatto { opacity: 1; }
 }
+
+/* Tabelle larghe: scorrono dentro la loro casella, la pagina resta larga quanto il telefono */
+.scorre { max-width: 100%; overflow-x: auto; }
+.scorre .tabella td, .scorre .tabella th { overflow-wrap: anywhere; }

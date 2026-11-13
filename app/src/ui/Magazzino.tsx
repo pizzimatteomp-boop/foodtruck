@@ -32,7 +32,7 @@ export function Magazzino({ db }: { db: Firestore }) {
         <h2>Ultimo inventario · {ultimo.giorno.split('-').reverse().join('/')}</h2>
         {diff.length ? (<>
           <p class="nota">Contato contro atteso (dall'inventario precedente + fatture + produzione − vendite − senza incasso). Valore delle differenze ai prezzi di oggi: <strong>{euro(valoreDiff)}</strong>.</p>
-          <table class="tabella" aria-label="Differenze dell'inventario">
+          <div class="scorre"><table class="tabella" aria-label="Differenze dell'inventario">
             <thead><tr><th>Voce</th><th>Atteso</th><th>Contato</th><th>Diff.</th></tr></thead>
             <tbody>{diff.map((d) => (
               <tr key={d.chiave} class={d.percentuale !== null && Math.abs(d.percentuale) >= 10 ? 'fuori-soglia' : ''}>
@@ -40,12 +40,12 @@ export function Magazzino({ db }: { db: Firestore }) {
                 <td>{segno(d.differenza, d.unita)}{d.percentuale !== null ? ` (${d.percentuale.toString().replace('.', ',')}%)` : ''}</td>
               </tr>
             ))}</tbody>
-          </table>
+          </table></div>
         </>) : <p class="nota">Per il confronto serve un inventario precedente delle stesse voci: dal prossimo inventario vedrai le differenze.</p>}
       </>) : <p class="nota">Ancora nessun inventario: fai il primo dalla pagina «Inventario», sarà il punto di partenza.</p>}
 
       <h2>Stock oggi (teorico)</h2>
-      <table class="tabella" aria-label="Stock teorico">
+      <div class="scorre"><table class="tabella" aria-label="Stock teorico">
         <thead><tr><th>Voce</th><th>Contato</th><th>Movimenti</th><th>Oggi</th></tr></thead>
         <tbody>{contate.map((s) => {
           const v = perChiave.get(s.chiave)!;
@@ -58,7 +58,7 @@ export function Magazzino({ db }: { db: Firestore }) {
             </tr>
           );
         })}</tbody>
-      </table>
+      </table></div>
       {stock.some((s) => s.teorico !== null && s.teorico < 0) && <p class="errore" role="note">Stock negativo: manca una fattura o una produzione registrata, oppure la ricetta non corrisponde.</p>}
       <p class="nota">{stock.length - contate.length} voci mai contate: entrano nello stock dal primo inventario. Le fatture con la stessa data dell'inventario, se l'inventario è del pomeriggio, si considerano già contate.</p>
       <ScorteMinime db={db} voci={voci} scorte={scorte} />

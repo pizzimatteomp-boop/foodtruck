@@ -188,10 +188,10 @@ function Previsione({ db, evento, base, salvata }: { db: Firestore; evento: Even
 
       <h2>Pezzi previsti</h2>
       {pezzi.length ? (
-        <table class="tabella" aria-label="Pezzi previsti">
+        <div class="scorre"><table class="tabella" aria-label="Pezzi previsti">
           <thead><tr><th>Prodotto</th><th>Pezzi</th><th>Incasso</th></tr></thead>
           <tbody>{pezzi.map((x) => <tr key={x.id}><th scope="row">{x.nome}</th><td>{x.pezzi}{x.modo === 'pz' ? ' (fissi)' : ''}</td><td>{euro(x.incasso)}</td></tr>)}</tbody>
-        </table>
+        </table></div>
       ) : <p class="nota">Scrivi il fatturato previsto e le % dei prodotti.</p>}
 
       <h2>Piano di carico</h2>
