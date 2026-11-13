@@ -10,6 +10,9 @@ import type { Ingrediente, Prodotto } from '../foodcost/modello';
 import { contenutoEtichetta, ErroreProduzione, leggiMisura, preparaProduzione, quantitaLeggibile } from '../produzione/produzione';
 import { registraProduzione, ristampa, useEtichette, type Etichetta } from '../produzione/produzione.db';
 import { EtichettaVista } from './EtichettaVista';
+import { oggi } from '../dati/oggi';
+import { daProdurre } from '../eventi/carico';
+import { useCarichi } from '../eventi/carico.db';
 import { MISURA_CHIAVE } from './Stazione';
 
 const STATO: Record<Etichetta['stato'], string> = { da_stampare: '⏳ in coda', in_stampa: '🖨 in stampa', stampata: '✅ stampata' };
@@ -18,6 +21,14 @@ export function Produzione({ db, uid }: { db: Firestore; uid: string }) {
   const pro = useRaccolta<Prodotto>(db, 'prodotti');
   const ing = useRaccolta<Ingrediente>(db, 'ingredienti');
   const et = useEtichette(db, 20);
+  const car = useCarichi(db);
+  const prod = useRaccolta<{ id: string; prodotto: string; quantita: number; creatoIl?: { toMillis?: () => number } }>(db, 'produzioni');
+  // Lista di produzione (P4): semilavorati che mancano nei piani di carico dei prossimi eventi.
+  const lista = useMemo(() => daProdurre(
+    car.dati.map((c) => ({ evento: c.evento, dal: c.dal, al: c.al, preparatoMs: (c.preparato as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0, righe: c.righe })),
+    prod.dati.map((x) => ({ prodotto: x.prodotto, quantita: x.quantita, ms: x.creatoIl?.toMillis?.() ?? Date.now() })),
+    oggi(),
+  ), [car.dati, prod.dati]);
   const [cerca, setCerca] = useState('');
   const [scelto, setScelto] = useState<Prodotto | null>(null);
   const [campi, setCampi] = useState({ quantita: '', copie: '1', nota: '' });
@@ -39,9 +50,9 @@ export function Produzione({ db, uid }: { db: Firestore; uid: string }) {
     } catch { return null; }
   }, [scelto, campi, mappe]);
 
-  function scegli(p: Prodotto) {
+  function scegli(p: Prodotto, quantita?: number) {
     setScelto(p);
-    setCampi({ quantita: String(p.resa.quantita || ''), copie: '1', nota: '' });
+    setCampi({ quantita: String(quantita ?? (p.resa.quantita || '')).replace('.', ','), copie: '1', nota: '' });
     setEsito(null);
   }
 
@@ -90,6 +101,21 @@ export function Produzione({ db, uid }: { db: Firestore; uid: string }) {
         </form>
       ) : (
         <>
+          {lista.length > 0 && (<>
+            <h2>Da produrre per i prossimi eventi</h2>
+            <ul class="persone" aria-label="Da produrre">
+              {lista.map((x) => {
+                const p = elenco.find((y) => y.id === x.id);
+                return (
+                  <li key={`${x.id}-${x.evento}`}>
+                    <div class="nome"><strong>{x.nome} · {quantitaLeggibile(x.resta, x.unita)}</strong> <small>per {x.evento} ({x.dal.split('-').reverse().slice(0, 2).join('/')}){x.fatto ? ` · già fatti ${quantitaLeggibile(x.fatto, x.unita)}` : ''}</small></div>
+                    {p && <div class="comandi"><button type="button" class="primario piccolo" aria-label={`Produci ${x.nome}`} onClick={() => scegli(p, Math.ceil(x.resta))}>Produci</button></div>}
+                  </li>
+                );
+              })}
+            </ul>
+            <h2>Tutti i semilavorati</h2>
+          </>)}
           <input aria-label="Cerca prodotto" placeholder="🔍 Cerca" value={cerca} onInput={(e) => setCerca(e.currentTarget.value)} />
           <div class="griglia-prodotti produzione-griglia">
             {visibili.map((p) => (

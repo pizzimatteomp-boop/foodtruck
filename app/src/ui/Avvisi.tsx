@@ -10,6 +10,8 @@ import { avvisiFoodCost, fotografia, fotografiaDaSalvare, nomeMese, type Avviso 
 import { salvaFotografia, salvaSogliaRincaro, useFotografie, useSogliaRincaro } from '../storico/storico.db';
 import { avvisiQuadrature } from '../cassa/quadratura';
 import { useStockMagazzino } from './stockMagazzino';
+import { avvisiInventario } from '../magazzino/stock';
+import { quantitaLeggibile } from '../produzione/produzione';
 import { useQuadrature } from '../cassa/quadratura.db';
 import type { Evento } from '../eventi/eventi';
 
@@ -62,6 +64,7 @@ export function Avvisi({ db }: { db: Firestore }) {
     daControllare > 0 && { testo: `${daControllare} ${daControllare === 1 ? 'articolo' : 'articoli'} delle fatture da controllare`, link: '#/fatture' },
     menu.bloccanti.length > 0 && { testo: `Menu: ${menu.bloccanti.length} dati da sistemare prima di pubblicare`, link: '#/pubblica' },
     menuDaPubblicare && { testo: 'Menu: ci sono modifiche non ancora pubblicate', link: '#/pubblica' },
+    ...(magazzino?.ultimo ? avvisiInventario(magazzino.diff, magazzino.ultimo.giorno, 10, quantitaLeggibile) : []).map((testo) => ({ testo: `📦 ${testo}`, link: '#/magazzino' })),
     ...(magazzino?.sotto ?? []).map((x) => ({ testo: `${x.azione === 'da produrre' ? '🏭' : '🛒'} ${x.testo}`, link: '#/magazzino' })),
     ...avvisiQuadrature(quadrature.dati, (id) => eventi.dati.find((e) => e.id === id)?.nome ?? 'evento').map((testo) => ({ testo, link: '#/vendi' })),
   ].filter(Boolean) as { testo: string; link: string }[];

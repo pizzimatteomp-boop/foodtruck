@@ -815,6 +815,7 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await expect(mag).toContainText('Scorte minime · 1 impostate');
   await tel.goto('/#/avvisi');
   await expect(tel.getByRole('list', { name: 'Da fare' })).toContainText('Mayo di prova da produrre');
+  await expect(tel.getByRole('list', { name: 'Da fare' })).toContainText(/Inventario del .*: Mayo di prova −300 g rispetto all'atteso \(−37,5%\)/);
   await tel.goto('/#/magazzino');
   // piano eventi: fatturato previsto, % e pezzi fissi → pezzi e piano di carico
   await tel.goto('/#/eventi');
@@ -846,6 +847,19 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await carico.getByRole('checkbox').first().check();
   await expect(carico.getByLabel('Avanzamento')).toContainText('Caricate 1 di');
   await tel.screenshot({ path: 'test-results/carico.png', fullPage: true });
+  // lista di produzione: la Mayo che manca al piano compare in Produzione, già compilata; prodotta, sparisce
+  await tel.goto('/#/produzione');
+  const prodLab = tel.getByRole('region', { name: 'Produzione' });
+  const daFare = prodLab.getByRole('list', { name: 'Da produrre' });
+  await expect(daFare).toContainText('Mayo di prova · 100 g');
+  await expect(daFare).toContainText('per Fiera del carico');
+  await daFare.getByRole('button', { name: 'Produci Mayo di prova' }).click();
+  const formProd = prodLab.getByRole('form', { name: 'Nuova produzione' });
+  await expect(formProd.getByLabel(/Quantità prodotta/)).toHaveValue('100');
+  await formProd.getByLabel('Etichette').fill('0');
+  await formProd.getByRole('button', { name: 'Registra e stampa' }).click();
+  await expect(prodLab.getByRole('status')).toContainText('Mayo di prova · 100 g');
+  await expect(prodLab.getByRole('list', { name: 'Da produrre' })).toHaveCount(0);
   // il titolare sceglie cosa far contare: solo i semilavorati
   await tel.goto('/#/inventario');
   await expect(inv).toContainText('Il magazziniere vede tutte le voci');

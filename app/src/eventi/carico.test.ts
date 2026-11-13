@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Prodotto } from '../foodcost/modello';
 import type { VoceMagazzino } from '../magazzino/inventario';
 import {
-  daCaricare, numeroPrevisione, percentualiReali, pezziPrevisti, pianoDiCarico, previsioneDiBase, sommaPercentuali, testoManca,
+  daCaricare, daProdurre, numeroPrevisione, percentualiReali, pezziPrevisti, pianoDiCarico, previsioneDiBase, sommaPercentuali, testoManca,
 } from './carico';
 
 // Dati inventati.
@@ -78,5 +78,21 @@ describe('previsione dell\'evento', () => {
     ];
     expect(percentualiReali(s as never)).toEqual({ kebab: 82.8, patate: 17.2 });
     expect(percentualiReali([])).toBeNull();
+  });
+
+  it('lista di produzione: semilavorati mancanti negli eventi non finiti, meno quanto prodotto dopo il piano', () => {
+    const riga = (manca: number | null) => ({ chiave: 'semilavorato-mayo', nome: 'Mayo', unita: 'g', sezione: 'semilavorato' as const, manca });
+    const carichi = [
+      { evento: 'Fiera B', dal: '2026-11-25', al: '2026-11-26', preparatoMs: 100, righe: [riga(1000)] },
+      { evento: 'Fiera A', dal: '2026-11-20', al: '2026-11-22', preparatoMs: 100, righe: [riga(2000), { ...riga(500), chiave: 'ingrediente-olio', sezione: 'alimentare' as const }] },
+      { evento: 'Passata', dal: '2026-11-01', al: '2026-11-02', preparatoMs: 100, righe: [riga(700)] },
+      { evento: 'Fiera C', dal: '2026-11-28', al: '2026-11-28', preparatoMs: 100, righe: [riga(0), riga(null)] },
+    ];
+    const prod = [{ prodotto: 'mayo', quantita: 1500, ms: 200 }, { prodotto: 'mayo', quantita: 900, ms: 50 }, { prodotto: 'altro', quantita: 5000, ms: 300 }];
+    expect(daProdurre(carichi, prod, '2026-11-13')).toEqual([
+      { id: 'mayo', nome: 'Mayo', unita: 'g', evento: 'Fiera A', dal: '2026-11-20', serve: 2000, fatto: 1500, resta: 500 },
+      { id: 'mayo', nome: 'Mayo', unita: 'g', evento: 'Fiera B', dal: '2026-11-25', serve: 1000, fatto: 0, resta: 1000 },
+    ]);
+    expect(daProdurre(carichi, [{ prodotto: 'mayo', quantita: 5000, ms: 200 }], '2026-11-13')).toEqual([]);
   });
 });

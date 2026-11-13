@@ -123,3 +123,11 @@ export function confronto(voci: readonly VoceMagazzino[], inventari: readonly In
   }
   return out.sort((a, b) => Math.abs(b.percentuale ?? 100) - Math.abs(a.percentuale ?? 100));
 }
+
+/** Avvisi sulle differenze dell'ultimo inventario oltre la soglia % (di base 10%), le più grandi prima. */
+export function avvisiInventario(diff: readonly Differenza[], giorno: string, soglia = 10, testoQuantita: (n: number, unita: string) => string = (n, u) => `${n} ${u}`): string[] {
+  const data = giorno.split('-').reverse().join('/');
+  return diff.filter((d) => d.percentuale !== null && Math.abs(d.percentuale) >= soglia)
+    .sort((a, b) => Math.abs(b.percentuale!) - Math.abs(a.percentuale!))
+    .map((d) => `Inventario del ${data}: ${d.nome} ${d.differenza > 0 ? '+' : '−'}${testoQuantita(Math.abs(d.differenza), d.unita)} rispetto all'atteso (${d.percentuale! > 0 ? '+' : '−'}${String(Math.abs(d.percentuale!)).replace('.', ',')}%)`);
+}

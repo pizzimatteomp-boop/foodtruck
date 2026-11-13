@@ -75,3 +75,20 @@ describe('stock teorico del magazzino', () => {
     expect(mezzogiorno('2026-11-01')).toBe(Date.parse('2026-11-01T11:00:00Z'));
   });
 });
+
+describe('avvisi dell\'inventario', () => {
+  it('solo le differenze oltre il 10%, le più grandi prima', async () => {
+    const { avvisiInventario } = await import('./stock');
+    const d = [
+      { chiave: 'a', nome: 'Olio', unita: 'ml', atteso: 5000, contato: 4400, differenza: -600, percentuale: -12 },
+      { chiave: 'b', nome: 'Sale', unita: 'g', atteso: 1000, contato: 1050, differenza: 50, percentuale: 5 },
+      { chiave: 'c', nome: 'Mayo', unita: 'g', atteso: 1000, contato: 1500, differenza: 500, percentuale: 50 },
+      { chiave: 'd', nome: 'Nuovo', unita: 'g', atteso: 0, contato: 10, differenza: 10, percentuale: null },
+    ];
+    expect(avvisiInventario(d, '2026-11-12')).toEqual([
+      'Inventario del 12/11/2026: Mayo +500 g rispetto all\'atteso (+50%)',
+      'Inventario del 12/11/2026: Olio −600 ml rispetto all\'atteso (−12%)',
+    ]);
+    expect(avvisiInventario(d, '2026-11-12', 60)).toEqual([]);
+  });
+});

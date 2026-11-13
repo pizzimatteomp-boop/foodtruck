@@ -142,3 +142,33 @@ export function percentualiReali(scontrini: readonly Pick<ScontrinoArchivio, 'ti
   for (const [id, x] of incasso) out[id] = Math.round((x / tot) * 1000) / 10;
   return out;
 }
+
+export interface DaProdurre { id: string; nome: string; unita: string; evento: string; dal: string; serve: number; fatto: number; resta: number }
+
+/**
+ * Lista di produzione (P4): semilavorati che mancavano nei piani di carico degli eventi non ancora finiti,
+ * meno quanto il laboratorio ha prodotto dopo la preparazione del piano (assegnato prima agli eventi più vicini).
+ * Solo quelli che restano da fare.
+ */
+export function daProdurre(
+  carichi: readonly { evento: string; dal: string; al: string; preparatoMs: number; righe: readonly Pick<RigaCarico, 'chiave' | 'nome' | 'unita' | 'sezione' | 'manca'>[] }[],
+  produzioni: readonly { prodotto: string; quantita: number; ms: number }[],
+  oggi: string,
+): DaProdurre[] {
+  const prossimi = carichi.filter((c) => c.al >= oggi).sort((a, b) => a.dal.localeCompare(b.dal) || a.evento.localeCompare(b.evento, 'it'));
+  const usato = new Map<string, number>();
+  const out: DaProdurre[] = [];
+  for (const c of prossimi) {
+    for (const r of c.righe) {
+      if (r.sezione !== 'semilavorato' || !r.manca || r.manca <= 0) continue;
+      const id = r.chiave.replace(/^semilavorato-/, '');
+      const prodotto = produzioni.filter((p) => p.prodotto === id && p.ms > c.preparatoMs).reduce((t, p) => t + p.quantita, 0);
+      const disponibile = Math.max(0, prodotto - (usato.get(id) ?? 0));
+      const fatto = Math.min(r.manca, disponibile);
+      usato.set(id, (usato.get(id) ?? 0) + fatto);
+      const resta = arrot(r.manca - fatto);
+      if (resta > 0) out.push({ id, nome: r.nome, unita: r.unita, evento: c.evento, dal: c.dal, serve: r.manca, fatto: arrot(fatto), resta });
+    }
+  }
+  return out;
+}
