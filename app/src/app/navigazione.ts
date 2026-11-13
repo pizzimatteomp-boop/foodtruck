@@ -22,6 +22,12 @@ export interface Pagina {
   visibile: (ruolo: Ruolo) => boolean;
 }
 
+/**
+ * Import da VegMan Planner: non serve più (13/11/2026, Matteo: i dati sono già nell'app). Resta solo nelle prove
+ * automatiche sugli emulatori, dove carica i dati finti.
+ */
+const SOLO_PROVE = import.meta.env?.VITE_EMULATORI === '1';
+
 export const PAGINE: readonly Pagina[] = [
   { id: 'home', titolo: 'Home', icona: '🏠', descrizione: '', principale: true, gruppo: 'Altro', visibile: (r) => r === 'titolare' },
   { id: 'vendi', titolo: 'Cassa', icona: '💶', descrizione: 'Vendi: prodotti, importi liberi, pagamento', principale: true, gruppo: 'Vendite', visibile: (r) => puo(r, 'scontrini') },
@@ -39,7 +45,7 @@ export const PAGINE: readonly Pagina[] = [
   { id: 'pubblica', titolo: 'Menu e QR', icona: '📱', descrizione: 'Menu pubblico, QR code e cartello da stampare', principale: false, gruppo: 'Menu e costi', visibile: (r) => puo(r, 'acquisti') },
   { id: 'allergeni', titolo: 'Allergeni', icona: '🌾', descrizione: 'Liste ingredienti e tabella allergeni', principale: false, gruppo: 'Menu e costi', visibile: (r) => puo(r, 'acquisti') },
   { id: 'persone', titolo: 'Persone', icona: '👥', descrizione: 'Chi può entrare e con quale ruolo', principale: false, gruppo: 'Altro', visibile: (r) => puo(r, 'utenti') },
-  { id: 'importa', titolo: 'Importa', icona: '⬆', descrizione: 'Dati da VegMan Planner', principale: false, nascosta: true, gruppo: 'Altro', visibile: (r) => puo(r, 'acquisti') },
+  { id: 'importa', titolo: 'Importa', icona: '⬆', descrizione: 'Dati da VegMan Planner', principale: false, nascosta: true, gruppo: 'Altro', visibile: (r) => SOLO_PROVE && puo(r, 'acquisti') },
 ];
 
 export function pagineVisibili(ruolo: Ruolo): Pagina[] {
