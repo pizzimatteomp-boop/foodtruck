@@ -1,4 +1,4 @@
-import { GRUPPI, indirizzo, paginaDa, pagineVisibili, parametroDa } from './navigazione';
+import { GRUPPI, indirizzo, pagineMenu, paginaDa, pagineVisibili, parametroDa } from './navigazione';
 
 describe('pagine per ruolo', () => {
   it('il titolare vede tutte le pagine; gli altri solo le proprie, senza Home', () => {
@@ -39,5 +39,10 @@ describe('pagine per ruolo', () => {
 
   it('indirizzi', () => {
     expect(pagineVisibili('titolare').map(indirizzo)).toEqual(['#/', '#/vendi', '#/prodotti', '#/ingredienti', '#/fatture', '#/avvisi', '#/produzione', '#/carico', '#/inventario', '#/magazzino', '#/stazione', '#/eventi', '#/resoconto', '#/pubblica', '#/allergeni', '#/persone', '#/importa']);
+  });
+
+  it('«Importa» (VegMan Planner) non è nel menu né nella Home, ma si apre dall\'indirizzo fino al passaggio a vegman-app', () => {
+    expect(pagineMenu('titolare').map((p) => p.id)).not.toContain('importa');
+    expect(paginaDa('#/importa', 'titolare').id).toBe('importa');
   });
 });

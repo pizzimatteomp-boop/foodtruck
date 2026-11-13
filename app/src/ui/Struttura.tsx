@@ -1,7 +1,7 @@
 /** Intestazione, menu delle pagine (in basso sul telefono, a lato sullo schermo grande) e contenuto. */
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
-import { indirizzo, pagineVisibili, type Pagina } from '../app/navigazione';
+import { indirizzo, pagineMenu, type Pagina } from '../app/navigazione';
 import { esci, type Servizi } from '../firebase/accesso';
 import type { Ambiente } from '../firebase/config';
 import type { Profilo } from '../firebase/profilo';
@@ -14,7 +14,7 @@ export function Struttura({ servizi, ambiente, profilo, pagina, children }: {
   pagina: Pagina;
   children: ComponentChildren;
 }) {
-  const pagine = pagineVisibili(profilo.ruolo);
+  const pagine = pagineMenu(profilo.ruolo);
   // Altezza del menu in basso (telefono, compresa la barra di Android): le barre fisse delle pagine
   // (es. «Fine inventario») si appoggiano sopra il menu invece di finirci sotto.
   const menu = useRef<HTMLElement>(null);

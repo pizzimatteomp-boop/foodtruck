@@ -3,6 +3,7 @@
  * per il prossimo evento. Solo cosa caricare (niente fatturato né prezzi), spunta «caricato» condivisa
  * tra i telefoni, avviso di cosa manca in magazzino, stampa A4.
  */
+import { stampaPagina } from './stampaPagina';
 import type { Firestore } from 'firebase/firestore';
 import { useMemo, useState } from 'preact/hooks';
 import { oggi } from '../dati/oggi';
@@ -63,7 +64,7 @@ export function Carico({ db }: { db: Firestore }) {
           </ul>
         </div>
       ))}
-      <button type="button" class="secondario no-stampa" onClick={() => window.print()}>🖨 Stampa</button>
+      <button type="button" class="secondario no-stampa" onClick={() => stampaPagina(`Carico ${carico.evento}`)}>🖨 Stampa</button>
     </section>
   );
 }

@@ -15,6 +15,8 @@ export interface Pagina {
   descrizione: string;
   /** Nel menu in basso del telefono (le altre si aprono dalla Home). */
   principale: boolean;
+  /** Non compare né nel menu né nella Home (si apre solo dall'indirizzo). */
+  nascosta?: boolean;
   /** Sezione del pannello della Home del titolare. */
   gruppo: Gruppo;
   visibile: (ruolo: Ruolo) => boolean;
@@ -37,7 +39,7 @@ export const PAGINE: readonly Pagina[] = [
   { id: 'pubblica', titolo: 'Menu e QR', icona: '📱', descrizione: 'Menu pubblico, QR code e cartello da stampare', principale: false, gruppo: 'Menu e costi', visibile: (r) => puo(r, 'acquisti') },
   { id: 'allergeni', titolo: 'Allergeni', icona: '🌾', descrizione: 'Liste ingredienti e tabella allergeni', principale: false, gruppo: 'Menu e costi', visibile: (r) => puo(r, 'acquisti') },
   { id: 'persone', titolo: 'Persone', icona: '👥', descrizione: 'Chi può entrare e con quale ruolo', principale: false, gruppo: 'Altro', visibile: (r) => puo(r, 'utenti') },
-  { id: 'importa', titolo: 'Importa', icona: '⬆', descrizione: 'Dati da VegMan Planner', principale: false, gruppo: 'Altro', visibile: (r) => puo(r, 'acquisti') },
+  { id: 'importa', titolo: 'Importa', icona: '⬆', descrizione: 'Dati da VegMan Planner', principale: false, nascosta: true, gruppo: 'Altro', visibile: (r) => puo(r, 'acquisti') },
 ];
 
 export function pagineVisibili(ruolo: Ruolo): Pagina[] {
@@ -62,4 +64,9 @@ export function parametroDa(hash: string): string | null {
 
 export function indirizzo(p: Pagina): string {
   return p.id === 'home' ? '#/' : `#/${p.id}`;
+}
+
+/** Pagine da mostrare nel menu e nella Home (senza quelle nascoste). */
+export function pagineMenu(ruolo: Ruolo): Pagina[] {
+  return pagineVisibili(ruolo).filter((p) => !p.nascosta);
 }

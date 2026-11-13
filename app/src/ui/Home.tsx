@@ -1,9 +1,9 @@
 /** Home del titolare: saluto e tutte le pagine, divise per argomento. Gli altri ruoli entrano direttamente nella loro pagina. */
-import { GRUPPI, indirizzo, pagineVisibili } from '../app/navigazione';
+import { GRUPPI, indirizzo, pagineMenu } from '../app/navigazione';
 import type { Ruolo } from '../firebase/ruoli';
 
 export function Home({ nome, ruolo }: { nome: string; ruolo: Ruolo }) {
-  const pagine = pagineVisibili(ruolo).filter((p) => p.id !== 'home');
+  const pagine = pagineMenu(ruolo).filter((p) => p.id !== 'home');
   return (
     <section class="scheda">
       <h1>Ciao {nome}</h1>

@@ -153,7 +153,7 @@ test('scheda dell\'app installabile', async ({ request }) => {
 
 test('il titolare importa un backup di VegMan Planner e vede il food cost', async ({ page }) => {
   await accedi(page, MATTEO);
-  await apri(page, 'Importa');
+  await page.goto('/#/importa');
   const importa = page.getByRole('region', { name: 'Importa' });
   await importa.getByLabel('File di backup (.json)').setInputFiles('tests/browser/dati/backup-inventato.json');
   const conti = importa.getByRole('table', { name: 'Conteggi' });

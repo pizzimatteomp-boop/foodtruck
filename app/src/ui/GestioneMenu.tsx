@@ -1,4 +1,5 @@
 /** Pagina «Menu e QR» (titolare): anteprima, controlli, pubblicazione, QR code, stampa. */
+import { stampaPagina } from './stampaPagina';
 import type { Firestore } from 'firebase/firestore';
 import { useMemo, useState } from 'preact/hooks';
 import { useRaccolta } from '../dati/useRaccolta.db';
@@ -31,7 +32,7 @@ function Stampa({ voci }: { voci: VoceMenu[] }) {
     <div class="stampa" aria-label="Versione da stampare">
       <div class="no-stampa riga-titolo">
         <a href="#/pubblica">← Menu e QR</a>
-        <button type="button" class="primario piccolo" onClick={() => window.print()}>Stampa</button>
+        <button type="button" class="primario piccolo" onClick={() => stampaPagina('Menu VegMan')}>Stampa</button>
       </div>
       <section class="foglio">
         <div class="foglio-testa"><LogoV /><div><strong>VEGMAN</strong><span>Allergeni · Allergens</span></div></div>
