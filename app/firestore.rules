@@ -278,6 +278,26 @@ service cloud.firestore {
       allow read: if titolare();
       allow write: if titolare() && nuovo().keys().hasOnly(['voci']) && nuovo().voci is map && nuovo().voci.size() <= 3000;
     }
+    // Previsioni degli eventi (fatturato, % dei prodotti, scorta): solo il titolare.
+    match /impostazioni/previsione {
+      allow read: if titolare();
+      allow write: if titolare() && nuovo().keys().hasOnly(['voci', 'scorta']) && nuovo().voci is map && nuovo().scorta is number && nuovo().scorta >= 0 && nuovo().scorta <= 100;
+    }
+    match /previsioni/{evento} {
+      allow read, delete: if titolare();
+      allow write: if titolare() && nuovo().keys().hasOnly(['fatturato', 'scorta', 'voci'])
+        && nuovo().fatturato is number && nuovo().fatturato >= 0 && nuovo().scorta is number && nuovo().scorta >= 0 && nuovo().scorta <= 100 && nuovo().voci is map;
+    }
+    // Piano di carico: lo prepara il titolare; chi prepara il furgone lo legge e cambia solo le spunte «caricato».
+    match /carichi/{evento} {
+      allow read: if produzione();
+      allow create: if titolare() && nuovo().keys().hasOnly(['evento', 'dal', 'al', 'righe', 'caricate', 'preparato'])
+        && testo(nuovo().evento) && nuovo().righe is list && nuovo().righe.size() <= 1000 && nuovo().caricate is list;
+      allow update: if (titolare() && nuovo().keys().hasOnly(['evento', 'dal', 'al', 'righe', 'caricate', 'preparato'])
+          && testo(nuovo().evento) && nuovo().righe is list && nuovo().righe.size() <= 1000 && nuovo().caricate is list)
+        || (produzione() && nuovo().diff(resource.data).affectedKeys().hasOnly(['caricate']) && nuovo().caricate is list && nuovo().caricate.size() <= 1000);
+      allow delete: if titolare();
+    }
     // Un inventario registrato non si cambia: una correzione è un nuovo inventario.
     match /inventari/{id} {
       allow read: if magazzino();

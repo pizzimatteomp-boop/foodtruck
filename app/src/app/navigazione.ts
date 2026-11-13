@@ -8,7 +8,7 @@ export type Gruppo = 'Vendite' | 'Menu e costi' | 'Laboratorio e magazzino' | 'A
 export const GRUPPI: readonly Gruppo[] = ['Vendite', 'Menu e costi', 'Laboratorio e magazzino', 'Altro'];
 
 export interface Pagina {
-  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa' | 'vendi' | 'resoconto' | 'produzione' | 'stazione' | 'inventario' | 'magazzino';
+  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa' | 'vendi' | 'resoconto' | 'produzione' | 'stazione' | 'inventario' | 'magazzino' | 'eventi' | 'carico';
   titolo: string;
   icona: string;
   /** Una riga per il pannello della Home. */
@@ -28,9 +28,11 @@ export const PAGINE: readonly Pagina[] = [
   { id: 'fatture', titolo: 'Fatture', icona: '🧾', descrizione: 'Carica le fatture, controlla le righe nuove', principale: true, gruppo: 'Menu e costi', visibile: (r) => puo(r, 'acquisti') },
   { id: 'avvisi', titolo: 'Avvisi', icona: '🔔', descrizione: 'Soglie, rincari e cose da fare', principale: true, gruppo: 'Menu e costi', visibile: (r) => puo(r, 'acquisti') },
   { id: 'produzione', titolo: 'Produzione', icona: '🏭', descrizione: 'Laboratorio: registra cosa hai fatto e stampa le etichette', principale: false, gruppo: 'Laboratorio e magazzino', visibile: (r) => puo(r, 'produzione') },
+  { id: 'carico', titolo: 'Carico', icona: '🚚', descrizione: 'Cosa caricare sul furgone per il prossimo evento', principale: false, gruppo: 'Laboratorio e magazzino', visibile: (r) => puo(r, 'produzione') },
   { id: 'inventario', titolo: 'Inventario', icona: '📦', descrizione: 'Conta ingredienti, packaging e semilavorati', principale: false, gruppo: 'Laboratorio e magazzino', visibile: (r) => puo(r, 'magazzino') },
   { id: 'magazzino', titolo: 'Magazzino', icona: '🏬', descrizione: 'Stock teorico e differenze dell\'inventario', principale: false, gruppo: 'Laboratorio e magazzino', visibile: (r) => puo(r, 'report') },
   { id: 'stazione', titolo: 'Stazione etichette', icona: '🏷', descrizione: 'Da aprire sul computer della stampante: stampa da sola', principale: false, gruppo: 'Laboratorio e magazzino', visibile: (r) => puo(r, 'magazzino') },
+  { id: 'eventi', titolo: 'Piano eventi', icona: '📅', descrizione: 'Fatturato previsto, prodotti e piano di carico', principale: false, gruppo: 'Vendite', visibile: (r) => puo(r, 'eventi:modifica') },
   { id: 'resoconto', titolo: 'Resoconto', icona: '📊', descrizione: 'Un evento in numeri: incassi, prodotti, margine', principale: false, gruppo: 'Vendite', visibile: (r) => puo(r, 'report') },
   { id: 'pubblica', titolo: 'Menu e QR', icona: '📱', descrizione: 'Menu pubblico, QR code e cartello da stampare', principale: false, gruppo: 'Menu e costi', visibile: (r) => puo(r, 'acquisti') },
   { id: 'allergeni', titolo: 'Allergeni', icona: '🌾', descrizione: 'Liste ingredienti e tabella allergeni', principale: false, gruppo: 'Menu e costi', visibile: (r) => puo(r, 'acquisti') },

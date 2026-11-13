@@ -85,7 +85,7 @@ test('persona nuova → abilitata dal titolare → entra con il ruolo cassa', as
   await accedi(matteo, MATTEO);
   await expect(matteo.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
   // Home del titolare: pagine divise per argomento.
-  await expect(matteo.getByRole('navigation', { name: 'Vendite' }).getByRole('link')).toHaveText([/Cassa/, /Resoconto/]);
+  await expect(matteo.getByRole('navigation', { name: 'Vendite' }).getByRole('link')).toHaveText([/Cassa/, /Piano eventi/, /Resoconto/]);
   await expect(matteo.getByRole('navigation', { name: 'Laboratorio e magazzino' })).toBeVisible();
   await apri(matteo, 'Persone');
   await expect(matteo).toHaveURL(/#\/persone$/);
@@ -816,6 +816,36 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await tel.goto('/#/avvisi');
   await expect(tel.getByRole('list', { name: 'Da fare' })).toContainText('Mayo di prova da produrre');
   await tel.goto('/#/magazzino');
+  // piano eventi: fatturato previsto, % e pezzi fissi → pezzi e piano di carico
+  await tel.goto('/#/eventi');
+  const piano = tel.getByRole('region', { name: 'Piano eventi' });
+  await piano.getByLabel('Nome del nuovo evento').fill('Fiera del carico');
+  await piano.getByRole('button', { name: 'Crea evento' }).click();
+  await expect(piano.getByLabel('Evento da pianificare')).toContainText('Fiera del carico');
+  await piano.getByLabel('Fatturato previsto').fill('1000');
+  await expect(piano.getByLabel('Scorta in più')).toHaveValue('15');
+  const prodottiPrev = piano.getByRole('list', { name: 'Prodotti della previsione' });
+  for (const n of await prodottiPrev.getByRole('textbox').all()) await n.fill('');
+  await piano.getByLabel('Previsione di Pane e olio').fill('50');
+  await piano.getByLabel('Modo di Wrap di prova').selectOption('pz');
+  await piano.getByLabel('Previsione di Wrap di prova').fill('20');
+  // Pane e olio: 1000 € × 50% / 4 € = 125 × 1,15 = 143,75 → 144; Wrap 20 fissi
+  const pezziPrev = piano.getByRole('table', { name: 'Pezzi previsti' });
+  await expect(pezziPrev.getByRole('row', { name: /Pane e olio/ })).toContainText('144');
+  await expect(pezziPrev.getByRole('row', { name: /Wrap di prova/ })).toContainText('20 (fissi)');
+  await expect(piano).toContainText('Somma delle %: 50%');
+  await piano.getByRole('button', { name: 'Salva e prepara il piano di carico' }).click();
+  await expect(piano.getByRole('status')).toContainText('Piano di carico pronto');
+  await tel.screenshot({ path: 'test-results/piano-eventi.png', fullPage: true });
+  // carico: lo vede chi carica il furgone, con le spunte
+  await tel.goto('/#/carico');
+  const carico = tel.getByRole('region', { name: 'Carico' });
+  await expect(carico).toContainText('Fiera del carico');
+  await expect(carico).not.toContainText('1000');
+  await expect(carico.getByLabel('Avanzamento')).toContainText('Caricate 0 di');
+  await carico.getByRole('checkbox').first().check();
+  await expect(carico.getByLabel('Avanzamento')).toContainText('Caricate 1 di');
+  await tel.screenshot({ path: 'test-results/carico.png', fullPage: true });
   // il titolare sceglie cosa far contare: solo i semilavorati
   await tel.goto('/#/inventario');
   await expect(inv).toContainText('Il magazziniere vede tutte le voci');
@@ -839,7 +869,7 @@ test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser })
   await page.addInitScript(() => localStorage.setItem('vegman-oggi', '2026-11-07'));
   await accedi(page, MATTEO);
   await expect(page.getByRole('heading', { name: 'Ciao Matteo' })).toBeVisible();
-  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'inventario', 'magazzino', 'stazione', 'resoconto', 'pubblica', 'allergeni', 'persone', 'importa']) {
+  for (const p of ['vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'inventario', 'magazzino', 'stazione', 'resoconto', 'pubblica', 'allergeni', 'persone', 'importa', 'eventi', 'carico']) {
     await page.goto(`/#/${p}`);
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `pagina ${p}`).toBeLessThanOrEqual(360);

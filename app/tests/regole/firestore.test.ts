@@ -571,6 +571,25 @@ describe('magazzino: confezioni di conta e inventari', () => {
     await assertFails(setDoc(doc(db('matteo'), 'impostazioni', 'scorte'), { voci: [] }));
     await assertFails(setDoc(doc(db('matteo'), 'impostazioni', 'scorte'), { voci: {}, x: 1 }));
   });
+  it('previsioni e piano di carico: fatturato e % solo al titolare; il carico lo leggono e spuntano magazziniere e team', async () => {
+    await assertSucceeds(setDoc(doc(db('matteo'), 'impostazioni', 'previsione'), { voci: { k: { modo: '%', valore: 34.5 } }, scorta: 15 }));
+    await assertFails(getDoc(doc(db('marco'), 'impostazioni', 'previsione')));
+    await assertFails(setDoc(doc(db('matteo'), 'impostazioni', 'previsione'), { voci: {}, scorta: 150 }));
+    await assertSucceeds(setDoc(doc(db('matteo'), 'previsioni', 'e1'), { fatturato: 3000, scorta: 15, voci: {} }));
+    await assertFails(getDoc(doc(db('marco'), 'previsioni', 'e1')));
+    await assertFails(setDoc(doc(db('marco'), 'previsioni', 'e1'), { fatturato: 1, scorta: 15, voci: {} }));
+    const carico = { evento: 'Sagra', dal: '2026-11-20', al: '2026-11-22', righe: [{ chiave: 'ingrediente-i1', nome: 'Pane' }], caricate: [], preparato: serverTimestamp() };
+    await assertFails(setDoc(doc(db('marco'), 'carichi', 'e1'), carico));
+    await assertSucceeds(setDoc(doc(db('matteo'), 'carichi', 'e1'), carico));
+    await assertSucceeds(getDoc(doc(db('marco'), 'carichi', 'e1')));
+    await assertSucceeds(getDoc(doc(db('luca'), 'carichi', 'e1')));
+    await assertFails(getDoc(doc(db('anna'), 'carichi', 'e1')));
+    await assertSucceeds(updateDoc(doc(db('marco'), 'carichi', 'e1'), { caricate: ['ingrediente-i1'] }));
+    await assertSucceeds(updateDoc(doc(db('luca'), 'carichi', 'e1'), { caricate: [] }));
+    await assertFails(updateDoc(doc(db('marco'), 'carichi', 'e1'), { righe: [] }));
+    await assertFails(updateDoc(doc(db('anna'), 'carichi', 'e1'), { caricate: ['x'] }));
+    await assertFails(deleteDoc(doc(db('marco'), 'carichi', 'e1')));
+  });
   it('inventari: li registra il magazziniere, non si cambiano, li cancella solo il titolare', async () => {
     const ref = await assertSucceeds(addDoc(collection(db('marco'), 'inventari'), inv('marco')));
     await assertFails(addDoc(collection(db('luca'), 'inventari'), inv('luca')));
