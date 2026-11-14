@@ -8,15 +8,6 @@ export async function registraScontrino(db: Firestore, uid: string, s: Scontrino
   await setDoc(doc(db, 'scontrini', idScontrino(s)), { ...s, creatoDa: uid, creatoIl: serverTimestamp() });
 }
 
-/** Scontrini di un giorno (tutte le casse), aggiornati dal vivo. */
-export function useScontriniDelGiorno(db: Firestore, giorno: string): { dati: (ScontrinoArchivio & { id: string })[]; caricato: boolean } {
-  const [stato, setStato] = useState<{ dati: (ScontrinoArchivio & { id: string })[]; caricato: boolean }>({ dati: [], caricato: false });
-  useEffect(() => onSnapshot(query(collection(db, 'scontrini'), where('giorno', '==', giorno)),
-    (q) => setStato({ dati: q.docs.map((d) => ({ ...(d.data() as ScontrinoArchivio), id: d.id })), caricato: true }),
-    () => setStato((s) => ({ ...s, caricato: true }))), [db, giorno]);
-  return stato;
-}
-
 /** Scontrini di un evento (tutte le casse, tutti i giorni), aggiornati dal vivo. */
 export function useScontriniEvento(db: Firestore, evento: string): { dati: (ScontrinoArchivio & { id: string })[]; caricato: boolean } {
   const [stato, setStato] = useState<{ dati: (ScontrinoArchivio & { id: string })[]; caricato: boolean }>({ dati: [], caricato: false });

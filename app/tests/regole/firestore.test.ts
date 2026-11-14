@@ -69,14 +69,12 @@ beforeEach(async () => {
     const d = c.firestore();
     for (const [uid, p] of Object.entries(PERSONE)) await setDoc(doc(d, 'utenti', uid), p);
     await setDoc(doc(d, 'eventi', 'ev1'), { nome: 'Festa di Osimo', dal: '2026-11-07', al: '2026-11-08', paese: 'IT', stato: 'aperto' });
-    await setDoc(doc(d, 'eventi', 'ev1', 'checklist', 'v1'), { voce: 'Friggitrice', fatto: false });
     await setDoc(doc(d, 'prodotti', 'r1'), { nome: 'Kebab', tipo: 'vendibile', gruppo: '', prezzo: 12, resa: { quantita: 1, unita: 'pz' }, ricetta: [], quotaVendite: 0 });
     await setDoc(doc(d, 'ingredienti', 'i1'), { nome: 'Ceci', categoria: 'alimentare', unita: 'g', gruppo: '', confezione: null });
     await setDoc(doc(d, 'articoli', 'art1'), { nome: 'CECI 5 KG', unita: 'PZ', categoria: null, ingrediente: null, fattore: 1 });
     await setDoc(doc(d, 'acquisti', 'a1'), { fornitore: 'X', totale: 100 });
     await setDoc(doc(d, 'scontrini', 's1'), { tipo: 'V', totale: 1.5 });
     await setDoc(doc(d, 'movimenti', 'm1'), { tipo: 'scarto' });
-    await setDoc(doc(d, 'comande', 'c1'), { stato: 'aperta' });
   });
 });
 
@@ -147,12 +145,10 @@ describe('eventi: solo il titolare, con i campi giusti', () => {
 });
 
 describe('anagrafiche, acquisti, eventi', () => {
-  it('il team legge eventi, checklist e ricette ma non li modifica', async () => {
+  it('il team legge eventi e ricette ma non li modifica', async () => {
     await assertSucceeds(getDoc(doc(db('luca'), 'eventi', 'ev1')));
-    await assertSucceeds(getDoc(doc(db('luca'), 'eventi', 'ev1', 'checklist', 'v1')));
     await assertSucceeds(getDoc(doc(db('luca'), 'prodotti', 'r1')));
     await assertSucceeds(getDoc(doc(db('luca'), 'ingredienti', 'i1')));
-    await assertFails(updateDoc(doc(db('luca'), 'eventi', 'ev1', 'checklist', 'v1'), { fatto: true }));
     await assertFails(updateDoc(doc(db('anna'), 'prodotti', 'r1'), { nome: 'Altro' }));
     await assertFails(setDoc(doc(db('luca'), 'ingredienti', 'i2'), { nome: 'X' }));
     await assertSucceeds(updateDoc(doc(db('matteo'), 'eventi', 'ev1'), { nome: 'Festa' }));
@@ -174,16 +170,6 @@ describe('anagrafiche, acquisti, eventi', () => {
     await assertFails(addDoc(collection(db('anna'), 'importazioni'), { origine: 'planner', ...firma('anna') }));
     await assertFails(updateDoc(doc(db('matteo'), 'importazioni', ref.id), { origine: 'fatture' }));
     await assertFails(getDoc(doc(db('luca'), 'importazioni', ref.id)));
-  });
-});
-
-describe('comande', () => {
-  it('la cassa apre e aggiorna, il team no, cancella solo il titolare', async () => {
-    await assertSucceeds(addDoc(collection(db('anna'), 'comande'), { stato: 'aperta' }));
-    await assertSucceeds(updateDoc(doc(db('anna'), 'comande', 'c1'), { stato: 'pagata' }));
-    await assertFails(addDoc(collection(db('luca'), 'comande'), { stato: 'aperta' }));
-    await assertFails(deleteDoc(doc(db('anna'), 'comande', 'c1')));
-    await assertSucceeds(deleteDoc(doc(db('matteo'), 'comande', 'c1')));
   });
 });
 
@@ -300,11 +286,10 @@ describe('quadratura di cassa e registro', () => {
     await assertFails(addDoc(collection(db('luca'), 'quadrature'), { ...q(), ...firma('luca') }));
   });
 
-  it('registro: tutti aggiungono, solo il titolare legge, nessuno cancella', async () => {
-    const ref = await assertSucceeds(addDoc(collection(db('luca'), 'registro'), { azione: 'checklist vista', ...firma('luca') }));
-    await assertFails(getDoc(doc(db('luca'), 'registro', ref.id)));
-    await assertSucceeds(getDoc(doc(db('matteo'), 'registro', ref.id)));
-    await assertFails(deleteDoc(doc(db('matteo'), 'registro', ref.id)));
+  it('raccolte non previste: chiuse a tutti, anche al titolare', async () => {
+    await assertFails(addDoc(collection(db('matteo'), 'comande'), { stato: 'aperta' }));
+    await assertFails(addDoc(collection(db('luca'), 'registro'), { azione: 'x', ...firma('luca') }));
+    await assertFails(getDoc(doc(db('matteo'), 'eventi', 'ev1', 'checklist', 'v1')));
   });
 });
 

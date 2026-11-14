@@ -138,6 +138,8 @@ details summary { cursor: pointer; color: var(--accento); }
 .tabella thead th { font-size: 0.8rem; color: var(--tenue); font-weight: 600; }
 .tabella thead th:not(:first-child) { text-align: right; }
 .tabella th[scope='row'] { font-weight: 500; }
+/* Dentro «.scorre» la tabella scorre di lato invece di spezzare le parole lettera per lettera. */
+.scorre .tabella th { white-space: nowrap; }
 .incompleto { display: block; color: var(--errore); font-size: 0.8rem; }
 .avvisi { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 .ok { padding: 10px 12px; border-radius: 10px; background: var(--selezione); color: var(--su-selezione); font-weight: 600; }
@@ -523,3 +525,6 @@ input.corto { width: 80px; }
 /* Tabelle larghe: scorrono dentro la loro casella, la pagina resta larga quanto il telefono */
 .scorre { max-width: 100%; overflow-x: auto; }
 .scorre .tabella td, .scorre .tabella th { overflow-wrap: anywhere; }
+/* Invio in sospeso (menu della cassa): stesso riquadro arancio del registro di emergenza. */
+.sospeso-cassa { padding: 10px 12px; border-radius: 12px; margin-top: 12px; }
+.sospeso-cassa .nota { margin: 4px 0 8px; }

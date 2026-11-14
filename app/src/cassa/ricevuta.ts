@@ -6,7 +6,6 @@
 import type { ScontrinoArchivio } from './archivio';
 
 export const FRASE = 'Grazie! Cibo 100% vegetale 🌱';
-export const FRASE_EN = 'Thank you! 100% plant-based food';
 
 const euro = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
 

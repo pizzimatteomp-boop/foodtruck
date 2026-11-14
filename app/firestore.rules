@@ -3,8 +3,8 @@ rules_version = '2';
 //
 // Ruoli (in /utenti/{uid}.ruolo, assegnati solo dal titolare):
 //   titolare  → tutto
-//   cassa     → comande, scontrini, movimenti senza incasso, quadrature di cassa
-//   team      → lettura di eventi, checklist, ricette e prodotti
+//   cassa     → scontrini, movimenti senza incasso, quadrature di cassa
+//   team      → lettura di eventi, ricette e prodotti; registra la produzione, spunta il carico
 // Un utente con attivo == false non può fare nulla.
 //
 // Principi (vedi CLAUDE.md):
@@ -132,7 +132,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ---------- Eventi e checklist ----------
+    // ---------- Eventi ----------
     match /eventi/{id} {
       allow read: if team();
       // Evento: nome, giorni (da/a), luogo, Paese (IT = cassa fiscale italiana), stato.
@@ -144,13 +144,6 @@ service cloud.firestore {
         && (!('luogo' in nuovo()) || (nuovo().luogo is string && nuovo().luogo.size() <= 120))
         && nuovo().paese is string && nuovo().paese.matches('^[A-Z]{2}$')
         && nuovo().stato in ['aperto', 'chiuso'];
-      allow delete: if titolare();
-      match /checklist/{voce} { allow read: if team(); allow write: if titolare(); }
-    }
-
-    // ---------- Comande ----------
-    match /comande/{id} {
-      allow read, create, update: if cassa();
       allow delete: if titolare();
     }
 
@@ -316,12 +309,6 @@ service cloud.firestore {
       allow delete: if titolare();
     }
 
-    // ---------- Registro delle operazioni: solo aggiunte ----------
-    match /registro/{id} {
-      allow read: if titolare();
-      allow create: if team() && firmato() && testo(nuovo().azione);
-      allow update, delete: if false;
-    }
 
     // Tutto il resto è chiuso.
   }

@@ -13,7 +13,7 @@ import {
 } from '../cassa/carrello';
 import { useRaccolta } from '../dati/useRaccolta.db';
 import type { Aliquota } from '../fiscal/dco';
-import { archivioInMemoria, archivioSuDispositivo, InvioInSospeso, NonEmesso, type ArchivioInvii } from '../fiscal/emissione';
+import { archivioInMemoria, archivioSuDispositivo, InvioInSospeso, NonEmesso, type ArchivioInvii, type InvioSospeso } from '../fiscal/emissione';
 import { CassaProva, type Pagamento } from '../fiscal/prova';
 import type { CassaAgenzia } from '../fiscal/cassaAgenzia';
 import { collegaCassaVera, MANTIENI_VIVA_MS } from './agenziaTelefono';
@@ -51,7 +51,7 @@ async function archivio(): Promise<ArchivioInvii> {
 
 function messaggio(e: unknown): string {
   if (e instanceof ErroreCassa) return e.message;
-  if (e instanceof InvioInSospeso) return 'C\'è uno scontrino in sospeso: va verificato (Cassa · prova → Verifica).';
+  if (e instanceof InvioInSospeso) return 'C\'è un invio in sospeso da verificare: ☰ Menu della cassa → «Invio in sospeso».';
   if (e instanceof NonEmesso) return 'Non emesso: riprova.';
   if (e instanceof SessioneScaduta) return `${e.message} Niente emesso: riprova.`;
   if (e instanceof RifiutoAgenzia) return e.message;
@@ -652,6 +652,7 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
           {chiusura && <ChiusuraCassa db={db} uid={uid} titolare={titolare} evento={evento} occupata={!!attesa || righe.length > 0}
             inEmergenza={aperteEmergenza.length} onChiusa={onChiusa} />}
           {!modoVero && <label class="spunta"><input type="checkbox" checked={senzaRete} onChange={(e) => setSenzaRete(e.currentTarget.checked)} /> Prova senza rete (simulatore)</label>}
+          {cassa && <InvioSospesoCassa cassa={cassa} occupato={occupato} onEsito={(testo, errore) => setAvviso({ testo, errore })} />}
           <RegistroEmergenza registro={registro} evento={evento.id} occupato={occupato} voceAMano={voceAMano} onEmetti={() => void emettiRegistro()} onRisolvi={risolvi} />
           <ScontriniEvento db={db} evento={evento.id} puoAnnullare={(s) => !!cassa && (cassa.ambiente === 'agenzia' ? s.ambiente === 'agenzia' : cassa.scontrini.some((x) => x.idtrx === s.idtrx && !x.annullato))} occupato={occupato} onAnnulla={(s) => void annulla(s)} onInvia={(s, q) => void invia(s, q)} onStampa={(s, q) => void stampaRicevuta(s, q)} />
           {titolare && <MovimentiEvento db={db} evento={evento.id} />}
@@ -868,6 +869,58 @@ function Stampante() {
         {nome && <button type="button" class="secondario piccolo" onClick={() => { void dimenticaStampante(); setNome(null); setStato(''); }}>Dimentica</button>}
       </div>
       {stato && <small role="status">{stato}</small>}
+    </div>
+  );
+}
+
+/**
+ * Invio rimasto in sospeso (risposta persa durante una vendita, un annullo o un reso) senza una voce nel registro
+ * di emergenza: si vede solo quando c'è. «Verifica» chiede all'Agenzia (vendite); annulli e resi si controllano
+ * a mano sul portale e poi si chiude il sospeso. Finché resta, nessuno scontrino nuovo parte (anti-doppioni).
+ */
+function InvioSospesoCassa({ cassa, occupato, onEsito }: { cassa: CassaProva | CassaAgenzia; occupato: boolean; onEsito: (testo: string, errore: boolean) => void }) {
+  const [sospeso, setSospeso] = useState<InvioSospeso | null>(null);
+  const [conferma, setConferma] = useState(false);
+  const [lavoro, setLavoro] = useState(false);
+  const rileggi = () => cassa.sospeso().then(setSospeso, () => setSospeso(null));
+  useEffect(() => { void rileggi(); }, [cassa, occupato]);
+  if (!sospeso) return null;
+  const tipo = sospeso.tipo === 'V' ? 'vendita' : sospeso.tipo === 'A' ? 'annullo' : 'reso';
+  const quando = new Date(sospeso.creatoIl).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  async function verifica() {
+    setLavoro(true);
+    try {
+      const r = await cassa.verifica();
+      if (r) onEsito(`✅ ${tipo} del ${quando} risulta emessa dall'Agenzia (${r.progressivo}). Controlla l'archivio: se manca, è sul portale.`, false);
+      else onEsito(`${tipo} del ${quando}: l'Agenzia non l'ha ricevuta. Il sospeso è chiuso: si può riemettere.`, false);
+    } catch (e) {
+      onEsito(e instanceof InvioInSospeso
+        ? `Non verificabile in automatico: cerca ${tipo === 'vendita' ? 'la vendita' : `l'${tipo}${sospeso!.progressivoOriginale ? ` di ${sospeso!.progressivoOriginale}` : ''}`} del ${quando} sul portale Fatture e Corrispettivi, poi usa «Chiudi il sospeso» qui sotto.`
+        : messaggio(e), true);
+    }
+    setLavoro(false);
+    await rileggi();
+  }
+  async function chiudi() {
+    setLavoro(true);
+    try { await cassa.chiudiAMano(); onEsito(`Sospeso del ${quando} chiuso a mano: se la ${tipo} non c'è sul portale, va rifatta.`, false); } catch (e) { onEsito(messaggio(e), true); }
+    setConferma(false);
+    setLavoro(false);
+    await rileggi();
+  }
+  return (
+    <div class="emergenza sospeso-cassa" role="region" aria-label="Invio in sospeso">
+      <strong>⚠ Invio in sospeso</strong>
+      <p class="nota">{tipo} del {quando}{sospeso.progressivoOriginale ? ` (originale ${sospeso.progressivoOriginale})` : ''}: la risposta dell'Agenzia si è persa. Finché non si chiarisce, non partono scontrini nuovi.</p>
+      <div class="comandi">
+        <button type="button" class="secondario" disabled={lavoro || occupato} onClick={() => void verifica()}>Verifica con l'Agenzia</button>
+        {!conferma && <button type="button" class="secondario pericolo" disabled={lavoro || occupato} onClick={() => setConferma(true)}>Chiudi il sospeso</button>}
+      </div>
+      {conferma && (
+        <p class="esito errore" role="alert">Hai controllato sul portale? Chiudere senza controllare può far emettere due volte o mai.{' '}
+          <button type="button" class="secondario pericolo piccolo" disabled={lavoro} onClick={() => void chiudi()}>Sì, chiudi</button>{' '}
+          <button type="button" class="secondario piccolo" onClick={() => setConferma(false)}>No</button></p>
+      )}
     </div>
   );
 }
