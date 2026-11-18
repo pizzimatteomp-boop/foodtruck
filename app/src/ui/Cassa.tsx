@@ -131,9 +131,11 @@ function AperturaCassa({ db, eventi, titolare, ambiente, messaggio, onApri }: { 
     const n = nomeCassa(nome);
     scrivi(NOME_CASSA, n);
     scrivi(STAMPA_COMANDE, comande ? '1' : '0');
+    // Passando dal simulatore all'Agenzia vera (o viceversa) la cassa riparte da zero: la chiusura non mescola prove e scontrini veri.
+    const cambiaModo = prova && (leggi(MODO) === 'agenzia' ? 'agenzia' : 'simulatore') !== (vero ? 'agenzia' : 'simulatore');
     if (prova) scrivi(MODO, vero ? 'agenzia' : 'simulatore');
     // Riaprendo la stessa cassa sullo stesso evento (es. dopo «Cambia») resta l'ora di apertura; il fondo si aggiorna.
-    const r = apriCassa(leggiApertura(), x, n, f, Date.now());
+    const r = apriCassa(cambiaModo ? null : leggiApertura(), x, n, f, Date.now());
     scrivi(APERTURA, JSON.stringify(r.apertura));
     if (r.nuova) scrivi(NUMERO_COMANDA, '0');
     onApri(x);
@@ -670,7 +672,7 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
             <button type="button" class="secondario" onClick={onCambia}>Cambia evento o cassa</button>
             <button type="button" class="secondario" aria-expanded={chiusura} onClick={() => setChiusura(!chiusura)}>Chiudi cassa</button>
           </div>
-          {chiusura && <ChiusuraCassa db={db} uid={uid} titolare={titolare} evento={evento} occupata={!!attesa || righe.length > 0}
+          {chiusura && <ChiusuraCassa db={db} uid={uid} titolare={titolare} evento={evento} ambiente={modoVero ? 'agenzia' : 'simulatore'} occupata={!!attesa || righe.length > 0}
             inEmergenza={aperteEmergenza.length} onChiusa={onChiusa} />}
           {!modoVero && <label class="spunta"><input type="checkbox" checked={senzaRete} onChange={(e) => setSenzaRete(e.currentTarget.checked)} /> Prova senza rete (simulatore)</label>}
           {cassa && <InvioSospesoCassa cassa={cassa} occupato={occupato} onEsito={(testo, errore) => setAvviso({ testo, errore })} />}
@@ -751,10 +753,12 @@ function MovimentiEvento({ db, evento }: { db: Firestore; evento: string }) {
 const euroSegno = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${euro(Math.abs(n))}`;
 
 /** Chiusura: conta alla cieca dei contanti e del totale carta; poi la cassa torna all'apertura. */
-function ChiusuraCassa({ db, uid, titolare, evento, occupata, inEmergenza, onChiusa }: {
-  db: Firestore; uid: string; titolare: boolean; evento: Evento; occupata: boolean; inEmergenza: number; onChiusa: (messaggio: string) => void;
+function ChiusuraCassa({ db, uid, titolare, evento, ambiente, occupata, inEmergenza, onChiusa }: {
+  db: Firestore; uid: string; titolare: boolean; evento: Evento; ambiente: 'simulatore' | 'agenzia'; occupata: boolean; inEmergenza: number; onChiusa: (messaggio: string) => void;
 }) {
-  const sc = useScontriniEvento(db, evento.id);
+  const tutti = useScontriniEvento(db, evento.id);
+  // Solo gli scontrini della modalità in uso (prove del simulatore e scontrini veri non si mescolano).
+  const sc = { ...tutti, dati: tutti.dati.filter((s) => s.ambiente === ambiente) };
   const [conta, setConta] = useState({ contanti: '', pos: '', nota: '' });
   const [errore, setErrore] = useState('');
   const [invio, setInvio] = useState(false);
