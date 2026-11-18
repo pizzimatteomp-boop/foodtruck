@@ -107,9 +107,10 @@ function AperturaCassa({ db, eventi, titolare, ambiente, messaggio, onApri }: { 
   const [nome, setNome] = useState(leggiNomeCassa());
   const [comande, setComande] = useState(leggi(STAMPA_COMANDE) === '1');
   // Scontrini veri: spunta + «VERO» scritto in un campo della pagina (la finestra prompt() sul telefono non compare).
-  const giaVero = prova && leggi(MODO) === 'agenzia' && titolare && NATIVA;
-  const [spuntaVero, setSpuntaVero] = useState(giaVero);
-  const [confermaVero, setConfermaVero] = useState(giaVero ? 'VERO' : '');
+  // Mai già pronti: a ogni apertura si sceglie di nuovo (il 18/11/2026 la scelta ricordata ha aperto la cassa
+  // sull'Agenzia vera durante le prove senza che Matteo se ne accorgesse).
+  const [spuntaVero, setSpuntaVero] = useState(false);
+  const [confermaVero, setConfermaVero] = useState('');
   const vero = spuntaVero && confermaVero.trim().toUpperCase() === 'VERO';
   const [fondo, setFondo] = useState(() => fondoProposto(leggiApertura(), lista[0]?.id ?? '', leggiNomeCassa()));
   // Cassa già aperta su questo evento con questo nome: si propone il fondo scritto allora (si può correggere).
