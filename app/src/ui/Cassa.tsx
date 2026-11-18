@@ -412,7 +412,8 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
     } catch (e) { setAvviso({ testo: messaggio(e), errore: true }); }
   }
 
-  const vendibili = useMemo(() => pro.dati.filter((p) => p.tipo === 'vendibile' && p.prezzo > 0)
+  // In cassa solo i prodotti «In menu» (chiesto da Matteo il 18/11/2026): si accendono e spengono dalla pagina Prodotti.
+  const vendibili = useMemo(() => pro.dati.filter((p) => p.tipo === 'vendibile' && p.prezzo > 0 && p.inMenu === true)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'it')), [pro.dati]);
   const gruppi = useMemo(() => [...new Set(vendibili.map((p) => p.gruppo || 'Altro'))].sort((a, b) => a.localeCompare(b, 'it')), [vendibili]);
   const pref = useMemo(() => preferiti(vendibili), [vendibili]);
@@ -602,7 +603,7 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
             </div>
           </div>
           <div class="griglia-prodotti">
-            {!pro.caricato ? <p class="nota">Carico…</p> : griglia.map((p) => (
+            {!pro.caricato ? <p class="nota">Carico…</p> : !vendibili.length ? <p class="nota">Nessun prodotto in menu: accendi «In menu» nella scheda dei prodotti da vendere (pagina Prodotti).</p> : griglia.map((p) => (
               <button key={p.id} type="button" style={{ background: coloreGruppo(p.gruppo || 'Altro', gruppi) }} onClick={() => prodotto(p)}>
                 <span>{p.nome}</span><small>{euro(p.prezzo)}</small>
               </button>

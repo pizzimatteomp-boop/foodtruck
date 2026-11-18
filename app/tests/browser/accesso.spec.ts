@@ -482,6 +482,15 @@ test('storico, grafici e avvisi: fotografia di ottobre, rincari, soglie', async 
 
 test('cassa come Billy: quantità con ×, importo libero, contanti; importo digitato e carta (simulatore)', async ({ page }) => {
   await accedi(page, MATTEO);
+  // in cassa compaiono solo i prodotti «In menu»: si accendono Burger e Pane e olio (Wrap lo è già)
+  for (const nome of ['Burger di prova', 'Pane e olio']) {
+    await page.goto('/#/prodotti');
+    await page.getByRole('region', { name: 'Prodotti' }).getByRole('link', { name: new RegExp(nome) }).click();
+    const scheda = page.getByRole('region', { name: 'Scheda prodotto' });
+    await scheda.getByLabel('In menu').check();
+    await expect(scheda.getByRole('status')).toHaveText('Aggiunto al menu.');
+  }
+  await page.goto('/#/');
   await page.getByRole('navigation', { name: 'Menu' }).getByRole('link', { name: /Cassa$/ }).click();
   // apertura: nessun evento → il titolare lo crea e apre la cassa
   const apri = page.getByRole('region', { name: 'Apri la cassa' });
