@@ -751,6 +751,7 @@ test('produzione dal telefono → etichetta stampata da sola dalla stazione sul 
 });
 
 test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, registrazione', async ({ browser }) => {
+  test.setTimeout(90_000);
   const tel = await (await browser.newContext({ viewport: { width: 360, height: 760 } })).newPage();
   await accedi(tel, MATTEO);
   await tel.goto('/#/inventario');
@@ -838,6 +839,20 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await piano.getByRole('button', { name: 'Salva e prepara il piano di carico' }).click();
   await expect(piano.getByRole('status')).toContainText('Piano di carico pronto');
   await tel.screenshot({ path: 'test-results/piano-eventi.png', fullPage: true });
+  // evento creato per sbaglio: si corregge e si elimina (senza scontrini si può)
+  await piano.getByText('＋ Nuovo evento').click();
+  await piano.getByLabel('Nome del nuovo evento').fill('Evento sbaglaito');
+  await piano.getByRole('button', { name: 'Crea evento' }).click();
+  await expect(piano.getByLabel('Evento da pianificare')).toContainText('Evento sbaglaito');
+  await piano.getByText('✏️ Correggi o elimina questo evento').click();
+  await piano.getByLabel('Nome dell\'evento').fill('Evento sbagliato');
+  await piano.getByLabel('Luogo dell\'evento').fill('Ancona');
+  await piano.getByRole('button', { name: 'Salva le correzioni' }).click();
+  await expect(piano.getByLabel('Evento da pianificare')).toContainText(/Evento sbagliato · \d{2}\/\d{2} · Ancona/);
+  await piano.getByRole('button', { name: 'Elimina evento' }).click();
+  await piano.getByRole('button', { name: 'Sì, elimina' }).click();
+  await expect(piano.getByLabel('Evento da pianificare')).not.toContainText('Evento sbagliato');
+  await expect(piano.getByLabel('Evento da pianificare')).toContainText('Fiera del carico');
   // calendario Google (scheda «App» pubblicata come CSV, qui finta): aggiunge solo gli eventi nuovi
   await tel.route('https://docs.google.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/csv', body:
     'Evento,Dal,Al,Luogo per la mappa,Fatturato previsto 2027,Incasso nel calendario 2026 (€)\r\nFiera Prova Uno,13/02/2027,14/02/2027,Forlì (FC),,"3.196 €"\r\nFiera Prova Due,17/04/2027,18/04/2027,San Marino (RSM),5000,\r\nSenza date,,,,,' }));
@@ -996,5 +1011,16 @@ test('cassa sul telefono: schermata fissa, prodotti e righe in vista, il resto n
   await page.screenshot({ path: 'test-results/cassa-telefono-menu.png' });
   await menu.getByRole('button', { name: 'Torna alla cassa' }).click();
   await expect(menu).toHaveCount(0);
+  // un evento con scontrini non si può eliminare (l'archivio fiscale resta legato all'evento)
+  await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
+  await expect(cassa.getByRole('status').filter({ hasText: '✅' })).toBeVisible();
+  const idEvento = await page.evaluate(() => localStorage.getItem('vegman-evento-cassa'));
+  await page.goto('/#/eventi');
+  const piano = page.getByRole('region', { name: 'Piano eventi' });
+  await piano.getByLabel('Evento da pianificare').selectOption(idEvento!);
+  await piano.getByText('✏️ Correggi o elimina questo evento').click();
+  await piano.getByRole('button', { name: 'Elimina evento' }).click();
+  await piano.getByRole('button', { name: 'Sì, elimina' }).click();
+  await expect(piano.getByRole('alert')).toContainText('Non si può eliminare: l\'evento ha già scontrini');
   await page.context().close();
 });

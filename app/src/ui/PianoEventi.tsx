@@ -16,7 +16,7 @@ import { salvaBasePrevisione, salvaCalendario, salvaCarico, salvaPrevisione, use
 import { eventiDalCalendario, eventiNuovi, indirizzoValido, leggiCsv, type EventoCalendario } from '../eventi/calendario';
 import { scaricaCalendario } from './calendarioRete';
 import { descriviEvento, ErroreEvento, eventiPerCassa, preparaEvento, type Evento } from '../eventi/eventi';
-import { creaEvento } from '../eventi/eventi.db';
+import { creaEvento, eliminaEvento, modificaEvento } from '../eventi/eventi.db';
 import type { Prodotto } from '../foodcost/modello';
 import { euro } from './formato';
 import { useStockMagazzino } from './stockMagazzino';
@@ -43,6 +43,7 @@ export function PianoEventi({ db }: { db: Firestore }) {
           </select>
         </label>
       ) : <p class="nota">Nessun evento aperto: creane uno qui sotto.</p>}
+      {evento && <ModificaEvento key={evento.id} db={db} evento={evento} onEliminato={() => setScelto('')} />}
       <NuovoEvento db={db} onCreato={setScelto} aperto={!lista.length} />
       <Calendario db={db} esistenti={ev.dati} scorta={base?.scorta ?? SCORTA_BASE} />
       {evento && base !== undefined && prev !== undefined && <Previsione key={id} db={db} evento={evento} base={base} salvata={prev} />}
@@ -74,6 +75,57 @@ function NuovoEvento({ db, onCreato, aperto }: { db: Firestore; onCreato: (id: s
         </div>
         <button type="submit" class="secondario">Crea evento</button>
         {errore && <p class="errore" role="alert">{errore}</p>}
+      </form>
+    </details>
+  );
+}
+
+/** Correzione o cancellazione dell'evento scelto (per gli errori di battitura o gli eventi creati per sbaglio). */
+function ModificaEvento({ db, evento, onEliminato }: { db: Firestore; evento: Evento; onEliminato: () => void }) {
+  const iniziale = { nome: evento.nome, dal: evento.dal, al: evento.al, luogo: evento.luogo ?? '', paese: evento.paese };
+  const [m, setM] = useState(iniziale);
+  const [esito, setEsito] = useState<{ testo: string; errore: boolean } | null>(null);
+  const [conferma, setConferma] = useState(false);
+  const [occupato, setOccupato] = useState(false);
+  async function salva(e: Event) {
+    e.preventDefault();
+    setOccupato(true);
+    try { await modificaEvento(db, evento.id, preparaEvento(m), evento.stato); setEsito({ testo: '✅ Evento corretto.', errore: false }); } catch (err) {
+      setEsito({ testo: err instanceof ErroreEvento ? err.message : 'Modifica non salvata: riprova.', errore: true });
+    }
+    setOccupato(false);
+  }
+  async function elimina() {
+    setOccupato(true);
+    try { await eliminaEvento(db, evento.id); onEliminato(); } catch (err) {
+      setEsito({ testo: err instanceof ErroreEvento ? err.message : 'Evento non eliminato: riprova.', errore: true });
+      setConferma(false);
+      setOccupato(false);
+    }
+  }
+  return (
+    <details>
+      <summary>✏️ Correggi o elimina questo evento</summary>
+      <form class="nuova" onSubmit={(e) => void salva(e)}>
+        <input aria-label="Nome dell'evento" value={m.nome} onInput={(e) => setM({ ...m, nome: e.currentTarget.value })} />
+        <div class="due">
+          <label class="campo"><span>Dal</span><input aria-label="Primo giorno dell'evento" type="date" value={m.dal} onInput={(e) => setM({ ...m, dal: e.currentTarget.value })} /></label>
+          <label class="campo"><span>Al</span><input aria-label="Ultimo giorno dell'evento" type="date" value={m.al} min={m.dal} onInput={(e) => setM({ ...m, al: e.currentTarget.value })} /></label>
+        </div>
+        <div class="due">
+          <input aria-label="Luogo dell'evento" placeholder="Luogo" value={m.luogo} onInput={(e) => setM({ ...m, luogo: e.currentTarget.value })} />
+          <input aria-label="Paese dell'evento" placeholder="Paese (IT)" maxLength={2} value={m.paese} onInput={(e) => setM({ ...m, paese: e.currentTarget.value })} />
+        </div>
+        <div class="comandi">
+          <button type="submit" class="secondario" disabled={occupato}>Salva le correzioni</button>
+          {!conferma && <button type="button" class="secondario pericolo" disabled={occupato} onClick={() => setConferma(true)}>Elimina evento</button>}
+        </div>
+        {conferma && (
+          <p class="esito errore" role="alert">Eliminare «{evento.nome}» con la sua previsione e il piano di carico?{' '}
+            <button type="button" class="secondario pericolo piccolo" disabled={occupato} onClick={() => void elimina()}>Sì, elimina</button>{' '}
+            <button type="button" class="secondario piccolo" onClick={() => setConferma(false)}>No</button></p>
+        )}
+        {esito && <p class={esito.errore ? 'errore' : 'esito'} role={esito.errore ? 'alert' : 'status'}>{esito.testo}</p>}
       </form>
     </details>
   );
