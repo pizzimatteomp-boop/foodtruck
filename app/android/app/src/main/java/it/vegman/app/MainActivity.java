@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // Plugin dell'app (prima di super.onCreate, come chiede Capacitor).
         registerPlugin(StampaPlugin.class);
+        registerPlugin(SchermoPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

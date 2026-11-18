@@ -39,9 +39,12 @@ import { ImpostazioniTelefono } from './ImpostazioniTelefono';
 import { deposito } from './portaleTelefono';
 import type { Ambiente } from '../firebase/config';
 import { spiegaCausa, type EsitoSumUp } from '../cassa/sumup';
+import { tieniSchermoAcceso } from './schermoAcceso';
 import { apriSumUp, chiaveSumUp, chiudiPagamento, esitoSalvato, pagamentoInCorso, quandoTornaSumUp, type PagamentoInCorso } from './sumupTelefono';
 
 const NATIVA = Capacitor.isNativePlatform();
+/** Agenzia non collegata: ogni quanto si riprova da soli. */
+const RIPROVA_COLLEGAMENTO_MS = 60 * 1000;
 
 async function archivio(): Promise<ArchivioInvii> {
   if (!Capacitor.isNativePlatform()) return archivioInMemoria();
@@ -269,11 +272,27 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
     return () => { vivo = false; };
   }, [tentativo]);
   // Sessione tenuta sveglia con una lettura leggera; se è scaduta il nuovo accesso parte da solo.
+  // Anche quando si torna nell'app (schermo riacceso, ritorno da SumUp): così il primo scontrino non aspetta l'accesso.
   useEffect(() => {
     if (!cassa || cassa.ambiente !== 'agenzia') return undefined;
-    const t = setInterval(() => { cassa.mantieniViva().catch(() => undefined); }, MANTIENI_VIVA_MS);
-    return () => clearInterval(t);
+    const sveglia = () => { cassa.mantieniViva().catch(() => undefined); };
+    const t = setInterval(sveglia, MANTIENI_VIVA_MS);
+    const torna = () => { if (document.visibilityState === 'visible') sveglia(); };
+    document.addEventListener('visibilitychange', torna);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', torna); };
   }, [cassa]);
+  // Agenzia non collegata: si riprova da sola ogni minuto, al ritorno della rete e quando si torna nell'app.
+  useEffect(() => {
+    if (!modoVero || collegamento.stato !== 'errore') return undefined;
+    const riprova = () => setTentativo((x) => x + 1);
+    const t = setInterval(riprova, RIPROVA_COLLEGAMENTO_MS);
+    const torna = () => { if (document.visibilityState === 'visible') riprova(); };
+    window.addEventListener('online', riprova);
+    document.addEventListener('visibilitychange', torna);
+    return () => { clearInterval(t); window.removeEventListener('online', riprova); document.removeEventListener('visibilitychange', torna); };
+  }, [modoVero, collegamento.stato]);
+  // Schermo sempre acceso mentre la cassa è aperta.
+  useEffect(() => tieniSchermoAcceso(), []);
 
   // SumUp (solo app Android, se la chiave è impostata): ELET apre SumUp, al ritorno si emette lo scontrino.
   const [conSumUp, setConSumUp] = useState(false);
