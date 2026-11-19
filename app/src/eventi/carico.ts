@@ -68,6 +68,26 @@ export function pezziPrevisti(prodotti: readonly Prodotto[], prev: Previsione, f
   return out.sort((a, b) => b.pezzi - a.pezzi || a.nome.localeCompare(b.nome, 'it'));
 }
 
+/**
+ * Carico unico per più eventi (stesso weekend, casse separate): i pezzi previsti di ogni evento, ciascuno con
+ * il suo fatturato, la sua scorta e le sue voci (sopra i valori di base, come nella previsione del singolo
+ * evento), messi insieme. Gli eventi senza previsione salvata sono elencati in `senza` e non contano.
+ */
+export function pezziInsieme(
+  prodotti: readonly Prodotto[],
+  base: Previsione | null | undefined,
+  eventi: readonly { nome: string; previsione: { fatturato: number; scorta: number; voci: Previsione } | null }[],
+): { pezzi: PezziPrevisti[]; senza: string[] } {
+  const pezzi: PezziPrevisti[] = [];
+  const senza: string[] = [];
+  for (const e of eventi) {
+    if (!e.previsione) { senza.push(e.nome); continue; }
+    const voci = { ...previsioneDiBase(prodotti, base), ...e.previsione.voci };
+    pezzi.push(...pezziPrevisti(prodotti, voci, e.previsione.fatturato, e.previsione.scorta));
+  }
+  return { pezzi, senza };
+}
+
 export interface RigaCarico {
   chiave: string;
   nome: string;

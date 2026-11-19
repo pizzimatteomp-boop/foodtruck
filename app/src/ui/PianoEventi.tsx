@@ -10,9 +10,9 @@ import { oggi } from '../dati/oggi';
 import { useRaccolta } from '../dati/useRaccolta.db';
 import {
   daCaricare, ErrorePrevisione, NOMI_SEZIONE_CARICO, numeroPrevisione, percentualiReali, pezziPrevisti, pianoDiCarico,
-  previsioneDiBase, SCORTA_BASE, sommaPercentuali, testoManca, type Modo, type Previsione,
+  pezziInsieme, previsioneDiBase, SCORTA_BASE, sommaPercentuali, testoManca, type Modo, type Previsione,
 } from '../eventi/carico';
-import { salvaBasePrevisione, salvaCalendario, salvaCarico, salvaPrevisione, useBasePrevisione, useCalendario, usePrevisione, type BasePrevisione, type PrevisioneEvento } from '../eventi/carico.db';
+import { salvaBasePrevisione, salvaCalendario, salvaCarico, salvaCaricoInsieme, salvaPrevisione, useBasePrevisione, useCalendario, usePrevisione, type BasePrevisione, type PrevisioneEvento } from '../eventi/carico.db';
 import { eventiDalCalendario, eventiNuovi, indirizzoValido, leggiCsv, type EventoCalendario } from '../eventi/calendario';
 import { scaricaCalendario } from './calendarioRete';
 import { descriviEvento, ErroreEvento, eventiPerCassa, preparaEvento, type Evento } from '../eventi/eventi';
@@ -47,6 +47,7 @@ export function PianoEventi({ db }: { db: Firestore }) {
       <NuovoEvento db={db} onCreato={setScelto} aperto={!lista.length} />
       <Calendario db={db} esistenti={ev.dati} scorta={base?.scorta ?? SCORTA_BASE} />
       {evento && base !== undefined && prev !== undefined && <Previsione key={id} db={db} evento={evento} base={base} salvata={prev} />}
+      {lista.length > 1 && base !== undefined && <CaricoInsieme db={db} eventi={lista} base={base} />}
     </section>
   );
 }
@@ -127,6 +128,74 @@ function ModificaEvento({ db, evento, onEliminato }: { db: Firestore; evento: Ev
         )}
         {esito && <p class={esito.errore ? 'errore' : 'esito'} role={esito.errore ? 'alert' : 'status'}>{esito.testo}</p>}
       </form>
+    </details>
+  );
+}
+
+/**
+ * Un solo carico per più eventi (es. due eventi nello stesso weekend, con casse separate): si spuntano gli
+ * eventi, l'app somma i pezzi previsti di ciascuno (con la sua previsione salvata) e prepara un piano unico.
+ */
+function CaricoInsieme({ db, eventi, base }: { db: Firestore; eventi: Evento[]; base: BasePrevisione | null }) {
+  const pro = useRaccolta<Prodotto>(db, 'prodotti');
+  const prev = useRaccolta<PrevisioneEvento & { id: string }>(db, 'previsioni');
+  const magazzino = useStockMagazzino(db);
+  const [scelti, setScelti] = useState<string[]>([]);
+  const [esito, setEsito] = useState<{ testo: string; errore: boolean } | null>(null);
+  const [occupato, setOccupato] = useState(false);
+  const perId = new Map(prev.dati.map((p) => [p.id, p] as const));
+  const selezionati = eventi.filter((e) => scelti.includes(e.id));
+  const { pezzi, senza } = useMemo(() => pezziInsieme(pro.dati, base?.voci, selezionati.map((e) => ({ nome: e.nome, previsione: perId.get(e.id) ?? null }))),
+    [pro.dati, base, JSON.stringify(scelti), prev.dati]);
+  const piano = useMemo(() => {
+    if (!magazzino || selezionati.length < 2) return null;
+    return pianoDiCarico(pezzi, pro.dati, magazzino.voci, new Map(magazzino.stock.map((x) => [x.chiave, x.teorico] as const)));
+  }, [pezzi, pro.dati, magazzino, selezionati.length]);
+  const cambia = (id: string, si: boolean) => { setEsito(null); setScelti(si ? [...scelti, id] : scelti.filter((x) => x !== id)); };
+  async function prepara() {
+    if (!piano || senza.length) return;
+    setOccupato(true);
+    try {
+      await salvaCaricoInsieme(db, selezionati, piano);
+      setEsito({ testo: `✅ Carico unico pronto per ${selezionati.length} eventi (${piano.length} voci): chi carica il furgone lo trova in «Carico».`, errore: false });
+    } catch { setEsito({ testo: 'Carico non salvato: riprova.', errore: true }); }
+    setOccupato(false);
+  }
+  const sezioni = (['alimentare', 'semilavorato', 'packaging'] as const).map((x) => ({ x, righe: (piano ?? []).filter((r) => r.sezione === x) })).filter((y) => y.righe.length);
+  return (
+    <details>
+      <summary>🚚 Un carico per più eventi</summary>
+      <div class="nuova" aria-label="Carico per più eventi">
+        <p class="nota">Per eventi vicini (es. stesso weekend) con casse separate: spunta gli eventi e l'app somma i pezzi di ognuno, ciascuno con la sua previsione salvata qui sopra.</p>
+        <ul class="persone" aria-label="Eventi del carico unico">
+          {eventi.map((e) => {
+            const p = perId.get(e.id);
+            return (
+              <li key={e.id}><label class="spunta">
+                <input type="checkbox" checked={scelti.includes(e.id)} onChange={(x) => cambia(e.id, x.currentTarget.checked)} />
+                {' '}{descriviEvento(e)} <small>{p ? `· ${euro(p.fatturato)} previsti` : '· previsione non salvata'}</small>
+              </label></li>
+            );
+          })}
+        </ul>
+        {selezionati.length === 1 && <p class="nota">Spunta almeno due eventi.</p>}
+        {senza.length > 0 && <p class="errore" role="alert">Prima salva la previsione di: {senza.join(', ')} (sceglilo in alto e premi «Salva e prepara il piano di carico»).</p>}
+        {piano && !senza.length && (
+          <>
+            <h3>Carico unico · {selezionati.length} eventi</h3>
+            {sezioni.map(({ x, righe }) => (
+              <div key={x}>
+                <h4>{NOMI_SEZIONE_CARICO[x]}</h4>
+                <ul class="elenco carico" aria-label={`Carico unico · ${NOMI_SEZIONE_CARICO[x]}`}>
+                  {righe.map((r) => <li key={r.chiave}><span class="nome">{r.nome}</span><span>{daCaricare(r)}{testoManca(r) && <small class={r.manca ? 'manca' : 'tenue'}> · {testoManca(r)}</small>}</span></li>)}
+                </ul>
+              </div>
+            ))}
+            <button type="button" class="primario" disabled={occupato} onClick={() => void prepara()}>Prepara il carico unico ({selezionati.length} eventi)</button>
+          </>
+        )}
+        {esito && <p class={esito.errore ? 'esito errore' : 'esito'} role={esito.errore ? 'alert' : 'status'}>{esito.testo}</p>}
+      </div>
     </details>
   );
 }

@@ -96,3 +96,24 @@ describe('previsione dell\'evento', () => {
     expect(daProdurre(carichi, [{ prodotto: 'mayo', quantita: 5000, ms: 200 }], '2026-11-13')).toEqual([]);
   });
 });
+
+describe('pezziInsieme (carico per più eventi)', () => {
+  it('somma i pezzi di ogni evento con la sua previsione; segnala chi non ce l\'ha', async () => {
+    const { pezziInsieme } = await import('./carico');
+    const prodotti = [
+      { id: 'k', nome: 'Kebab', tipo: 'vendibile', prezzo: 10, quotaVendite: 0, resa: { quantita: 1, unita: 'pz' }, ricetta: [], gruppo: '' },
+      { id: 't', nome: 'Tempeh', tipo: 'vendibile', prezzo: 8, quotaVendite: 0, resa: { quantita: 1, unita: 'pz' }, ricetta: [], gruppo: '' },
+    ] as never;
+    const base = { k: { modo: '%', valore: 50 }, t: { modo: 'pz', valore: 60 } } as const;
+    const r = pezziInsieme(prodotti, base, [
+      { nome: 'Sabato', previsione: { fatturato: 1000, scorta: 0, voci: {} } },
+      { nome: 'Domenica', previsione: { fatturato: 2000, scorta: 10, voci: { t: { modo: 'pz', valore: 20 } } } },
+      { nome: 'Lunedì', previsione: null },
+    ]);
+    // Sabato: kebab 1000×50%/10 = 50, tempeh 60 fissi; Domenica: kebab 2000×50%/10×1,1 = 110, tempeh 20
+    const somma = (id: string) => r.pezzi.filter((p) => p.id === id).reduce((t, p) => t + p.pezzi, 0);
+    expect(somma('k')).toBe(160);
+    expect(somma('t')).toBe(80);
+    expect(r.senza).toEqual(['Lunedì']);
+  });
+});

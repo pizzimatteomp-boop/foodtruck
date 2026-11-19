@@ -3,7 +3,7 @@
  * Il piano di carico è una copia fatta al momento: il magazziniere non vede fatturato, % né prezzi,
  * e può cambiare solo le spunte «caricato».
  */
-import { arrayRemove, arrayUnion, collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc, type Firestore } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc, writeBatch, type Firestore } from 'firebase/firestore';
 import { useEffect, useState } from 'preact/hooks';
 import type { Evento } from './eventi';
 import type { Previsione, RigaCarico } from './carico';
@@ -40,6 +40,26 @@ export async function salvaCarico(db: Firestore, e: Evento, righe: readonly Riga
   const restano = new Set(righe.map((r) => r.chiave));
   const caricate = ((prima?.exists() ? (prima.data() as Carico).caricate : []) ?? []).filter((k) => restano.has(k));
   await setDoc(doc(db, 'carichi', e.id), { evento: e.nome, dal: e.dal, al: e.al, righe: righe.map((r) => ({ ...r })), caricate, preparato: serverTimestamp() });
+}
+
+/**
+ * Carico unico per più eventi: un solo piano (id «insieme-…») con nome «A + B», dal primo all'ultimo giorno.
+ * I piani dei singoli eventi inclusi si tolgono, così «Carico» e «Da produrre» non contano due volte.
+ */
+export async function salvaCaricoInsieme(db: Firestore, eventi: readonly Evento[], righe: readonly RigaCarico[]): Promise<string> {
+  const ordinati = [...eventi].sort((a, b) => a.dal.localeCompare(b.dal) || a.nome.localeCompare(b.nome, 'it'));
+  const id = `insieme-${ordinati.map((e) => e.id).join('-')}`;
+  const prima = await getDoc(doc(db, 'carichi', id)).catch(() => null);
+  const restano = new Set(righe.map((r) => r.chiave));
+  const caricate = ((prima?.exists() ? (prima.data() as Carico).caricate : []) ?? []).filter((k) => restano.has(k));
+  const b = writeBatch(db);
+  for (const e of ordinati) b.delete(doc(db, 'carichi', e.id));
+  b.set(doc(db, 'carichi', id), {
+    evento: ordinati.map((e) => e.nome).join(' + ').slice(0, 300), dal: ordinati[0]!.dal, al: ordinati.reduce((m, e) => (e.al > m ? e.al : m), ordinati[0]!.al),
+    righe: righe.map((r) => ({ ...r })), caricate, preparato: serverTimestamp(),
+  });
+  await b.commit();
+  return id;
 }
 
 export function useCarichi(db: Firestore): { dati: Carico[]; caricato: boolean } {

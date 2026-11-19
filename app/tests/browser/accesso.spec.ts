@@ -931,6 +931,23 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await inv.getByRole('tab', { name: 'Ingredienti' }).click();
   await expect(voci.getByRole('listitem')).toHaveCount(0);
   await expect(inv).toContainText('il titolare non ha scelto voci di questa sezione');
+  // carico unico per due eventi (casse separate): si spuntano, si sommano i pezzi, un solo piano in «Carico»
+  await tel.goto('/#/eventi');
+  const piano2 = tel.getByRole('region', { name: 'Piano eventi' });
+  await piano2.getByText('🚚 Un carico per più eventi').click();
+  const insieme = piano2.getByLabel('Carico per più eventi');
+  const elencoEv = insieme.getByRole('list', { name: 'Eventi del carico unico' });
+  await elencoEv.getByRole('listitem').filter({ hasText: 'Fiera del carico' }).getByRole('checkbox').check();
+  await expect(insieme).toContainText('Spunta almeno due eventi');
+  await elencoEv.getByRole('listitem').filter({ hasText: 'Fiera Prova Uno' }).getByRole('checkbox').check();
+  await expect(insieme).toContainText('Carico unico · 2 eventi');
+  await insieme.getByRole('button', { name: 'Prepara il carico unico (2 eventi)' }).click();
+  await expect(insieme.getByRole('status')).toContainText('Carico unico pronto per 2 eventi');
+  await tel.goto('/#/carico');
+  const carico2 = tel.getByRole('region', { name: 'Carico' });
+  await expect(carico2.getByRole('heading', { level: 2 })).toContainText('Fiera del carico + Fiera Prova Uno');
+  // il piano del solo «Fiera del carico» è stato tolto: resta un carico solo, niente scelta
+  await expect(carico2.getByLabel('Evento del carico')).toHaveCount(0);
 });
 
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {
