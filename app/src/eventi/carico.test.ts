@@ -117,3 +117,13 @@ describe('pezziInsieme (carico per più eventi)', () => {
     expect(r.senza).toEqual(['Lunedì']);
   });
 });
+
+describe('id del carico unico', () => {
+  it('stesso ordine del salvataggio e lettura degli eventi', async () => {
+    const { idInsieme, eventiDiInsieme } = await import('./carico');
+    const id = idInsieme([{ id: 'B2', dal: '2026-11-22', nome: 'Domenica' }, { id: 'A1', dal: '2026-11-21', nome: 'Sabato' }]);
+    expect(id).toBe('insieme-A1-B2');
+    expect(eventiDiInsieme(id)).toEqual(['A1', 'B2']);
+    expect(eventiDiInsieme('A1')).toBeNull();
+  });
+});

@@ -948,6 +948,24 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await expect(carico2.getByRole('heading', { level: 2 })).toContainText('Fiera del carico + Fiera Prova Uno');
   // il piano del solo «Fiera del carico» è stato tolto: resta un carico solo, niente scelta
   await expect(carico2.getByLabel('Evento del carico')).toHaveCount(0);
+  const righePrima = await carico2.getByRole('listitem').count();
+  const mayoPrima = (await carico2.getByRole('listitem').filter({ hasText: 'Mayo di prova' }).textContent().catch(() => '')) ?? '';
+  expect(mayoPrima).toContain('Mayo di prova');
+  // si toglie un prodotto da uno degli eventi: il tasto aggiorna il carico unico, non crea un piano separato
+  await tel.goto('/#/eventi');
+  const piano3 = tel.getByRole('region', { name: 'Piano eventi' });
+  await piano3.getByLabel('Evento da pianificare').selectOption({ label: (await piano3.getByLabel('Evento da pianificare').locator('option', { hasText: 'Fiera del carico' }).textContent())! });
+  await expect(piano3).toContainText('salvando si aggiorna quello');
+  await piano3.getByLabel('Previsione di Wrap di prova').fill('0');
+  await piano3.getByRole('button', { name: 'Salva e aggiorna il carico unico' }).click();
+  await expect(piano3.getByRole('status').filter({ hasText: 'Carico unico aggiornato' })).toBeVisible();
+  await tel.goto('/#/carico');
+  await expect(carico2.getByLabel('Evento del carico')).toHaveCount(0);
+  await expect(carico2.getByRole('heading', { level: 2 })).toContainText('Fiera del carico + Fiera Prova Uno');
+  // via il wrap (20 fissi) di Fiera del carico: la sua voce propria (Mayo) cala o sparisce, mai una lista in più
+  expect(await carico2.getByRole('listitem').count()).toBeLessThanOrEqual(righePrima);
+  const mayo = carico2.getByRole('listitem').filter({ hasText: 'Mayo di prova' });
+  if (await mayo.count()) await expect(mayo).not.toHaveText(mayoPrima); // meno Mayo (o sparita)
 });
 
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {

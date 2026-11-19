@@ -88,6 +88,17 @@ export function pezziInsieme(
   return { pezzi, senza };
 }
 
+/** Id del carico unico che comprende questi eventi (ordinati come in salvaCaricoInsieme). */
+export function idInsieme(eventi: readonly { id: string; dal: string; nome: string }[]): string {
+  const ordinati = [...eventi].sort((a, b) => a.dal.localeCompare(b.dal) || a.nome.localeCompare(b.nome, 'it'));
+  return `insieme-${ordinati.map((e) => e.id).join('-')}`;
+}
+
+/** Eventi di un carico unico, dal suo id («insieme-id1-id2…»; gli id dei documenti non hanno trattini). null se non è unico. */
+export function eventiDiInsieme(idCarico: string): string[] | null {
+  return idCarico.startsWith('insieme-') ? idCarico.slice('insieme-'.length).split('-').filter(Boolean) : null;
+}
+
 export interface RigaCarico {
   chiave: string;
   nome: string;

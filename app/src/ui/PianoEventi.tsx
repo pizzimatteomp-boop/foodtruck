@@ -10,9 +10,9 @@ import { oggi } from '../dati/oggi';
 import { useRaccolta } from '../dati/useRaccolta.db';
 import {
   daCaricare, ErrorePrevisione, NOMI_SEZIONE_CARICO, numeroPrevisione, percentualiReali, pezziPrevisti, pianoDiCarico,
-  pezziInsieme, previsioneDiBase, SCORTA_BASE, sommaPercentuali, testoManca, type Modo, type Previsione,
+  eventiDiInsieme, pezziInsieme, previsioneDiBase, SCORTA_BASE, sommaPercentuali, testoManca, type Modo, type Previsione,
 } from '../eventi/carico';
-import { salvaBasePrevisione, salvaCalendario, salvaCarico, salvaCaricoInsieme, salvaPrevisione, useBasePrevisione, useCalendario, usePrevisione, type BasePrevisione, type PrevisioneEvento } from '../eventi/carico.db';
+import { salvaBasePrevisione, salvaCalendario, salvaCarico, salvaCaricoInsieme, salvaPrevisione, useCarichi, useBasePrevisione, useCalendario, usePrevisione, type BasePrevisione, type PrevisioneEvento } from '../eventi/carico.db';
 import { eventiDalCalendario, eventiNuovi, indirizzoValido, leggiCsv, type EventoCalendario } from '../eventi/calendario';
 import { scaricaCalendario } from './calendarioRete';
 import { descriviEvento, ErroreEvento, eventiPerCassa, preparaEvento, type Evento } from '../eventi/eventi';
@@ -46,7 +46,7 @@ export function PianoEventi({ db }: { db: Firestore }) {
       {evento && <ModificaEvento key={evento.id} db={db} evento={evento} onEliminato={() => setScelto('')} />}
       <NuovoEvento db={db} onCreato={setScelto} aperto={!lista.length} />
       <Calendario db={db} esistenti={ev.dati} scorta={base?.scorta ?? SCORTA_BASE} />
-      {evento && base !== undefined && prev !== undefined && <Previsione key={id} db={db} evento={evento} base={base} salvata={prev} />}
+      {evento && base !== undefined && prev !== undefined && <Previsione key={id} db={db} evento={evento} eventi={ev.dati} base={base} salvata={prev} />}
       {lista.length > 1 && base !== undefined && <CaricoInsieme db={db} eventi={lista} base={base} />}
     </section>
   );
@@ -202,7 +202,12 @@ function CaricoInsieme({ db, eventi, base }: { db: Firestore; eventi: Evento[]; 
 
 type Riga = { modo: Modo; testo: string };
 
-function Previsione({ db, evento, base, salvata }: { db: Firestore; evento: Evento; base: BasePrevisione | null; salvata: PrevisioneEvento | null }) {
+function Previsione({ db, evento, eventi, base, salvata }: { db: Firestore; evento: Evento; eventi: readonly Evento[]; base: BasePrevisione | null; salvata: PrevisioneEvento | null }) {
+  // Se l'evento fa parte di un carico unico, «Salva» rifà quello (non un piano separato che conterebbe due volte).
+  const carichi = useCarichi(db);
+  const previsioni = useRaccolta<PrevisioneEvento & { id: string }>(db, 'previsioni');
+  const unico = carichi.dati.map((c) => ({ c, ids: eventiDiInsieme(c.id) })).find((x) => x.ids?.includes(evento.id));
+  const compagni = unico ? unico.ids!.map((i) => eventi.find((e) => e.id === i)).filter((e): e is Evento => !!e) : [];
   const pro = useRaccolta<Prodotto>(db, 'prodotti');
   const sc = useRaccolta<ScontrinoArchivio & { id: string }>(db, 'scontrini');
   const magazzino = useStockMagazzino(db);
@@ -267,9 +272,20 @@ function Previsione({ db, evento, base, salvata }: { db: Firestore; evento: Even
     if (!piano) return;
     setOccupato(true);
     try {
-      await salvaPrevisione(db, evento.id, { fatturato: numeri.fatturato, scorta: numeri.scorta, voci: numeri.voci });
-      await salvaCarico(db, evento, piano);
-      setEsito({ testo: `✅ Piano di carico pronto (${piano.length} voci): chi carica il furgone lo trova in «Carico».`, errore: false });
+      const questa = { fatturato: numeri.fatturato, scorta: numeri.scorta, voci: numeri.voci };
+      await salvaPrevisione(db, evento.id, questa);
+      if (unico && compagni.length > 1) {
+        // carico unico: si ricalcola con la previsione appena salvata e quelle salvate degli altri eventi
+        const perId = new Map(previsioni.dati.map((p) => [p.id, p] as const));
+        const { pezzi: tutti, senza } = pezziInsieme(pro.dati, base?.voci, compagni.map((e) => ({ nome: e.nome, previsione: e.id === evento.id ? questa : perId.get(e.id) ?? null })));
+        if (senza.length) { setEsito({ testo: `Previsione salvata, ma il carico unico non si aggiorna: manca la previsione di ${senza.join(', ')}.`, errore: true }); setOccupato(false); return; }
+        const righeUnico = pianoDiCarico(tutti, pro.dati, magazzino!.voci, new Map(magazzino!.stock.map((x) => [x.chiave, x.teorico] as const)));
+        await salvaCaricoInsieme(db, compagni, righeUnico);
+        setEsito({ testo: `✅ Carico unico aggiornato (${compagni.map((e) => e.nome).join(' + ')}, ${righeUnico.length} voci).`, errore: false });
+      } else {
+        await salvaCarico(db, evento, piano);
+        setEsito({ testo: `✅ Piano di carico pronto (${piano.length} voci): chi carica il furgone lo trova in «Carico».`, errore: false });
+      }
     } catch {
       setEsito({ testo: 'Piano non salvato: riprova.', errore: true });
     }
@@ -328,7 +344,8 @@ function Previsione({ db, evento, base, salvata }: { db: Firestore; evento: Even
         </div>
       ))}
       {esito && <p class={esito.errore ? 'esito errore' : 'esito'} role={esito.errore ? 'alert' : 'status'}>{esito.testo}</p>}
-      <button type="button" class="primario" disabled={occupato || !piano?.length} onClick={() => void prepara()}>Salva e prepara il piano di carico</button>
+      {unico && compagni.length > 1 && <p class="nota">Questo evento è nel carico unico «{compagni.map((e) => e.nome).join(' + ')}»: salvando si aggiorna quello.</p>}
+      <button type="button" class="primario" disabled={occupato || !piano?.length || (!!unico && !previsioni.caricato)} onClick={() => void prepara()}>{unico && compagni.length > 1 ? 'Salva e aggiorna il carico unico' : 'Salva e prepara il piano di carico'}</button>
     </div>
   );
 }

@@ -3,10 +3,10 @@
  * Il piano di carico è una copia fatta al momento: il magazziniere non vede fatturato, % né prezzi,
  * e può cambiare solo le spunte «caricato».
  */
-import { arrayRemove, arrayUnion, collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc, writeBatch, type Firestore } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, serverTimestamp, setDoc, updateDoc, writeBatch, type Firestore } from 'firebase/firestore';
 import { useEffect, useState } from 'preact/hooks';
 import type { Evento } from './eventi';
-import type { Previsione, RigaCarico } from './carico';
+import { eventiDiInsieme, idInsieme, type Previsione, type RigaCarico } from './carico';
 
 export interface BasePrevisione { voci: Previsione; scorta: number }
 export interface PrevisioneEvento { fatturato: number; scorta: number; voci: Previsione }
@@ -48,12 +48,17 @@ export async function salvaCarico(db: Firestore, e: Evento, righe: readonly Riga
  */
 export async function salvaCaricoInsieme(db: Firestore, eventi: readonly Evento[], righe: readonly RigaCarico[]): Promise<string> {
   const ordinati = [...eventi].sort((a, b) => a.dal.localeCompare(b.dal) || a.nome.localeCompare(b.nome, 'it'));
-  const id = `insieme-${ordinati.map((e) => e.id).join('-')}`;
+  const id = idInsieme(ordinati);
   const prima = await getDoc(doc(db, 'carichi', id)).catch(() => null);
   const restano = new Set(righe.map((r) => r.chiave));
   const caricate = ((prima?.exists() ? (prima.data() as Carico).caricate : []) ?? []).filter((k) => restano.has(k));
+  // via i piani dei singoli eventi e gli altri carichi unici che contengono uno di questi eventi
+  const dentro = new Set(ordinati.map((e) => e.id));
+  const altri = (await getDocs(collection(db, 'carichi'))).docs.map((d) => d.id)
+    .filter((x) => x !== id && (eventiDiInsieme(x) ?? []).some((e) => dentro.has(e)));
   const b = writeBatch(db);
   for (const e of ordinati) b.delete(doc(db, 'carichi', e.id));
+  for (const x of altri) b.delete(doc(db, 'carichi', x));
   b.set(doc(db, 'carichi', id), {
     evento: ordinati.map((e) => e.nome).join(' + ').slice(0, 300), dal: ordinati[0]!.dal, al: ordinati.reduce((m, e) => (e.al > m ? e.al : m), ordinati[0]!.al),
     righe: righe.map((r) => ({ ...r })), caricate, preparato: serverTimestamp(),
