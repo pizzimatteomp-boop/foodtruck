@@ -890,6 +890,30 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   await expect(carico.getByLabel('Avanzamento')).toContainText('Caricate 0 di');
   await carico.getByRole('checkbox').first().check();
   await expect(carico.getByLabel('Avanzamento')).toContainText('Caricate 1 di');
+  // 🔥 la Mayo si fa in fiera: si apre la tendina, i suoi ingredienti si sommano (olio) o si aggiungono (sale)
+  const avanzamentoPrima = await carico.getByLabel('Avanzamento').textContent();
+  const semi = carico.getByRole('list', { name: 'Semilavorati (pronti)' });
+  await semi.getByRole('listitem').filter({ hasText: 'Mayo di prova' }).getByRole('button', { name: '🔥 Lo faccio in fiera' }).click();
+  const mayoFiera = carico.getByRole('listitem', { name: 'Mayo di prova in fiera' });
+  await expect(mayoFiera).toContainText('si fa in fiera');
+  await expect(mayoFiera.getByRole('list', { name: 'Ingredienti per Mayo di prova' })).toContainText('Olio di semi');
+  const cibo = carico.getByRole('list', { name: 'Cibo' });
+  await expect(cibo.getByRole('listitem').filter({ hasText: 'Olio di semi' })).toHaveCount(1);
+  await expect(cibo.getByRole('listitem').filter({ hasText: 'Olio di semi' })).toContainText('per Mayo di prova');
+  // l'olio era già spuntato: ora ne serve di più, quindi torna da caricare
+  await expect(cibo.getByRole('listitem').filter({ hasText: 'Olio di semi' }).getByRole('checkbox')).not.toBeChecked();
+  await expect(cibo.getByRole('listitem').filter({ hasText: 'Sale' })).toContainText('per Mayo di prova');
+  await expect(carico).not.toContainText('In magazzino non basta: Mayo');
+  await tel.screenshot({ path: 'test-results/carico-fiera.png', fullPage: true });
+  // la scelta è salvata (vale per tutti i telefoni): ricaricando resta; «Lo porto pronto» torna com'era
+  await tel.reload();
+  await expect(carico.getByRole('listitem', { name: 'Mayo di prova in fiera' })).toBeVisible();
+  await carico.getByRole('listitem', { name: 'Mayo di prova in fiera' }).getByRole('button', { name: 'Lo porto pronto' }).click();
+  await expect(carico.getByRole('listitem', { name: 'Mayo di prova in fiera' })).toHaveCount(0);
+  await expect(cibo.getByRole('listitem').filter({ hasText: 'Sale' })).toHaveCount(0);
+  expect(avanzamentoPrima).toContain('Caricate 1 di 3');
+  await expect(carico.getByLabel('Avanzamento')).toContainText('Caricate 0 di 3');
+  await carico.getByRole('checkbox').first().check();
   await tel.screenshot({ path: 'test-results/carico.png', fullPage: true });
   // in stampa il carico si vede (prima una regola delle etichette lasciava i fogli bianchi), senza menu né pulsanti
   await tel.emulateMedia({ media: 'print' });

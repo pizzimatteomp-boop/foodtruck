@@ -25,7 +25,7 @@ export function Produzione({ db, uid }: { db: Firestore; uid: string }) {
   const prod = useRaccolta<{ id: string; prodotto: string; quantita: number; creatoIl?: { toMillis?: () => number } }>(db, 'produzioni');
   // Lista di produzione (P4): semilavorati che mancano nei piani di carico dei prossimi eventi.
   const lista = useMemo(() => daProdurre(
-    car.dati.map((c) => ({ evento: c.evento, dal: c.dal, al: c.al, preparatoMs: (c.preparato as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0, righe: c.righe })),
+    car.dati.map((c) => ({ evento: c.evento, dal: c.dal, al: c.al, preparatoMs: (c.preparato as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0, righe: c.righe, inFiera: c.inFiera ?? [] })),
     prod.dati.map((x) => ({ prodotto: x.prodotto, quantita: x.quantita, ms: x.creatoIl?.toMillis?.() ?? Date.now() })),
     oggi(),
   ), [car.dati, prod.dati]);

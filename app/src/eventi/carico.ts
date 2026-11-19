@@ -9,7 +9,7 @@
 import type { ScontrinoArchivio } from '../cassa/archivio';
 import type { Prodotto } from '../foodcost/modello';
 import type { Sezione, VoceMagazzino } from '../magazzino/inventario';
-import { scomponi } from '../magazzino/stock';
+import { mezzogiorno, scomponi } from '../magazzino/stock';
 import { quantitaLeggibile } from '../produzione/produzione';
 
 export type Modo = '%' | 'pz';
@@ -114,6 +114,11 @@ export interface RigaCarico {
   stock: number | null;
   /** Quanto manca rispetto allo stock (0 = basta; null = stock non noto). */
   manca: number | null;
+  /**
+   * Solo semilavorati: gli ingredienti per produrlo all'evento («🔥 Lo faccio in fiera» nella pagina Carico),
+   * calcolati qui con la ricetta, così chi carica non vede le ricette.
+   */
+  ingredienti?: RigaCarico[];
 }
 
 const ORDINE: Sezione[] = ['alimentare', 'semilavorato', 'packaging'];
@@ -125,19 +130,83 @@ export function pianoDiCarico(pezzi: readonly Pick<PezziPrevisti, 'id' | 'pezzi'
   const totale = new Map<string, number>();
   for (const x of pezzi) for (const [k, q] of scomponi(x.id, x.pezzi, perId)) totale.set(k, (totale.get(k) ?? 0) + q);
   const perChiave = new Map(voci.map((v) => [v.chiave, v] as const));
-  const out: RigaCarico[] = [];
-  for (const [k, q0] of totale) {
-    const v = perChiave.get(k);
-    if (!v || !(q0 > 0)) continue;
-    const quantita = v.unita.trim().toLowerCase() === 'pz' ? Math.ceil(q0 - 1e-9) : arrot(q0);
-    const confezioni = v.conta ? Math.ceil(quantita / v.conta.quantita - 1e-9) : null;
-    const s = stock.has(k) ? stock.get(k)! : null;
-    out.push({
-      chiave: k, nome: v.nome, sezione: v.sezione, quantita, unita: v.unita, confezione: v.conta ? { nome: v.conta.nome, quantita: v.conta.quantita } : null,
-      confezioni, stock: s, manca: s === null ? null : arrot(Math.max(0, quantita - s)),
-    });
+  const righe = (tot: ReadonlyMap<string, number>, conIngredienti: boolean): RigaCarico[] => {
+    const out: RigaCarico[] = [];
+    for (const [k, q0] of tot) {
+      const v = perChiave.get(k);
+      if (!v || !(q0 > 0)) continue;
+      const r: RigaCarico = conQuantita<RigaCarico>({ chiave: k, nome: v.nome, sezione: v.sezione, quantita: 0, unita: v.unita, confezione: v.conta ? { nome: v.conta.nome, quantita: v.conta.quantita } : null, confezioni: null, stock: stock.has(k) ? stock.get(k)! : null, manca: null }, q0);
+      if (conIngredienti && v.sezione === 'semilavorato') {
+        // ingredienti per farlo all'evento (un livello: i semilavorati dentro restano semilavorati)
+        const dentro = righe(scomponi(k.replace(/^semilavorato-/, ''), r.quantita, perId), false);
+        if (dentro.length) r.ingredienti = dentro;
+      }
+      out.push(r);
+    }
+    return out.sort((a, b) => ORDINE.indexOf(a.sezione) - ORDINE.indexOf(b.sezione) || a.nome.localeCompare(b.nome, 'it'));
+  };
+  return righe(totale, true);
+}
+
+/** La riga con una quantità nuova: arrotondamento (pz interi), confezioni e «manca» rifatti. */
+export function conQuantita<T extends Omit<RigaCarico, 'ingredienti'> & { ingredienti?: RigaCarico[] }>(r: T, q0: number): T {
+  const quantita = r.unita.trim().toLowerCase() === 'pz' ? Math.ceil(q0 - 1e-9) : arrot(q0);
+  return {
+    ...r, quantita,
+    confezioni: r.confezione ? Math.ceil(quantita / r.confezione.quantita - 1e-9) : null,
+    manca: r.stock === null ? null : arrot(Math.max(0, quantita - r.stock)),
+  };
+}
+
+/** Riga come si vede nella pagina Carico, con i semilavorati che si fanno in fiera. */
+export interface RigaVista extends RigaCarico {
+  /** Semilavorato che si fa all'evento: non si carica pronto (si caricano i suoi ingredienti). */
+  inFiera: boolean;
+  /** Semilavorati fatti in fiera che hanno aggiunto questa voce (nomi), con la quantità aggiunta. */
+  perFiera: { nome: string; quantita: number }[];
+}
+
+/**
+ * Piano di carico con le scelte «🔥 Lo faccio in fiera»: gli ingredienti dei semilavorati scelti si sommano
+ * alle voci già presenti (una riga sola per voce, con la quantità totale) o si aggiungono come voci nuove;
+ * il semilavorato resta in elenco segnato «in fiera» (non si carica). Confezioni e «manca» rifatti sul totale.
+ */
+export function caricoVisto(righe: readonly RigaCarico[], inFiera: readonly string[]): RigaVista[] {
+  const scelti = new Set(inFiera);
+  const out = new Map<string, RigaVista>(righe.map((r) => [r.chiave, { ...r, inFiera: scelti.has(r.chiave) && !!r.ingredienti?.length, perFiera: [] }]));
+  const aggiunte = new Map<string, { base: RigaCarico; q: number; da: { nome: string; quantita: number }[] }>();
+  for (const r of righe) {
+    if (!scelti.has(r.chiave) || !r.ingredienti?.length) continue;
+    for (const i of r.ingredienti) {
+      const a = aggiunte.get(i.chiave) ?? { base: i, q: 0, da: [] };
+      a.q += i.quantita;
+      a.da.push({ nome: r.nome, quantita: i.quantita });
+      aggiunte.set(i.chiave, a);
+    }
   }
-  return out.sort((a, b) => ORDINE.indexOf(a.sezione) - ORDINE.indexOf(b.sezione) || a.nome.localeCompare(b.nome, 'it'));
+  for (const [k, a] of aggiunte) {
+    const c = out.get(k);
+    if (c) out.set(k, { ...conQuantita(c, c.quantita + a.q), perFiera: a.da });
+    else {
+      const { ingredienti: _no, ...base } = a.base;
+      out.set(k, { ...conQuantita(base, a.q), inFiera: false, perFiera: a.da });
+    }
+  }
+  return [...out.values()]
+    .sort((a, b) => ORDINE.indexOf(a.sezione) - ORDINE.indexOf(b.sezione) || a.nome.localeCompare(b.nome, 'it'));
+}
+
+/**
+ * Semilavorati fatti in fiera, come produzioni per il magazzino: dal primo giorno dell'evento il semilavorato
+ * entra (quantità prevista) e i suoi ingredienti escono; le vendite lo consumano, l'inventario dopo la fiera
+ * corregge quello che è avanzato. Niente da registrare a mano.
+ */
+export function produzioniInFiera(carichi: readonly { dal: string; righe: readonly RigaCarico[]; inFiera?: readonly string[] }[]): { prodotto: string; quantita: number; ms: number }[] {
+  return carichi.flatMap((c) => {
+    const scelti = new Set(c.inFiera ?? []);
+    return c.righe.filter((r) => scelti.has(r.chiave) && r.sezione === 'semilavorato' && r.ingredienti?.length)
+      .map((r) => ({ prodotto: r.chiave.replace(/^semilavorato-/, ''), quantita: r.quantita, ms: mezzogiorno(c.dal) }));
+  });
 }
 
 /** «3 sacchi (13,8 kg)» oppure «1,2 kg» / «87 pz». */
@@ -182,7 +251,7 @@ export interface DaProdurre { id: string; nome: string; unita: string; evento: s
  * Solo quelli che restano da fare.
  */
 export function daProdurre(
-  carichi: readonly { evento: string; dal: string; al: string; preparatoMs: number; righe: readonly Pick<RigaCarico, 'chiave' | 'nome' | 'unita' | 'sezione' | 'manca'>[] }[],
+  carichi: readonly { evento: string; dal: string; al: string; preparatoMs: number; righe: readonly Pick<RigaCarico, 'chiave' | 'nome' | 'unita' | 'sezione' | 'manca'>[]; inFiera?: readonly string[] }[],
   produzioni: readonly { prodotto: string; quantita: number; ms: number }[],
   oggi: string,
 ): DaProdurre[] {
@@ -190,8 +259,9 @@ export function daProdurre(
   const usato = new Map<string, number>();
   const out: DaProdurre[] = [];
   for (const c of prossimi) {
+    const fiera = new Set(c.inFiera ?? []);
     for (const r of c.righe) {
-      if (r.sezione !== 'semilavorato' || !r.manca || r.manca <= 0) continue;
+      if (r.sezione !== 'semilavorato' || !r.manca || r.manca <= 0 || fiera.has(r.chiave)) continue;
       const id = r.chiave.replace(/^semilavorato-/, '');
       const prodotto = produzioni.filter((p) => p.prodotto === id && p.ms > c.preparatoMs).reduce((t, p) => t + p.quantita, 0);
       const disponibile = Math.max(0, prodotto - (usato.get(id) ?? 0));

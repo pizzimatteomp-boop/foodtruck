@@ -290,11 +290,16 @@ service cloud.firestore {
     // Piano di carico: lo prepara il titolare; chi prepara il furgone lo legge e cambia solo le spunte «caricato».
     match /carichi/{evento} {
       allow read: if produzione();
-      allow create: if titolare() && nuovo().keys().hasOnly(['evento', 'dal', 'al', 'righe', 'caricate', 'preparato'])
-        && testo(nuovo().evento) && nuovo().righe is list && nuovo().righe.size() <= 1000 && nuovo().caricate is list;
-      allow update: if (titolare() && nuovo().keys().hasOnly(['evento', 'dal', 'al', 'righe', 'caricate', 'preparato'])
-          && testo(nuovo().evento) && nuovo().righe is list && nuovo().righe.size() <= 1000 && nuovo().caricate is list)
-        || (produzione() && nuovo().diff(resource.data).affectedKeys().hasOnly(['caricate']) && nuovo().caricate is list && nuovo().caricate.size() <= 1000);
+      // inFiera = semilavorati che si fanno all'evento («🔥 Lo faccio in fiera»): li sceglie anche chi carica.
+      allow create: if titolare() && nuovo().keys().hasOnly(['evento', 'dal', 'al', 'righe', 'caricate', 'inFiera', 'preparato'])
+        && testo(nuovo().evento) && nuovo().righe is list && nuovo().righe.size() <= 1000 && nuovo().caricate is list
+        && (!('inFiera' in nuovo()) || nuovo().inFiera is list);
+      allow update: if (titolare() && nuovo().keys().hasOnly(['evento', 'dal', 'al', 'righe', 'caricate', 'inFiera', 'preparato'])
+          && testo(nuovo().evento) && nuovo().righe is list && nuovo().righe.size() <= 1000 && nuovo().caricate is list
+          && (!('inFiera' in nuovo()) || nuovo().inFiera is list))
+        || (produzione() && nuovo().diff(resource.data).affectedKeys().hasOnly(['caricate', 'inFiera'])
+          && nuovo().caricate is list && nuovo().caricate.size() <= 1000
+          && (!('inFiera' in nuovo()) || (nuovo().inFiera is list && nuovo().inFiera.size() <= 1000)));
       allow delete: if titolare();
     }
     // Un inventario registrato non si cambia: una correzione è un nuovo inventario.

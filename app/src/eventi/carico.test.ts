@@ -127,3 +127,52 @@ describe('id del carico unico', () => {
     expect(eventiDiInsieme('A1')).toBeNull();
   });
 });
+
+describe('semilavorati fatti in fiera (🔥 nel Carico)', () => {
+  // la Mayo si fa con olio (800 g per 1000 g); l'olio serve anche alle patate fritte
+  const patateOlio = prodotto({ id: 'patate', nome: 'Patate', prezzo: 5, ricetta: [{ tipo: 'ingrediente', id: 'patate', quantita: 250 }, { tipo: 'ingrediente', id: 'olio', quantita: 50 }] });
+  const conOlio = [mayo, kebab, patateOlio];
+  const vociOlio = [...voci, voce({ chiave: 'ingrediente-olio', nome: 'Olio', sezione: 'alimentare', unita: 'g', conta: { nome: 'taniche', quantita: 10000 } })];
+  const stock = new Map<string, number | null>([['ingrediente-olio', 4000]]);
+
+  it('il piano tiene gli ingredienti di ogni semilavorato, per la sua quantità', async () => {
+    const r = pianoDiCarico([{ id: 'kebab', pezzi: 100 }, { id: 'patate', pezzi: 10 }], conOlio, vociOlio, stock);
+    const m = r.find((x) => x.chiave === 'semilavorato-mayo')!;
+    expect(m.quantita).toBe(3000);
+    expect(m.ingredienti).toEqual([expect.objectContaining({ chiave: 'ingrediente-olio', quantita: 2400 })]);
+    expect(r.find((x) => x.chiave === 'ingrediente-olio')!.ingredienti).toBeUndefined();
+  });
+
+  it('scelto «in fiera»: gli ingredienti si sommano alle voci già presenti (una riga sola), manca e confezioni rifatti', async () => {
+    const { caricoVisto } = await import('./carico');
+    const r = pianoDiCarico([{ id: 'kebab', pezzi: 100 }, { id: 'patate', pezzi: 10 }], conOlio, vociOlio, stock);
+    const senza = caricoVisto(r, []);
+    expect(senza.find((x) => x.chiave === 'ingrediente-olio')).toMatchObject({ quantita: 500, manca: 0, perFiera: [] });
+    const v = caricoVisto(r, ['semilavorato-mayo']);
+    expect(v.filter((x) => x.chiave === 'ingrediente-olio')).toHaveLength(1);
+    expect(v.find((x) => x.chiave === 'ingrediente-olio')).toMatchObject({ quantita: 2900, confezioni: 1, manca: 0, perFiera: [{ nome: 'Mayo', quantita: 2400 }] });
+    expect(v.find((x) => x.chiave === 'semilavorato-mayo')).toMatchObject({ inFiera: true });
+    // con meno olio in magazzino: manca sul totale
+    const poco = caricoVisto(pianoDiCarico([{ id: 'kebab', pezzi: 100 }, { id: 'patate', pezzi: 10 }], conOlio, vociOlio, new Map([['ingrediente-olio', 1000]])), ['semilavorato-mayo']);
+    expect(poco.find((x) => x.chiave === 'ingrediente-olio')!.manca).toBe(1900);
+  });
+
+  it('un ingrediente che c\'era solo nel semilavorato diventa una voce nuova', async () => {
+    const { caricoVisto } = await import('./carico');
+    const r = pianoDiCarico([{ id: 'kebab', pezzi: 100 }], conOlio, vociOlio, stock);
+    expect(r.find((x) => x.chiave === 'ingrediente-olio')).toBeUndefined();
+    const v = caricoVisto(r, ['semilavorato-mayo']);
+    expect(v.find((x) => x.chiave === 'ingrediente-olio')).toMatchObject({ quantita: 2400, inFiera: false, perFiera: [{ nome: 'Mayo', quantita: 2400 }] });
+    expect(v.find((x) => x.chiave === 'ingrediente-olio')!.ingredienti).toBeUndefined();
+  });
+
+  it('magazzino e lista di produzione: il semilavorato fatto in fiera entra dal primo giorno e non va prodotto in laboratorio', async () => {
+    const { produzioniInFiera } = await import('./carico');
+    const r = pianoDiCarico([{ id: 'kebab', pezzi: 100 }], conOlio, vociOlio, new Map([['semilavorato-mayo', 0]]));
+    const c = { evento: 'Fiera', dal: '2026-11-20', al: '2026-11-20', preparatoMs: 0, righe: r };
+    expect(produzioniInFiera([{ ...c, inFiera: ['semilavorato-mayo'] }])).toEqual([{ prodotto: 'mayo', quantita: 3000, ms: Date.parse('2026-11-20T11:00:00Z') }]);
+    expect(produzioniInFiera([c])).toEqual([]);
+    expect(daProdurre([c], [], '2026-11-19').map((x) => x.id)).toEqual(['mayo']);
+    expect(daProdurre([{ ...c, inFiera: ['semilavorato-mayo'] }], [], '2026-11-19')).toEqual([]);
+  });
+});

@@ -15,6 +15,8 @@ import { useInventari, useScorte, useUnitaConta } from '../magazzino/inventario.
 import { sottoScorta } from '../magazzino/scorte';
 import { confronto, eventi, stockTeorico, type InventarioConOra } from '../magazzino/stock';
 import { FINESTRA_GIORNI } from './Ingredienti';
+import { produzioniInFiera } from '../eventi/carico';
+import { useCarichi } from '../eventi/carico.db';
 
 type ConOra = { creatoIl?: { toMillis?: () => number } };
 const ms = (x: ConOra) => x.creatoIl?.toMillis?.() ?? Date.now();
@@ -32,7 +34,8 @@ export function useStockMagazzino(db: Firestore) {
   const inv = useInventari(db, 50);
   const unita = useUnitaConta(db);
   const scorte = useScorte(db);
-  const pronto = ing.caricato && pro.caricato && art.caricato && acq.caricato && prod.caricato && sc.caricato && mov.caricato && inv.caricato && scorte !== undefined;
+  const car = useCarichi(db);
+  const pronto = ing.caricato && pro.caricato && art.caricato && acq.caricato && prod.caricato && sc.caricato && mov.caricato && inv.caricato && scorte !== undefined && car.caricato;
 
   const calcolo = useMemo(() => {
     if (!pronto) return null;
@@ -48,7 +51,8 @@ export function useStockMagazzino(db: Firestore) {
     ];
     const ev = eventi({
       prodotti: new Map(pro.dati.map((p) => [p.id, p] as const)), articoli: art.dati, acquisti: acq.dati,
-      produzioni: prod.dati.map((p) => ({ prodotto: p.prodotto, quantita: p.quantita, ms: ms(p) })), uscite,
+      // più i semilavorati fatti in fiera (scelti nel Carico): entrano e scaricano i loro ingredienti dal primo giorno
+      produzioni: [...prod.dati.map((p) => ({ prodotto: p.prodotto, quantita: p.quantita, ms: ms(p) })), ...produzioniInFiera(car.dati)], uscite,
     });
     const inventari: InventarioConOra[] = inv.dati.map((x) => ({ ms: x.creatoIl?.toDate?.()?.getTime() ?? Date.now(), giorno: x.giorno, righe: x.righe }));
     const stock = stockTeorico(voci, inventari, ev, Date.now());
@@ -64,7 +68,7 @@ export function useStockMagazzino(db: Firestore) {
       return c?.completo ? c.costoUnitario.toNumber() : null;
     };
     return { voci, stock, ultimo, diff, prezzo, prova: !veri && scontrini.length > 0, scorte: scorte!, sotto: sottoScorta(voci, stock, scorte!) };
-  }, [pronto, ing.dati, pro.dati, art.dati, acq.dati, prod.dati, sc.dati, mov.dati, inv.dati, unita, scorte]);
+  }, [pronto, ing.dati, pro.dati, art.dati, acq.dati, prod.dati, sc.dati, mov.dati, inv.dati, unita, scorte, car.dati]);
   return calcolo;
 }
 

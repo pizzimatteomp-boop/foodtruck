@@ -572,6 +572,11 @@ describe('magazzino: confezioni di conta e inventari', () => {
     await assertSucceeds(updateDoc(doc(db('marco'), 'carichi', 'e1'), { caricate: ['ingrediente-i1'] }));
     await assertSucceeds(updateDoc(doc(db('luca'), 'carichi', 'e1'), { caricate: [] }));
     await assertFails(updateDoc(doc(db('marco'), 'carichi', 'e1'), { righe: [] }));
+    // «🔥 Lo faccio in fiera»: chi carica sceglie i semilavorati da fare all'evento, ma non tocca le righe
+    await assertSucceeds(updateDoc(doc(db('marco'), 'carichi', 'e1'), { inFiera: ['semilavorato-s1'] }));
+    await assertSucceeds(updateDoc(doc(db('luca'), 'carichi', 'e1'), { inFiera: [] }));
+    await assertFails(updateDoc(doc(db('marco'), 'carichi', 'e1'), { inFiera: 'semilavorato-s1' }));
+    await assertFails(updateDoc(doc(db('anna'), 'carichi', 'e1'), { inFiera: ['x'] }));
     await assertFails(updateDoc(doc(db('anna'), 'carichi', 'e1'), { caricate: ['x'] }));
     await assertFails(deleteDoc(doc(db('marco'), 'carichi', 'e1')));
   });

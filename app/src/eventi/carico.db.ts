@@ -10,7 +10,7 @@ import { eventiDiInsieme, idInsieme, type Previsione, type RigaCarico } from './
 
 export interface BasePrevisione { voci: Previsione; scorta: number }
 export interface PrevisioneEvento { fatturato: number; scorta: number; voci: Previsione }
-export interface Carico { id: string; evento: string; dal: string; al: string; righe: RigaCarico[]; caricate: string[]; preparato?: { toDate?: () => Date } }
+export interface Carico { id: string; evento: string; dal: string; al: string; righe: RigaCarico[]; caricate: string[]; inFiera?: string[]; preparato?: { toDate?: () => Date } }
 
 function useDoc<T>(db: Firestore, percorso: string, segmenti: string[]): T | null | undefined {
   const [d, setD] = useState<T | null | undefined>(undefined);
@@ -34,12 +34,24 @@ export async function salvaPrevisione(db: Firestore, evento: string, p: Previsio
   await setDoc(doc(db, 'previsioni', evento), { fatturato: p.fatturato, scorta: p.scorta, voci: { ...p.voci } });
 }
 
+/** Riga da salvare: copia semplice, con gli ingredienti (per «Lo faccio in fiera») solo se ci sono. */
+const pulita = (r: RigaCarico): RigaCarico => {
+  const { ingredienti, ...resto } = r;
+  return ingredienti?.length ? { ...resto, ingredienti: ingredienti.map((i) => { const { ingredienti: _x, ...x } = i; return x; }) } : resto;
+};
+
+/** «🔥 Lo faccio in fiera» su un semilavorato del carico (condiviso tra i telefoni, come le spunte). */
+export async function segnaInFiera(db: Firestore, carico: string, chiave: string, si: boolean): Promise<void> {
+  await updateDoc(doc(db, 'carichi', carico), { inFiera: si ? arrayUnion(chiave) : arrayRemove(chiave) });
+}
+
 /** Salva (o rifà) il piano di carico: le spunte delle voci ancora presenti restano. */
 export async function salvaCarico(db: Firestore, e: Evento, righe: readonly RigaCarico[]): Promise<void> {
   const prima = await getDoc(doc(db, 'carichi', e.id)).catch(() => null);
   const restano = new Set(righe.map((r) => r.chiave));
   const caricate = ((prima?.exists() ? (prima.data() as Carico).caricate : []) ?? []).filter((k) => restano.has(k));
-  await setDoc(doc(db, 'carichi', e.id), { evento: e.nome, dal: e.dal, al: e.al, righe: righe.map((r) => ({ ...r })), caricate, preparato: serverTimestamp() });
+  const inFiera = ((prima?.exists() ? (prima.data() as Carico).inFiera : []) ?? []).filter((k) => restano.has(k));
+  await setDoc(doc(db, 'carichi', e.id), { evento: e.nome, dal: e.dal, al: e.al, righe: righe.map(pulita), caricate, inFiera, preparato: serverTimestamp() });
 }
 
 /**
@@ -52,6 +64,7 @@ export async function salvaCaricoInsieme(db: Firestore, eventi: readonly Evento[
   const prima = await getDoc(doc(db, 'carichi', id)).catch(() => null);
   const restano = new Set(righe.map((r) => r.chiave));
   const caricate = ((prima?.exists() ? (prima.data() as Carico).caricate : []) ?? []).filter((k) => restano.has(k));
+  const inFiera = ((prima?.exists() ? (prima.data() as Carico).inFiera : []) ?? []).filter((k) => restano.has(k));
   // via i piani dei singoli eventi e gli altri carichi unici che contengono uno di questi eventi
   const dentro = new Set(ordinati.map((e) => e.id));
   const altri = (await getDocs(collection(db, 'carichi'))).docs.map((d) => d.id)
@@ -61,7 +74,7 @@ export async function salvaCaricoInsieme(db: Firestore, eventi: readonly Evento[
   for (const x of altri) b.delete(doc(db, 'carichi', x));
   b.set(doc(db, 'carichi', id), {
     evento: ordinati.map((e) => e.nome).join(' + ').slice(0, 300), dal: ordinati[0]!.dal, al: ordinati.reduce((m, e) => (e.al > m ? e.al : m), ordinati[0]!.al),
-    righe: righe.map((r) => ({ ...r })), caricate, preparato: serverTimestamp(),
+    righe: righe.map(pulita), caricate, inFiera, preparato: serverTimestamp(),
   });
   await b.commit();
   return id;

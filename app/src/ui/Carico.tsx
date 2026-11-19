@@ -1,14 +1,16 @@
 /**
  * Pagina «Carico» (passo P3: magazziniere, team e titolare): il piano di carico preparato dal titolare
  * per il prossimo evento. Solo cosa caricare (niente fatturato né prezzi), spunta «caricato» condivisa
- * tra i telefoni, avviso di cosa manca in magazzino, stampa A4.
+ * tra i telefoni, avviso di cosa manca in magazzino, stampa A4. Per ogni semilavorato «🔥 Lo faccio in
+ * fiera» (19/11/2026, Matteo): si apre la tendina coi suoi ingredienti, che si sommano alle voci già presenti.
  */
 import { stampaPagina } from './stampaPagina';
 import type { Firestore } from 'firebase/firestore';
 import { useMemo, useState } from 'preact/hooks';
+import { quantitaLeggibile } from '../produzione/produzione';
 import { oggi } from '../dati/oggi';
-import { daCaricare, NOMI_SEZIONE_CARICO, testoManca } from '../eventi/carico';
-import { segnaCaricata, useCarichi } from '../eventi/carico.db';
+import { caricoVisto, daCaricare, NOMI_SEZIONE_CARICO, testoManca } from '../eventi/carico';
+import { segnaCaricata, segnaInFiera, useCarichi } from '../eventi/carico.db';
 
 const data = (g: string) => g.split('-').reverse().slice(0, 2).join('/');
 
@@ -28,13 +30,29 @@ export function Carico({ db }: { db: Firestore }) {
   if (!c.caricato) return <section class="scheda"><p>Carico…</p></section>;
   if (!carico) return <section class="scheda" aria-label="Carico"><h1>Carico</h1><p class="nota">Nessun piano di carico: lo prepara il titolare dalla pagina «Piano eventi».</p></section>;
   const fatte = new Set(carico.caricate);
-  const totali = carico.righe.length;
-  const caricate = carico.righe.filter((r) => fatte.has(r.chiave)).length;
-  const mancano = carico.righe.filter((r) => r.manca);
+  // con i semilavorati fatti in fiera: i loro ingredienti sommati alle voci (una riga per voce)
+  const viste = caricoVisto(carico.righe, carico.inFiera ?? []);
+  const daPortare = viste.filter((r) => !r.inFiera);
+  const totali = daPortare.length;
+  const caricate = daPortare.filter((r) => fatte.has(r.chiave)).length;
+  const mancano = daPortare.filter((r) => r.manca);
   async function spunta(chiave: string, si: boolean) {
     try { await segnaCaricata(db, carico!.id, chiave, si); setErrore(''); } catch { setErrore('Spunta non salvata: riprova.'); }
   }
-  const sezioni = (['alimentare', 'semilavorato', 'packaging'] as const).map((s) => ({ s, righe: carico.righe.filter((r) => r.sezione === s) })).filter((x) => x.righe.length);
+  async function fiera(chiave: string, si: boolean) {
+    try {
+      await segnaInFiera(db, carico!.id, chiave, si);
+      // le voci che ricevono gli ingredienti in più tornano da spuntare: la quantità da caricare è cambiata
+      if (si) {
+        const piu = carico!.righe.find((r) => r.chiave === chiave)?.ingredienti?.map((i) => i.chiave) ?? [];
+        for (const k of piu) if (fatte.has(k)) await segnaCaricata(db, carico!.id, k, false);
+      }
+      setErrore('');
+    } catch { setErrore('Scelta non salvata: riprova.'); }
+  }
+  const sezioni = (['alimentare', 'semilavorato', 'packaging'] as const).map((s) => ({ s, righe: viste.filter((r) => r.sezione === s) })).filter((x) => x.righe.length);
+  const daFiera = (r: (typeof viste)[number]) => (r.perFiera.length
+    ? <small class="per-fiera"> 🔥 di cui {r.perFiera.map((f) => `${quantitaLeggibile(f.quantita, r.unita)} per ${f.nome}`).join(', ')}</small> : null);
   return (
     <section class="scheda carico-pagina" aria-label="Carico">
       <h1>Carico</h1>
@@ -51,14 +69,26 @@ export function Carico({ db }: { db: Firestore }) {
         <div key={s}>
           <h3>{NOMI_SEZIONE_CARICO[s]}</h3>
           <ul class="carico-lista" aria-label={NOMI_SEZIONE_CARICO[s]}>
-            {righe.map((r) => (
+            {righe.map((r) => r.inFiera ? (
+              <li key={r.chiave} class="in-fiera" aria-label={`${r.nome} in fiera`}>
+                <div class="riga-fiera">
+                  <span class="nome"><s>{r.nome}</s> · 🔥 si fa in fiera</span>
+                  <button type="button" class="secondario piccolo" onClick={() => void fiera(r.chiave, false)}>Lo porto pronto</button>
+                </div>
+                <ul class="tendina-fiera" aria-label={`Ingredienti per ${r.nome}`}>
+                  {(r.ingredienti ?? []).map((i) => <li key={i.chiave}>{i.nome} <strong>{quantitaLeggibile(i.quantita, i.unita)}</strong></li>)}
+                </ul>
+                <small class="nota">Già sommati qui sopra e qui sotto nelle loro voci.</small>
+              </li>
+            ) : (
               <li key={r.chiave} class={fatte.has(r.chiave) ? 'fatto' : ''}>
                 <label>
                   <input type="checkbox" checked={fatte.has(r.chiave)} onChange={(e) => void spunta(r.chiave, e.currentTarget.checked)} />
-                  <span class="nome">{r.nome}</span>
+                  <span class="nome">{r.nome}{daFiera(r)}</span>
                   <strong class="quanto">{daCaricare(r)}</strong>
                 </label>
                 {r.manca ? <small class="manca">{testoManca(r)}</small> : null}
+                {r.ingredienti?.length ? <button type="button" class="secondario piccolo fiera" onClick={() => void fiera(r.chiave, true)}>🔥 Lo faccio in fiera</button> : null}
               </li>
             ))}
           </ul>
@@ -76,8 +106,10 @@ export function Carico({ db }: { db: Firestore }) {
           {sezioni.map(({ s, righe }) => (
             <table key={s}>
               <thead><tr><th colSpan={3}>{NOMI_SEZIONE_CARICO[s]}</th></tr></thead>
-              <tbody>{righe.map((r) => (
-                <tr key={r.chiave}><td class="box">☐</td><td>{r.nome}{r.manca ? ' ⚠' : ''}</td><td class="q">{daCaricare(r)}</td></tr>
+              <tbody>{righe.map((r) => r.inFiera ? (
+                <tr key={r.chiave}><td class="box">🔥</td><td><s>{r.nome}</s> in fiera: {(r.ingredienti ?? []).map((i) => i.nome).join(', ')}</td><td class="q">—</td></tr>
+              ) : (
+                <tr key={r.chiave}><td class="box">☐</td><td>{r.nome}{r.manca ? ' ⚠' : ''}{r.perFiera.length ? ' 🔥' : ''}</td><td class="q">{daCaricare(r)}</td></tr>
               ))}</tbody>
             </table>
           ))}
