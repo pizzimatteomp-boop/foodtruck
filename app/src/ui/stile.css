@@ -81,12 +81,19 @@ a { color: var(--accento); }
   display: flex; align-items: center; justify-content: center; gap: 6px;
 }
 .menu a[aria-current='page'] { color: var(--su-selezione); font-weight: 600; background: var(--selezione); }
+@media (max-width: 899px) { .menu-gruppo { display: none; } }
 .contenuto { grid-area: contenuto; padding: 16px; width: 100%; max-width: 720px; margin: 0 auto; min-width: 0; }
 
 @media (min-width: 900px) {
   .struttura { grid-template-columns: 200px minmax(0, 1fr); grid-template-rows: auto 1fr; grid-template-areas: 'testata testata' 'menu contenuto'; }
-  .menu { flex-direction: column; justify-content: flex-start; gap: 4px; border-top: 0; border-right: 1px solid var(--bordo); padding: 16px 8px; position: static; }
-  .menu a { justify-content: flex-start; max-width: none; flex: 0; }
+  /* Menu laterale fermo: resta al suo posto mentre la pagina scorre (scorre da solo solo se non ci sta). */
+  .menu {
+    flex-direction: column; justify-content: flex-start; gap: 2px; border-top: 0; border-right: 1px solid var(--bordo); padding: 12px 8px;
+    position: sticky; top: var(--altezza-testata, 60px); bottom: auto; align-self: start;
+    height: calc(100vh - var(--altezza-testata, 60px)); height: calc(100dvh - var(--altezza-testata, 60px)); overflow-y: auto;
+  }
+  .menu a { justify-content: flex-start; max-width: none; flex: 0 0 auto; min-height: 36px; padding: 4px 8px; }
+  .menu-gruppo { display: block; margin: 10px 8px 2px; font: 0.8rem/1.2 var(--titoli); letter-spacing: 0.03em; text-transform: uppercase; color: var(--tenue); }
 }
 
 /* Schede, pulsanti, campi */
