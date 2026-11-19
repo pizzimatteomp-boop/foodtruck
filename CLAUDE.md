@@ -115,6 +115,12 @@ Documento completo: «Super app VegMan · Fatture, ingredienti e food cost» (Cl
 - **In cassa solo i prodotti «In menu»** (18/11/2026, chiesto da Matteo): filtro `inMenu === true` su `vendibili` in `Cassa.tsx` (griglia, gruppi e preferiti); nessuno in menu → avviso con dove accenderlo. La spunta è la stessa del menu pubblico (si salva subito dalla scheda prodotto).
 - **Prove del 18/11/2026 (Matteo, telefono)**: a, c, e, g, h ok. Trovato: la scelta «Scontrini VERI» + VERO restava ricordata (`vegman-modo-cassa`) e alla riapertura la spunta era già pronta → la cassa si è aperta sull'Agenzia vera durante le prove («Prova senza rete» assente). **Corretto**: in «Apri la cassa» spunta e VERO partono sempre vuoti. Da sistemare dopo venerdì: riga a importo libero sul telefono (la tastiera di Android sulla «Descrizione» copre il tastierino nella schermata fissa). **Prove e scontrini veri separati** (18/11/2026): passando da simulatore ad Agenzia (o viceversa) l'apertura riparte da zero (`cambiaModo` in `AperturaCassa`) e «Chiudi cassa» conta solo gli scontrini dell'`ambiente` in uso (prima l'atteso li mescolava se la stessa cassa restava aperta sullo stesso evento). Movimenti senza incasso e chiusure non hanno l'ambiente: le prove vanno fatte su un evento a parte («PROVA cassa»).
 
+## Da fare dopo venerdì 20/11/2026 (lista di Matteo)
+- **Confronto prezzi per fornitore** (chiesto da Matteo il 19/11/2026, da riparlarne la settimana del 23/11): analizzare i prezzi di acquisto della stessa merce nei diversi fornitori (dalle fatture e dagli acquisti a mano) e consigliare dove comprare. Base già pronta: prezzo per fonte nella scheda ingrediente e storico mensile per fonte (`app/src/storico/`). Da decidere con lui: confronto a parità di unità (€/kg, €/L, €/pz), periodo, quali voci, come mostrare il consiglio.
+- Lettura dell'incasso SumUp dall'API (chiave API SumUp, diversa dall'affiliate key) per la chiusura e l'abbinamento pagamento↔scontrino: «vedremo» (Matteo, 18/11/2026).
+- Riga a importo libero sul telefono (tastiera Android che copre il tastierino).
+- Scontrini veri dal ruolo cassa / altri dispositivi; passaggio a `vegman-app`.
+
 ## Vendite e movimenti di prodotto (deciso il 6/11/2026)
 - **In Italia ogni vendita pagata ha il suo scontrino DCO**, emesso in automatico dalla comanda. Nessuna funzione per vendere senza scontrino e nessun archivio nascosto di vendite.
 - Movimenti **senza incasso**, tutti tracciati con motivo, persona, evento e ora, e scaricati dal magazzino:
