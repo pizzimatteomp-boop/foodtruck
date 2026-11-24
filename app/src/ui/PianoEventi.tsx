@@ -15,8 +15,8 @@ import {
 import { salvaBasePrevisione, salvaCalendario, salvaCarico, salvaCaricoInsieme, salvaPrevisione, useCarichi, useBasePrevisione, useCalendario, usePrevisione, type BasePrevisione, type PrevisioneEvento } from '../eventi/carico.db';
 import { eventiDalCalendario, eventiNuovi, indirizzoValido, leggiCsv, type EventoCalendario } from '../eventi/calendario';
 import { scaricaCalendario } from './calendarioRete';
-import { descriviEvento, ErroreEvento, eventiPerCassa, preparaEvento, type Evento } from '../eventi/eventi';
-import { creaEvento, eliminaEvento, modificaEvento } from '../eventi/eventi.db';
+import { cronologici, descriviEvento, ErroreEvento, eventiPerCassa, eventoDelGiorno, preparaEvento, type Evento } from '../eventi/eventi';
+import { creaEvento, eliminaEvento, legatiAllEvento, modificaEvento, testoLegati } from '../eventi/eventi.db';
 import type { Prodotto } from '../foodcost/modello';
 import { euro } from './formato';
 import { useStockMagazzino } from './stockMagazzino';
@@ -27,7 +27,7 @@ export function PianoEventi({ db }: { db: Firestore }) {
   const ev = useRaccolta<Evento>(db, 'eventi');
   const lista = useMemo(() => eventiPerCassa(ev.dati, oggi()), [ev.dati]);
   const [scelto, setScelto] = useState('');
-  const id = scelto && lista.some((e) => e.id === scelto) ? scelto : lista[0]?.id ?? '';
+  const id = scelto && lista.some((e) => e.id === scelto) ? scelto : eventoDelGiorno(lista, oggi())?.id ?? '';
   const evento = lista.find((e) => e.id === id);
   const base = useBasePrevisione(db);
   const prev = usePrevisione(db, id);
@@ -48,6 +48,7 @@ export function PianoEventi({ db }: { db: Firestore }) {
       <Calendario db={db} esistenti={ev.dati} scorta={base?.scorta ?? SCORTA_BASE} />
       {evento && base !== undefined && prev !== undefined && <Previsione key={id} db={db} evento={evento} eventi={ev.dati} base={base} salvata={prev} />}
       {lista.length > 1 && base !== undefined && <CaricoInsieme db={db} eventi={lista} base={base} />}
+      {ev.dati.length > 0 && <EliminaEventi db={db} eventi={ev.dati} onEliminato={(x) => { if (x === id) setScelto(''); }} />}
     </section>
   );
 }
@@ -86,7 +87,7 @@ function ModificaEvento({ db, evento, onEliminato }: { db: Firestore; evento: Ev
   const iniziale = { nome: evento.nome, dal: evento.dal, al: evento.al, luogo: evento.luogo ?? '', paese: evento.paese };
   const [m, setM] = useState(iniziale);
   const [esito, setEsito] = useState<{ testo: string; errore: boolean } | null>(null);
-  const [conferma, setConferma] = useState(false);
+  const [conferma, setConferma] = useState<string | null>(null);
   const [occupato, setOccupato] = useState(false);
   async function salva(e: Event) {
     e.preventDefault();
@@ -100,9 +101,19 @@ function ModificaEvento({ db, evento, onEliminato }: { db: Firestore; evento: Ev
     setOccupato(true);
     try { await eliminaEvento(db, evento.id); onEliminato(); } catch (err) {
       setEsito({ testo: err instanceof ErroreEvento ? err.message : 'Evento non eliminato: riprova.', errore: true });
-      setConferma(false);
+      setConferma(null);
       setOccupato(false);
     }
+  }
+  // prima di chiedere conferma si guarda cosa c'è legato: scontrini veri bloccano, le prove si cancellano insieme
+  async function chiediElimina() {
+    setOccupato(true);
+    try {
+      const l = await legatiAllEvento(db, evento.id);
+      if (l.veri) setEsito({ testo: `Non si può eliminare: l'evento ha ${l.veri} scontrini veri (trasmessi all'Agenzia). Puoi correggerne nome e date.`, errore: true });
+      else setConferma(testoLegati(l));
+    } catch { setEsito({ testo: 'Non riesco a controllare l\'evento: riprova.', errore: true }); }
+    setOccupato(false);
   }
   return (
     <details>
@@ -119,12 +130,12 @@ function ModificaEvento({ db, evento, onEliminato }: { db: Firestore; evento: Ev
         </div>
         <div class="comandi">
           <button type="submit" class="secondario" disabled={occupato}>Salva le correzioni</button>
-          {!conferma && <button type="button" class="secondario pericolo" disabled={occupato} onClick={() => setConferma(true)}>Elimina evento</button>}
+          {conferma === null && <button type="button" class="secondario pericolo" disabled={occupato} onClick={() => void chiediElimina()}>Elimina evento</button>}
         </div>
-        {conferma && (
-          <p class="esito errore" role="alert">Eliminare «{evento.nome}» con la sua previsione e il piano di carico?{' '}
+        {conferma !== null && (
+          <p class="esito errore" role="alert">Eliminare «{evento.nome}» con la sua previsione e il piano di carico{conferma ? `, e le sue prove: ${conferma}` : ''}?{' '}
             <button type="button" class="secondario pericolo piccolo" disabled={occupato} onClick={() => void elimina()}>Sì, elimina</button>{' '}
-            <button type="button" class="secondario piccolo" onClick={() => setConferma(false)}>No</button></p>
+            <button type="button" class="secondario piccolo" onClick={() => setConferma(null)}>No</button></p>
         )}
         {esito && <p class={esito.errore ? 'errore' : 'esito'} role={esito.errore ? 'alert' : 'status'}>{esito.testo}</p>}
       </form>
@@ -194,6 +205,54 @@ function CaricoInsieme({ db, eventi, base }: { db: Firestore; eventi: Evento[]; 
             <button type="button" class="primario" disabled={occupato} onClick={() => void prepara()}>Prepara il carico unico ({selezionati.length} eventi)</button>
           </>
         )}
+        {esito && <p class={esito.errore ? 'esito errore' : 'esito'} role={esito.errore ? 'alert' : 'status'}>{esito.testo}</p>}
+      </div>
+    </details>
+  );
+}
+
+/**
+ * Pulizia: tutti gli eventi (anche chiusi) con «Elimina». Quelli con scontrini veri non si possono eliminare;
+ * quelli di prova si cancellano con i loro scontrini del simulatore, movimenti e chiusure.
+ */
+function EliminaEventi({ db, eventi, onEliminato }: { db: Firestore; eventi: readonly Evento[]; onEliminato: (id: string) => void }) {
+  const [conferma, setConferma] = useState<{ id: string; testo: string } | null>(null);
+  const [esito, setEsito] = useState<{ testo: string; errore: boolean } | null>(null);
+  const [occupato, setOccupato] = useState(false);
+  async function chiedi(e: Evento) {
+    setOccupato(true); setEsito(null);
+    try {
+      const l = await legatiAllEvento(db, e.id);
+      if (l.veri) { setConferma(null); setEsito({ testo: `«${e.nome}» non si può eliminare: ha ${l.veri} scontrini veri (trasmessi all'Agenzia).`, errore: true }); }
+      else setConferma({ id: e.id, testo: testoLegati(l) });
+    } catch { setEsito({ testo: 'Non riesco a controllare l\'evento: riprova.', errore: true }); }
+    setOccupato(false);
+  }
+  async function elimina(e: Evento) {
+    setOccupato(true);
+    try { await eliminaEvento(db, e.id); setEsito({ testo: `✅ «${e.nome}» eliminato.`, errore: false }); onEliminato(e.id); } catch (err) {
+      setEsito({ testo: err instanceof ErroreEvento ? err.message : 'Evento non eliminato: riprova.', errore: true });
+    }
+    setConferma(null);
+    setOccupato(false);
+  }
+  return (
+    <details>
+      <summary>🗑 Elimina eventi</summary>
+      <div class="nuova" aria-label="Elimina eventi">
+        <p class="nota">Per togliere gli eventi di prova o creati per sbaglio, anche chiusi. Quelli con scontrini veri non si possono eliminare; per quelli di prova si cancellano anche i loro scontrini del simulatore, i movimenti senza incasso e le chiusure.</p>
+        <ul class="persone" aria-label="Eventi da eliminare">
+          {cronologici(eventi).map((e) => (
+            <li key={e.id}>
+              <div class="nome">{descriviEvento(e)}{e.stato !== 'aperto' ? <small> · {e.stato}</small> : null}</div>
+              {conferma?.id === e.id ? (
+                <p class="esito errore" role="alert">Eliminare «{e.nome}»{conferma.testo ? ` con ${conferma.testo}` : ''}?{' '}
+                  <button type="button" class="secondario pericolo piccolo" disabled={occupato} onClick={() => void elimina(e)}>Sì, elimina</button>{' '}
+                  <button type="button" class="secondario piccolo" onClick={() => setConferma(null)}>No</button></p>
+              ) : <div class="comandi"><button type="button" class="secondario pericolo piccolo" disabled={occupato} aria-label={`Elimina ${e.nome}`} onClick={() => void chiedi(e)}>Elimina</button></div>}
+            </li>
+          ))}
+        </ul>
         {esito && <p class={esito.errore ? 'esito errore' : 'esito'} role={esito.errore ? 'alert' : 'status'}>{esito.testo}</p>}
       </div>
     </details>

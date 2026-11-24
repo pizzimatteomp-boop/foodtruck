@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { descriviEvento, ErroreEvento, eventiPerCassa, fuoriItalia, inCorso, preparaEvento, type Evento } from './eventi';
+import { cronologici, descriviEvento, ErroreEvento, eventiPerCassa, eventoDelGiorno, fuoriItalia, inCorso, preparaEvento, type Evento } from './eventi';
 
 describe('eventi', () => {
   it('prepara: nome, giorni, luogo, Paese in maiuscolo, un solo giorno se manca la fine', () => {
@@ -14,11 +14,18 @@ describe('eventi', () => {
     expect(() => preparaEvento({ nome: '', dal: '' })).toThrow(ErroreEvento);
   });
 
-  it('ordine per la cassa: in corso, prossimi, passati; i chiusi non si vedono', () => {
+  it('ordine di data ovunque; già scelto l\'evento di oggi (o il prossimo / l\'ultimo passato); i chiusi non sono in cassa', () => {
     const e = (id: string, dal: string, al: string, stato: Evento['stato'] = 'aperto'): Evento => ({ id, nome: id, dal, al, paese: 'IT', stato });
     const l = [e('passato', '2026-10-01', '2026-10-02'), e('vecchio', '2026-09-01', '2026-09-01'), e('poi', '2026-12-01', '2026-12-01'), e('presto', '2026-11-20', '2026-11-20'),
       e('oggi', '2026-11-09', '2026-11-11'), e('chiuso', '2026-11-10', '2026-11-10', 'chiuso'), e('oggi2', '2026-11-10', '2026-11-10')];
-    expect(eventiPerCassa(l, '2026-11-10').map((x) => x.id)).toEqual(['oggi', 'oggi2', 'presto', 'poi', 'passato', 'vecchio']);
+    expect(eventiPerCassa(l, '2026-11-10').map((x) => x.id)).toEqual(['vecchio', 'passato', 'oggi', 'oggi2', 'presto', 'poi']);
+    expect(cronologici(l).map((x) => x.id)).toEqual(['vecchio', 'passato', 'oggi', 'chiuso', 'oggi2', 'presto', 'poi']);
+    expect(eventoDelGiorno(eventiPerCassa(l), '2026-11-10')!.id).toBe('oggi');
+    expect(eventoDelGiorno(l, '2026-11-15')!.id).toBe('presto');
+    expect(eventoDelGiorno(l, '2026-11-15', 'passato')!.id).toBe('oggi');
+    expect(eventoDelGiorno(l, '2027-01-01')!.id).toBe('poi');
+    expect(eventoDelGiorno(l, '2026-01-01', 'passato')!.id).toBe('vecchio');
+    expect(eventoDelGiorno([], '2026-01-01')).toBeUndefined();
     expect(inCorso(l[4]!, '2026-11-11')).toBe(true);
     expect(inCorso(l[4]!, '2026-11-12')).toBe(false);
   });

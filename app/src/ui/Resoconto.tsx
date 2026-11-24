@@ -5,7 +5,7 @@ import { useScontriniEvento } from '../cassa/archivio.db';
 import { useMovimentiEvento } from '../cassa/movimenti.db';
 import { oggi } from '../dati/oggi';
 import { useRaccolta } from '../dati/useRaccolta.db';
-import { descriviEvento, type Evento } from '../eventi/eventi';
+import { cronologici, descriviEvento, eventoDelGiorno, type Evento } from '../eventi/eventi';
 import { foodCost } from '../foodcost/calcolo';
 import type { Acquisto, Articolo, Ingrediente, Prodotto } from '../foodcost/modello';
 import { resoconto, type Costi } from '../resoconto/resoconto';
@@ -17,9 +17,10 @@ const giorno = (g: string) => g.split('-').reverse().slice(0, 2).join('/');
 
 export function Resoconto({ db }: { db: Firestore }) {
   const ev = useRaccolta<Evento>(db, 'eventi');
-  const elenco = useMemo(() => [...ev.dati].sort((a, b) => b.dal.localeCompare(a.dal)), [ev.dati]);
+  const elenco = useMemo(() => cronologici(ev.dati), [ev.dati]);
   const [scelto, setScelto] = useState('');
-  const id = scelto || elenco[0]?.id || '';
+  // già scelto l'evento di oggi, altrimenti l'ultimo concluso
+  const id = scelto || eventoDelGiorno(elenco, oggi(), 'passato')?.id || '';
   if (!ev.caricato) return <section class="scheda"><p>Carico…</p></section>;
   if (!elenco.length) return <section class="scheda" aria-label="Resoconto"><h1>Resoconto</h1><p class="nota">Ancora nessun evento.</p></section>;
   return (

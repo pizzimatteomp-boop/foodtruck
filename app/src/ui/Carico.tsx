@@ -9,6 +9,7 @@ import type { Firestore } from 'firebase/firestore';
 import { useMemo, useState } from 'preact/hooks';
 import { quantitaLeggibile } from '../produzione/produzione';
 import { oggi } from '../dati/oggi';
+import { cronologici, eventoDelGiorno } from '../eventi/eventi';
 import { caricoVisto, daCaricare, NOMI_SEZIONE_CARICO, testoManca } from '../eventi/carico';
 import { segnaCaricata, segnaInFiera, useCarichi } from '../eventi/carico.db';
 
@@ -16,16 +17,16 @@ const data = (g: string) => g.split('-').reverse().slice(0, 2).join('/');
 
 export function Carico({ db }: { db: Firestore }) {
   const c = useCarichi(db);
-  // prima i prossimi (dal più vicino), poi i passati (dal più recente)
+  // in ordine di data: gli ultimi 5 passati e tutti i prossimi; già scelto quello di oggi (o il prossimo)
   const lista = useMemo(() => {
     const o = oggi();
-    const prossimi = c.dati.filter((x) => x.al >= o).sort((a, b) => a.dal.localeCompare(b.dal));
-    const passati = c.dati.filter((x) => x.al < o).sort((a, b) => b.al.localeCompare(a.al)).slice(0, 5);
-    return [...prossimi, ...passati];
+    const passati = cronologici(c.dati.filter((x) => x.al < o).map((x) => ({ ...x, nome: x.evento }))).slice(-5);
+    const prossimi = cronologici(c.dati.filter((x) => x.al >= o).map((x) => ({ ...x, nome: x.evento })));
+    return [...passati, ...prossimi];
   }, [c.dati]);
   const [scelto, setScelto] = useState('');
   const [errore, setErrore] = useState('');
-  const carico = lista.find((x) => x.id === scelto) ?? lista[0];
+  const carico = lista.find((x) => x.id === scelto) ?? eventoDelGiorno(lista, oggi());
 
   if (!c.caricato) return <section class="scheda"><p>Carico…</p></section>;
   if (!carico) return <section class="scheda" aria-label="Carico"><h1>Carico</h1><p class="nota">Nessun piano di carico: lo prepara il titolare dalla pagina «Piano eventi».</p></section>;

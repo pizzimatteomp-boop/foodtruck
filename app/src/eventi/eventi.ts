@@ -8,7 +8,8 @@ export interface Evento {
   luogo?: string;
   /** Codice del Paese (IT = cassa fiscale italiana). */
   paese: string;
-  stato: 'aperto' | 'chiuso';
+  /** «eliminando»: il titolare lo sta cancellando con le sue prove (stato di passaggio). */
+  stato: 'aperto' | 'chiuso' | 'eliminando';
 }
 
 export class ErroreEvento extends Error {
@@ -32,11 +33,28 @@ export function preparaEvento(m: { nome: string; dal: string; al?: string; luogo
   return { nome, dal: m.dal, al, ...(luogo ? { luogo } : {}), paese, stato: 'aperto' };
 }
 
-/** Eventi aperti in ordine: prima quelli in corso oggi, poi i prossimi (dal più vicino), poi i passati (dal più recente). */
-export function eventiPerCassa(eventi: readonly Evento[], oggi: string): Evento[] {
-  const fase = (e: Evento) => (e.dal <= oggi && oggi <= e.al ? 0 : e.dal > oggi ? 1 : 2);
-  return eventi.filter((e) => e.stato === 'aperto').sort((a, b) => fase(a) - fase(b)
-    || (fase(a) === 2 ? b.al.localeCompare(a.al) : a.dal.localeCompare(b.dal)) || a.nome.localeCompare(b.nome, 'it'));
+/** Eventi in ordine di data (primo giorno, poi ultimo, poi nome): così in tutte le liste dell'app. */
+export function cronologici<T extends Pick<Evento, 'dal' | 'al' | 'nome'>>(eventi: readonly T[]): T[] {
+  return [...eventi].sort((a, b) => a.dal.localeCompare(b.dal) || a.al.localeCompare(b.al) || a.nome.localeCompare(b.nome, 'it'));
+}
+
+/** Eventi aperti, in ordine di data (Cassa, Piano eventi). */
+export function eventiPerCassa(eventi: readonly Evento[], _oggi?: string): Evento[] {
+  return cronologici(eventi.filter((e) => e.stato === 'aperto'));
+}
+
+/**
+ * Evento da proporre già scelto nel menu a tendina: quello in corso oggi; se non c'è, il prossimo
+ * (cassa, piano, carico) oppure l'ultimo passato (resoconto); altrimenti l'altro.
+ */
+export function eventoDelGiorno<T extends Pick<Evento, 'dal' | 'al' | 'nome'>>(eventi: readonly T[], oggi: string, senzaOggi: 'prossimo' | 'passato' = 'prossimo'): T | undefined {
+  const l = cronologici(eventi);
+  const oggiIn = l.find((e) => e.dal <= oggi && oggi <= e.al);
+  if (oggiIn) return oggiIn;
+  const prossimo = l.find((e) => e.dal > oggi);
+  // l'ultimo passato è quello finito più di recente
+  const passato = l.filter((e) => e.al < oggi).reduce<T | undefined>((m, e) => (!m || e.al >= m.al ? e : m), undefined);
+  return senzaOggi === 'prossimo' ? prossimo ?? passato : passato ?? prossimo;
 }
 
 /** È in corso oggi? */

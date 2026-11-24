@@ -35,6 +35,11 @@ service cloud.firestore {
     function firmato() {
       return nuovo().creatoDa == request.auth.uid && nuovo().creatoIl == request.time;
     }
+    // Evento che il titolare sta eliminando (prima lo segna, poi cancella le sue prove, poi l'evento).
+    function inEliminazione(evento) {
+      return exists(/databases/$(database)/documents/eventi/$(evento))
+        && get(/databases/$(database)/documents/eventi/$(evento)).data.stato == 'eliminando';
+    }
     function testo(v) { return v is string && v.size() > 0 && v.size() <= 500; }
 
     // ---------- Persone e ruoli ----------
@@ -143,7 +148,7 @@ service cloud.firestore {
         && nuovo().al is string && nuovo().al.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && nuovo().al >= nuovo().dal
         && (!('luogo' in nuovo()) || (nuovo().luogo is string && nuovo().luogo.size() <= 120))
         && nuovo().paese is string && nuovo().paese.matches('^[A-Z]{2}$')
-        && nuovo().stato in ['aperto', 'chiuso'];
+        && nuovo().stato in ['aperto', 'chiuso', 'eliminando'];
       allow delete: if titolare();
     }
 
@@ -171,7 +176,9 @@ service cloud.firestore {
         // Emesso dopo dal registro di emergenza: ora della vendita vera (millisecondi).
         && (!('emergenza' in nuovo()) || (nuovo().tipo == 'V' && nuovo().emergenza is int && nuovo().emergenza > 0))
         && (nuovo().tipo == 'V' || testo(nuovo().progressivoOriginale));
-      allow update, delete: if false;
+      allow update: if false;
+      // gli scontrini VERI non si cancellano mai; quelli del simulatore solo eliminando il loro evento di prova
+      allow delete: if titolare() && resource.data.ambiente == 'simulatore' && inEliminazione(resource.data.evento);
     }
 
     // ---------- Movimenti senza incasso ----------
@@ -192,7 +199,8 @@ service cloud.firestore {
         && testo(nuovo().cassa)
         && testo(nuovo().gruppo)
         && nuovo().giorno is string && nuovo().giorno.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if titolare() && inEliminazione(resource.data.evento);
     }
 
     // ---------- Chiusura e quadratura di cassa ----------
@@ -213,7 +221,8 @@ service cloud.firestore {
         && nuovo().scontrini is int && nuovo().scontrini >= 0
         && nuovo().annulli is int && nuovo().annulli >= 0
         && (!('nota' in nuovo()) || testo(nuovo().nota));
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if titolare() && inEliminazione(resource.data.evento);
     }
 
     // ---------- Produzione del laboratorio ----------

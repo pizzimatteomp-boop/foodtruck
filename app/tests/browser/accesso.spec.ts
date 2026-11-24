@@ -1079,16 +1079,19 @@ test('cassa sul telefono: schermata fissa, prodotti e righe in vista, il resto n
   await page.screenshot({ path: 'test-results/cassa-telefono-menu.png' });
   await menu.getByRole('button', { name: 'Torna alla cassa' }).click();
   await expect(menu).toHaveCount(0);
-  // un evento con scontrini non si può eliminare (l'archivio fiscale resta legato all'evento)
+  // un evento con solo scontrini di PROVA si elimina insieme alle sue prove (quelli veri non si potrebbero)
   await cassa.getByRole('button', { name: 'CONT', exact: true }).click();
   await expect(cassa.getByRole('status').filter({ hasText: '✅' })).toBeVisible();
   const idEvento = await page.evaluate(() => localStorage.getItem('vegman-evento-cassa'));
   await page.goto('/#/eventi');
   const piano = page.getByRole('region', { name: 'Piano eventi' });
-  await piano.getByLabel('Evento da pianificare').selectOption(idEvento!);
-  await piano.getByText('✏️ Correggi o elimina questo evento').click();
-  await piano.getByRole('button', { name: 'Elimina evento' }).click();
-  await piano.getByRole('button', { name: 'Sì, elimina' }).click();
-  await expect(piano.getByRole('alert')).toContainText('Non si può eliminare: l\'evento ha già scontrini');
+  const nomeEvento = (await piano.getByLabel('Evento da pianificare').locator(`option[value="${idEvento}"]`).textContent())!.split(' · ')[0]!;
+  await piano.getByText('🗑 Elimina eventi').click();
+  const pulizia = piano.getByLabel('Elimina eventi');
+  await pulizia.getByRole('button', { name: `Elimina ${nomeEvento}` }).click();
+  await expect(pulizia.getByRole('alert')).toContainText('scontrini di prova');
+  await pulizia.getByRole('button', { name: 'Sì, elimina' }).click();
+  await expect(pulizia.getByRole('status')).toContainText(`«${nomeEvento}» eliminato`);
+  await expect(piano.getByLabel('Evento da pianificare').locator(`option[value="${idEvento}"]`)).toHaveCount(0);
   await page.context().close();
 });

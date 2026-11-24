@@ -598,3 +598,31 @@ describe('magazzino: confezioni di conta e inventari', () => {
     await assertSucceeds(deleteDoc(doc(db('matteo'), 'inventari', ref.id)));
   });
 });
+
+describe('eliminare un evento di prova con le sue prove', () => {
+  it('scontrini del simulatore, movimenti e chiusure si cancellano solo con l\'evento «eliminando»; gli scontrini veri mai', async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      const d = c.firestore();
+      await setDoc(doc(d, 'scontrini', 'sim1'), { tipo: 'V', totale: 1, ambiente: 'simulatore', evento: 'ev1' });
+      await setDoc(doc(d, 'scontrini', 'vero1'), { tipo: 'V', totale: 1, ambiente: 'agenzia', evento: 'ev1' });
+      await setDoc(doc(d, 'movimenti', 'mov1'), { tipo: 'scarto', evento: 'ev1' });
+      await setDoc(doc(d, 'quadrature', 'q1'), { cassa: 'Cassa 1', evento: 'ev1' });
+    });
+    // evento normale: niente si cancella
+    await assertFails(deleteDoc(doc(db('matteo'), 'scontrini', 'sim1')));
+    await assertFails(deleteDoc(doc(db('matteo'), 'movimenti', 'mov1')));
+    await assertFails(deleteDoc(doc(db('matteo'), 'quadrature', 'q1')));
+    // solo il titolare segna l'evento «eliminando»
+    await assertFails(updateDoc(doc(db('anna'), 'eventi', 'ev1'), { stato: 'eliminando' }));
+    await assertSucceeds(updateDoc(doc(db('matteo'), 'eventi', 'ev1'), { stato: 'eliminando' }));
+    await assertFails(updateDoc(doc(db('matteo'), 'eventi', 'ev1'), { stato: 'cancellato' }));
+    // la cassa no, il titolare sì; lo scontrino VERO resta
+    await assertFails(deleteDoc(doc(db('anna'), 'scontrini', 'sim1')));
+    await assertFails(deleteDoc(doc(db('anna'), 'movimenti', 'mov1')));
+    await assertSucceeds(deleteDoc(doc(db('matteo'), 'scontrini', 'sim1')));
+    await assertSucceeds(deleteDoc(doc(db('matteo'), 'movimenti', 'mov1')));
+    await assertSucceeds(deleteDoc(doc(db('matteo'), 'quadrature', 'q1')));
+    await assertFails(deleteDoc(doc(db('matteo'), 'scontrini', 'vero1')));
+    await assertFails(updateDoc(doc(db('matteo'), 'scontrini', 'vero1'), { totale: 2 }));
+  });
+});

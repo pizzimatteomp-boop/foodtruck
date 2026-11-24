@@ -28,7 +28,7 @@ import { registraMovimenti, useMovimentiEvento } from '../cassa/movimenti.db';
 import { apri as apriCassa, centesimi, differenze, fondoProposto, preparaQuadratura, type Apertura } from '../cassa/quadratura';
 import { annota, daEmettere, descriviVoce, emettiVoce, leggiRegistro, risoltaAMano, testoRegistro, type Registro, type VoceEmergenza } from '../cassa/emergenza';
 import { chiudiEvento, registraQuadratura, useQuadrature } from '../cassa/quadratura.db';
-import { descriviEvento, ErroreEvento, eventiPerCassa, fuoriItalia, preparaEvento, type Evento } from '../eventi/eventi';
+import { descriviEvento, ErroreEvento, eventiPerCassa, eventoDelGiorno, fuoriItalia, preparaEvento, type Evento } from '../eventi/eventi';
 import { creaEvento } from '../eventi/eventi.db';
 import { oggi } from '../dati/oggi';
 import { condividiScontrino } from './condividi';
@@ -85,7 +85,8 @@ function leggiApertura(): Apertura | null { try { return JSON.parse(leggi(APERTU
  * non si apre; nell'ambiente di prova sempre il simulatore, salvo la prova col titolare (spunta + VERO) dall'app Android.
  */
 function modoCassa(ambiente: Ambiente, titolare: boolean): 'simulatore' | 'agenzia' | null {
-  if (ambiente === 'produzione') return NATIVA ? 'agenzia' : null;
+  // app definitiva: sempre VERA; il simulatore solo se il titolare lo ha spuntato a questa apertura (deciso da Matteo il 24/11/2026)
+  if (ambiente === 'produzione') return NATIVA ? (titolare && leggi(MODO) === 'simulatore' ? 'simulatore' : 'agenzia') : null;
   return titolare && NATIVA && leggi(MODO) === 'agenzia' ? 'agenzia' : 'simulatore';
 }
 
@@ -103,7 +104,9 @@ export function Cassa({ db, uid, titolare, ambiente }: { db: Firestore; uid: str
 function AperturaCassa({ db, eventi, titolare, ambiente, messaggio, onApri }: { db: Firestore; eventi: Evento[]; titolare: boolean; ambiente: Ambiente; messaggio: string; onApri: (id: string) => void }) {
   const prova = ambiente === 'prova';
   const lista = eventiPerCassa(eventi, oggi());
-  const [id, setId] = useState(lista[0]?.id ?? '');
+  // già scelto l'evento di oggi (o il prossimo): niente da cercare nella tendina
+  const proposto = eventoDelGiorno(lista, oggi())?.id ?? '';
+  const [id, setId] = useState(proposto);
   const [nome, setNome] = useState(leggiNomeCassa());
   const [comande, setComande] = useState(leggi(STAMPA_COMANDE) === '1');
   // Scontrini veri: spunta + «VERO» scritto in un campo della pagina (la finestra prompt() sul telefono non compare).
@@ -112,7 +115,9 @@ function AperturaCassa({ db, eventi, titolare, ambiente, messaggio, onApri }: { 
   const [spuntaVero, setSpuntaVero] = useState(false);
   const [confermaVero, setConfermaVero] = useState('');
   const vero = spuntaVero && confermaVero.trim().toUpperCase() === 'VERO';
-  const [fondo, setFondo] = useState(() => fondoProposto(leggiApertura(), lista[0]?.id ?? '', leggiNomeCassa()));
+  // app definitiva: la cassa è VERA; per una prova il titolare spunta il simulatore (mai ricordato)
+  const [spuntaSimulatore, setSpuntaSimulatore] = useState(false);
+  const [fondo, setFondo] = useState(() => fondoProposto(leggiApertura(), proposto, leggiNomeCassa()));
   // Cassa già aperta su questo evento con questo nome: si propone il fondo scritto allora (si può correggere).
   const giaAperta = (() => { const a = leggiApertura(); return a && a.evento === id && a.cassa === nomeCassa(nome) ? a : null; })();
   const fondoScritto = useRef(false);
@@ -124,7 +129,7 @@ function AperturaCassa({ db, eventi, titolare, ambiente, messaggio, onApri }: { 
     try { f = centesimi(fondo, 'Fondo cassa'); } catch (e) { setErrore((e as Error).message); return; }
     if (spuntaVero && !vero) { setErrore('Per gli scontrini veri scrivi VERO nel campo di conferma (oppure togli la spunta).'); return; }
     if (modoCassa(ambiente, titolare) === null) { setErrore('La cassa si usa dall\'app VegMan sul telefono Android.'); return; }
-    if (!prova) {
+    if (!prova && !spuntaSimulatore) {
       const ci = await deposito().then((c) => c.presenti()).catch(() => false);
       if (!ci) { setErrore(`Su questo telefono mancano le credenziali Fisconline: ${titolare ? 'inseriscile in «⚙ Impostazioni di questo telefono».' : 'le inserisce il titolare, dal suo accesso, in «⚙ Impostazioni di questo telefono».'}`); return; }
     }
@@ -132,8 +137,10 @@ function AperturaCassa({ db, eventi, titolare, ambiente, messaggio, onApri }: { 
     scrivi(NOME_CASSA, n);
     scrivi(STAMPA_COMANDE, comande ? '1' : '0');
     // Passando dal simulatore all'Agenzia vera (o viceversa) la cassa riparte da zero: la chiusura non mescola prove e scontrini veri.
-    const cambiaModo = prova && (leggi(MODO) === 'agenzia' ? 'agenzia' : 'simulatore') !== (vero ? 'agenzia' : 'simulatore');
-    if (prova) scrivi(MODO, vero ? 'agenzia' : 'simulatore');
+    const modoPrima = leggi(MODO) === 'agenzia' || (!prova && leggi(MODO) !== 'simulatore') ? 'agenzia' : 'simulatore';
+    const modoNuovo = prova ? (vero ? 'agenzia' : 'simulatore') : (spuntaSimulatore && titolare ? 'simulatore' : 'agenzia');
+    const cambiaModo = modoPrima !== modoNuovo;
+    scrivi(MODO, modoNuovo);
     // Riaprendo la stessa cassa sullo stesso evento (es. dopo «Cambia») resta l'ora di apertura; il fondo si aggiorna.
     const r = apriCassa(cambiaModo ? null : leggiApertura(), x, n, f, Date.now());
     scrivi(APERTURA, JSON.stringify(r.apertura));
@@ -163,6 +170,9 @@ function AperturaCassa({ db, eventi, titolare, ambiente, messaggio, onApri }: { 
           <label class="spunta"><input type="checkbox" checked={comande} onChange={(e) => setComande(e.currentTarget.checked)} /> Stampa le comande per la cucina</label>
           <ImpostazioniTelefono titolare={titolare} aperta={spuntaVero}>
             <Stampante />
+            {!prova && titolare && NATIVA && (
+              <label class="spunta"><input type="checkbox" checked={spuntaSimulatore} onChange={(e) => setSpuntaSimulatore(e.currentTarget.checked)} /> Solo una prova: cassa sul simulatore (nessuno scontrino vero)</label>
+            )}
             {prova && titolare && NATIVA && (
               <>
                 <label class={spuntaVero ? 'spunta vero' : 'spunta'}><input type="checkbox" checked={spuntaVero} onChange={(e) => { const si = e.currentTarget.checked; setSpuntaVero(si); if (!si) setConfermaVero(''); }} /> Scontrini VERI (Agenzia delle Entrate)</label>
