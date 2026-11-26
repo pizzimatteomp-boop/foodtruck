@@ -2,6 +2,7 @@
  * Prova completa nel browser, con gli emulatori e le regole vere (firestore.rules):
  * una persona nuova entra e vede il suo codice → il titolare la abilita come cassa → lei rientra e vede il ruolo.
  */
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
@@ -990,6 +991,20 @@ test('inventario: confezioni con + e −, sfuso, conta che resta nel telefono, r
   expect(await carico2.getByRole('listitem').count()).toBeLessThanOrEqual(righePrima);
   const mayo = carico2.getByRole('listitem').filter({ hasText: 'Mayo di prova' });
   if (await mayo.count()) await expect(mayo).not.toHaveText(mayoPrima); // meno Mayo (o sparita)
+  // passaggio alla definitiva: dalla prova si scarica il file con i dati utili (niente scontrini né movimenti)
+  await tel.goto('/#/passaggio');
+  const passaggio = tel.getByRole('region', { name: 'Passaggio alla definitiva' });
+  const scarico = tel.waitForEvent('download');
+  await passaggio.getByRole('button', { name: '⬇ Scarica i dati' }).click();
+  const file = await scarico;
+  expect(file.suggestedFilename()).toMatch(/^vegman-dati-\d{4}-\d{2}-\d{2}\.json$/);
+  const pacchetto = JSON.parse(readFileSync((await file.path())!, 'utf8'));
+  expect(pacchetto.vegman).toBe(1);
+  expect(pacchetto.raccolte.prodotti.length).toBeGreaterThan(0);
+  expect(pacchetto.raccolte.ingredienti.length).toBeGreaterThan(0);
+  expect(pacchetto.raccolte.scontrini).toBeUndefined();
+  expect(pacchetto.raccolte.movimenti).toBeUndefined();
+  await expect(passaggio.getByRole('status')).toContainText('File scaricato');
 });
 
 test('nessuna pagina è più larga di un telefono (360 px)', async ({ browser }) => {

@@ -168,11 +168,6 @@ jobs:
       - name: Installa le dipendenze
         run: npm ci --no-audit --no-fund
 
-      - name: Pacchetto per l'ambiente di prova e copia nel progetto Android
-        run: npm run build && npx cap sync android
-        env:
-          VITE_AMBIENTE: prova
-
       - name: Prepara la chiave di firma
         env:
           KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -185,18 +180,43 @@ jobs:
           printf '%s' "$KS" | base64 -d > "$RUNNER_TEMP/vegman.jks"
           echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/vegman.jks" >> "$GITHUB_ENV"
 
-      - name: Costruisci l'APK
-        working-directory: app/android
+      # Due APK con lo stesso identificativo (it.vegman.app), quindi uno per dispositivo:
+      #  - «VegMan prova» (vegman-prova, simulatore salvo «Scontrini VERI») per il telefono delle prove;
+      #  - «VegMan» definitiva (vegman-app, cassa sempre VERA) per il tablet di cassa, appena c'è
+      #    android/app/google-services.definitiva.json (registrazione dell'app Android in vegman-app; non è un segreto).
+      - name: Costruisci l'APK di prova
         env:
+          VITE_AMBIENTE: prova
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
+          npm run build && npx cap sync android
+          sed -i 's|<string name="app_name">VegMan</string>|<string name="app_name">VegMan prova</string>|' android/app/src/main/res/values/strings.xml
+          cd android
           if [ -n "$ANDROID_KEYSTORE_FILE" ]; then
             ./gradlew --no-daemon assembleRelease
             mkdir -p "$RUNNER_TEMP/apk" && cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/apk/VegMan-prova-${GITHUB_RUN_NUMBER}.apk"
-            "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$RUNNER_TEMP/apk/"*.apk | grep -E "SHA-1|SHA-256" | tee -a "$GITHUB_STEP_SUMMARY"
           else
             ./gradlew --no-daemon assembleDebug
           fi
+          git checkout -- app/src/main/res/values/strings.xml
+
+      - name: Costruisci l'APK definitivo
+        if: env.ANDROID_KEYSTORE_FILE != ''
+        env:
+          VITE_AMBIENTE: produzione
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ ! -f android/app/google-services.definitiva.json ]; then
+            echo "::notice::Manca android/app/google-services.definitiva.json (app Android da registrare in vegman-app): niente APK definitivo per ora."
+            exit 0
+          fi
+          npm run build && npx cap sync android
+          cp android/app/google-services.json "$RUNNER_TEMP/google-services.prova.json"
+          cp android/app/google-services.definitiva.json android/app/google-services.json
+          (cd android && ./gradlew --no-daemon assembleRelease)
+          cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/apk/VegMan-DEFINITIVA-${GITHUB_RUN_NUMBER}.apk"
+          cp "$RUNNER_TEMP/google-services.prova.json" android/app/google-services.json
+          for a in "$RUNNER_TEMP/apk/"*.apk; do echo "$(basename "$a")" | tee -a "$GITHUB_STEP_SUMMARY"; done
 
       - name: APK da scaricare
         if: env.ANDROID_KEYSTORE_FILE != '' && github.ref == 'refs/heads/main'
@@ -268,6 +288,68 @@ jobs:
         run: |
           npx firebase deploy --only firestore:rules --project vegman-prova --non-interactive
           echo "Regole del database pubblicate su vegman-prova" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cancella la chiave dal computer di GitHub
+        if: always()
+        run: rm -f "$RUNNER_TEMP/chiave.json"
+
+  # Pubblicazione su vegman-app (versione definitiva, dati veri): stesse schermate e regole, dopo gli stessi controlli.
+  # Solo da main; senza la chiave FIREBASE_SERVICE_ACCOUNT_VEGMAN_APP si salta.
+  pubblica-app:
+    name: Pubblica su vegman-app (definitiva)
+    needs: [test, regole, browser]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: pubblica-app
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: app/.nvmrc
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Installa le dipendenze
+        run: npm ci --no-audit --no-fund
+
+      - name: Pacchetto per la versione definitiva
+        run: npm run build
+        env:
+          VITE_AMBIENTE: produzione
+
+      - name: Prepara la chiave
+        env:
+          CHIAVE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_VEGMAN_APP }}
+        run: |
+          if [ -z "$CHIAVE" ]; then
+            echo "::warning::Manca la chiave FIREBASE_SERVICE_ACCOUNT_VEGMAN_APP: pubblicazione saltata."
+            exit 0
+          fi
+          printf '%s' "$CHIAVE" > "$RUNNER_TEMP/chiave.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/chiave.json" >> "$GITHUB_ENV"
+          # Dati pubblici della chiave (non segreti): servono a capire con quale account si pubblica.
+          jq -r '"Account: \(.client_email // "?") · progetto: \(.project_id // "?") · tipo: \(.type // "?")"' "$RUNNER_TEMP/chiave.json" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Pubblica le schermate
+        if: env.GOOGLE_APPLICATION_CREDENTIALS != ''
+        run: |
+          npx firebase deploy --only hosting --project vegman-app --non-interactive
+          echo "Schermate pubblicate su https://vegman-app.web.app" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Pubblica le regole del database
+        if: env.GOOGLE_APPLICATION_CREDENTIALS != ''
+        run: |
+          npx firebase deploy --only firestore:rules --project vegman-app --non-interactive
+          echo "Regole del database pubblicate su vegman-app" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cancella la chiave dal computer di GitHub
         if: always()

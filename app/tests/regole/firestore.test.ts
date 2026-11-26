@@ -626,3 +626,32 @@ describe('eliminare un evento di prova con le sue prove', () => {
     await assertFails(updateDoc(doc(db('matteo'), 'scontrini', 'vero1'), { totale: 2 }));
   });
 });
+
+describe('passaggio alla definitiva: il file della prova si scrive con le regole vere', () => {
+  it('il titolare copia tutto (firma e ora rifatte); due volte senza errori; la cassa non può', async () => {
+    const { preparaPacchetto, scritture } = await import('../../src/trasferimento/trasferimento');
+    const { giaPresenti, scriviPassaggio, data } = await import('../../src/trasferimento/trasferimento.db');
+    const p = preparaPacchetto({
+      raccolte: {
+        ingredienti: [{ id: 'nuovoIng', nome: 'Farina', categoria: 'alimentare', unita: 'g', gruppo: '', confezione: 1000 }],
+        prodotti: [{ id: 'nuovoProd', nome: 'Piadina', tipo: 'vendibile', gruppo: '', prezzo: 6, resa: { quantita: 1, unita: 'pz' }, ricetta: [], quotaVendite: 0, inMenu: true }],
+        fatture: [{ id: 'fNuova', fornitore: 'X', partitaIva: '0', tipo: 'TD01', numero: '9', data: '2026-10-01', totale: 10, righe: [] }],
+        storico: [{ id: '2026-10', mese: '2026-10', ingredienti: {}, prodotti: {}, creatoDa: 'vecchioUid', creatoIl: { toMillis: () => 1 } }],
+        impostazioni: [{ id: 'foodcost', sogliaRincaro: 12 }],
+        menu: [{ id: 'pubblico', voci: [], aggiornatoDa: 'vecchioUid', aggiornatoIl: { toMillis: () => 1 } }],
+      },
+      eventi: [{ id: 'natale', nome: 'Natale', dal: '2099-12-05', al: '2099-12-06', paese: 'IT', stato: 'aperto' }],
+      previsioni: [{ id: 'natale', fatturato: 3000, scorta: 15, voci: {} }],
+    }, '2026-11-26', 'x');
+    const file = JSON.parse(JSON.stringify(p));
+    const prima = scritture(file, 'matteo', await giaPresenti(db('matteo')), data);
+    await assertSucceeds(scriviPassaggio(db('matteo'), prima.scritture));
+    // seconda volta: fatture e storico già presenti si saltano, il resto si aggiorna
+    const seconda = scritture(file, 'matteo', await giaPresenti(db('matteo')), data);
+    expect(seconda.saltati).toBe(2);
+    await assertSucceeds(scriviPassaggio(db('matteo'), seconda.scritture));
+    expect((await getDoc(doc(db('matteo'), 'storico', '2026-10'))).data()!.creatoDa).toBe('matteo');
+    expect((await getDoc(doc(db('matteo'), 'eventi', 'natale'))).data()!.nome).toBe('Natale');
+    await assertFails(scriviPassaggio(db('anna'), scritture(file, 'anna', new Set(), data).scritture));
+  });
+});

@@ -2,7 +2,7 @@ import { GRUPPI, indirizzo, pagineMenu, paginaDa, pagineVisibili, parametroDa } 
 
 describe('pagine per ruolo', () => {
   it('il titolare vede tutte le pagine; gli altri solo le proprie, senza Home', () => {
-    expect(pagineVisibili('titolare').map((p) => p.id)).toEqual(['home', 'vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'carico', 'inventario', 'magazzino', 'stazione', 'eventi', 'resoconto', 'pubblica', 'allergeni', 'persone']);
+    expect(pagineVisibili('titolare').map((p) => p.id)).toEqual(['home', 'vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi', 'produzione', 'carico', 'inventario', 'magazzino', 'stazione', 'eventi', 'resoconto', 'pubblica', 'allergeni', 'persone', 'passaggio']);
     expect(pagineVisibili('titolare').filter((p) => p.principale).map((p) => p.id)).toEqual(['home', 'vendi', 'prodotti', 'ingredienti', 'fatture', 'avvisi']);
     expect(pagineVisibili('cassa').map((p) => p.id)).toEqual(['vendi']);
     expect(pagineVisibili('team').map((p) => p.id)).toEqual(['produzione', 'carico']);
@@ -38,7 +38,7 @@ describe('pagine per ruolo', () => {
   });
 
   it('indirizzi', () => {
-    expect(pagineVisibili('titolare').map(indirizzo)).toEqual(['#/', '#/vendi', '#/prodotti', '#/ingredienti', '#/fatture', '#/avvisi', '#/produzione', '#/carico', '#/inventario', '#/magazzino', '#/stazione', '#/eventi', '#/resoconto', '#/pubblica', '#/allergeni', '#/persone']);
+    expect(pagineVisibili('titolare').map(indirizzo)).toEqual(['#/', '#/vendi', '#/prodotti', '#/ingredienti', '#/fatture', '#/avvisi', '#/produzione', '#/carico', '#/inventario', '#/magazzino', '#/stazione', '#/eventi', '#/resoconto', '#/pubblica', '#/allergeni', '#/persone', '#/passaggio']);
   });
 
   it('«Importa» (VegMan Planner) non c\'è più nell\'app: né menu, né Home, né indirizzo', () => {

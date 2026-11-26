@@ -8,7 +8,7 @@ export type Gruppo = 'Vendite' | 'Menu e costi' | 'Laboratorio e magazzino' | 'A
 export const GRUPPI: readonly Gruppo[] = ['Vendite', 'Menu e costi', 'Laboratorio e magazzino', 'Altro'];
 
 export interface Pagina {
-  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa' | 'vendi' | 'resoconto' | 'produzione' | 'stazione' | 'inventario' | 'magazzino' | 'eventi' | 'carico';
+  id: 'home' | 'prodotti' | 'ingredienti' | 'fatture' | 'avvisi' | 'pubblica' | 'allergeni' | 'persone' | 'importa' | 'passaggio' | 'vendi' | 'resoconto' | 'produzione' | 'stazione' | 'inventario' | 'magazzino' | 'eventi' | 'carico';
   titolo: string;
   icona: string;
   /** Una riga per il pannello della Home. */
@@ -45,6 +45,7 @@ export const PAGINE: readonly Pagina[] = [
   { id: 'pubblica', titolo: 'Menu e QR', icona: '📱', descrizione: 'Menu pubblico, QR code e cartello da stampare', principale: false, gruppo: 'Menu e costi', visibile: (r) => puo(r, 'acquisti') },
   { id: 'allergeni', titolo: 'Allergeni', icona: '🌾', descrizione: 'Liste ingredienti e tabella allergeni', principale: false, gruppo: 'Menu e costi', visibile: (r) => puo(r, 'acquisti') },
   { id: 'persone', titolo: 'Persone', icona: '👥', descrizione: 'Chi può entrare e con quale ruolo', principale: false, gruppo: 'Altro', visibile: (r) => puo(r, 'utenti') },
+  { id: 'passaggio', titolo: 'Passaggio alla definitiva', icona: '🔁', descrizione: 'Dati dalla prova alla versione definitiva (una volta)', principale: false, gruppo: 'Altro', visibile: (r) => r === 'titolare' },
   { id: 'importa', titolo: 'Importa', icona: '⬆', descrizione: 'Dati da VegMan Planner', principale: false, nascosta: true, gruppo: 'Altro', visibile: (r) => SOLO_PROVE && puo(r, 'acquisti') },
 ];
 

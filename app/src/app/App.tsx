@@ -20,6 +20,7 @@ import { Home } from '../ui/Home';
 import { Importa } from '../ui/Importa';
 import { Cassa } from '../ui/Cassa';
 import { Ingredienti } from '../ui/Ingredienti';
+import { Passaggio } from '../ui/Passaggio';
 import { Persone } from '../ui/Persone';
 import { Prodotti } from '../ui/Prodotti';
 import { Struttura } from '../ui/Struttura';
@@ -59,6 +60,7 @@ export function App({ servizi, ambiente }: { servizi: Servizi; ambiente: Ambient
       {pagina.id === 'persone' ? <Persone db={servizi.db} titolareUid={stato.uid} />
         : pagina.id === 'vendi' ? <Cassa db={servizi.db} uid={stato.uid} titolare={stato.profilo.ruolo === 'titolare'} ambiente={ambiente} />
         : pagina.id === 'importa' ? <Importa db={servizi.db} uid={stato.uid} />
+        : pagina.id === 'passaggio' ? <Passaggio db={servizi.db} uid={stato.uid} ambiente={ambiente} />
         : pagina.id === 'prodotti' ? <Prodotti db={servizi.db} parametro={parametroDa(hash)} />
         : pagina.id === 'avvisi' ? <Avvisi db={servizi.db} />
         : pagina.id === 'resoconto' ? <Resoconto db={servizi.db} />
