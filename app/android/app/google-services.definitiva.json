@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "765161624870",
+    "project_id": "vegman-app",
+    "storage_bucket": "vegman-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:765161624870:android:9cd56bf5254698a3629de7",
+        "android_client_info": {
+          "package_name": "it.vegman.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "765161624870-fogjnrp8cmc87fnj92kpo80rotr1buib.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjtkX92ZyktBLwI-gm3TOZKc51lZO-95I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "765161624870-fogjnrp8cmc87fnj92kpo80rotr1buib.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
