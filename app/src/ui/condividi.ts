@@ -1,11 +1,10 @@
 /**
- * Invio dello scontrino al cliente col menu di condivisione del telefono (WhatsApp, email, SMS…).
- * Scontrino vero: il PDF dell'Agenzia (il documento fiscale). Simulatore, o PDF non disponibile:
- * la ricevuta in testo semplice. Niente immagini: è il modo più sicuro perché arrivi.
+ * Invio del documento al cliente col menu di condivisione del telefono (WhatsApp, email, SMS…):
+ * il PDF a striscia fatto dall'app (cassa/pdf.ts), un solo file, sia per gli scontrini veri sia per le prove.
  */
 import { Capacitor } from '@capacitor/core';
 import type { ScontrinoArchivio } from '../cassa/archivio';
-import { messaggioInvio, nomeFile, testoRicevuta } from '../cassa/ricevuta';
+import { messaggioInvio, nomeFile } from '../cassa/ricevuta';
 
 function base64(byte: Uint8Array): string {
   let s = '';
@@ -22,27 +21,18 @@ function scarica(blob: Blob, nome: string) {
 }
 
 /** Apre il menu di condivisione. Restituisce false se nel browser si è solo scaricato il file. */
-export async function condividiScontrino(s: ScontrinoArchivio, quando: Date, pdf?: Uint8Array): Promise<boolean> {
-  const conPdf = !!pdf?.length;
-  const testo = conPdf ? messaggioInvio(s) : testoRicevuta(s, quando);
+export async function condividiScontrino(s: ScontrinoArchivio, pdf: Uint8Array): Promise<boolean> {
+  const testo = messaggioInvio(s);
+  const nome = nomeFile(s, 'pdf');
   if (Capacitor.isNativePlatform()) {
     const { Share } = await import('@capacitor/share');
-    if (conPdf) {
-      const { Filesystem, Directory } = await import('@capacitor/filesystem');
-      const { uri } = await Filesystem.writeFile({ path: nomeFile(s, 'pdf'), data: base64(pdf!), directory: Directory.Cache });
-      await Share.share({ title: 'Scontrino VegMan', text: testo, files: [uri], dialogTitle: 'Invia lo scontrino' });
-    } else {
-      await Share.share({ title: 'Scontrino VegMan', text: testo, dialogTitle: 'Invia lo scontrino' });
-    }
+    const { Filesystem, Directory } = await import('@capacitor/filesystem');
+    const { uri } = await Filesystem.writeFile({ path: nome, data: base64(pdf), directory: Directory.Cache });
+    await Share.share({ title: 'Scontrino VegMan', text: testo, files: [uri], dialogTitle: 'Invia lo scontrino' });
     return true;
   }
-  if (conPdf) {
-    const file = new File([pdf as BlobPart], nomeFile(s, 'pdf'), { type: 'application/pdf' });
-    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ title: 'Scontrino VegMan', text: testo, files: [file] }); return true; }
-    scarica(file, file.name);
-    return false;
-  }
-  if (typeof navigator.share === 'function') { await navigator.share({ title: 'Scontrino VegMan', text: testo }); return true; }
-  scarica(new Blob([testo], { type: 'text/plain;charset=utf-8' }), nomeFile(s, 'txt'));
+  const file = new File([pdf as BlobPart], nome, { type: 'application/pdf' });
+  if (navigator.canShare?.({ files: [file] })) { await navigator.share({ title: 'Scontrino VegMan', text: testo, files: [file] }); return true; }
+  scarica(file, file.name);
   return false;
 }

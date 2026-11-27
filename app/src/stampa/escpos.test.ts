@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { scontrinoVendita } from '../cassa/archivio';
-import { contenutoRicevuta } from '../cassa/ricevuta';
-import { aCapo, aPezzi, ascii, caratteristicaScrivibile, colonne, comandaTermica, raster, ricevutaTermica, SERVIZI_STAMPANTE } from './escpos';
+import { documentoCliente, ESERCENTE_PROVA, impagina } from '../cassa/documento';
+import { aCapo, aPezzi, ascii, caratteristicaScrivibile, colonne, comandaTermica, COLONNE, documentoTermico, raster, SERVIZI_STAMPANTE } from './escpos';
 
 const testo = (b: Uint8Array) => new TextDecoder().decode(b.filter((x) => x === 0x0a || (x >= 0x20 && x < 0x7f)));
 
@@ -21,24 +21,23 @@ describe('stampa termica ESC/POS', () => {
     expect(aCapo('a'.repeat(40))).toEqual(['a'.repeat(32), 'a'.repeat(8)]);
   });
 
-  it('ricevuta di cortesia: righe, totale, pagamento, documento; niente fasce piene', () => {
+  it('documento sulla carta: stesse righe del PDF a 32 colonne, solo ASCII, titolo e totale grandi', () => {
     const s = scontrinoVendita({ idtrx: '1', progressivo: 'DCW2026/9999-7001', pagamento: 'contanti', ambiente: 'simulatore', cassa: 'C', giorno: '2026-11-11',
       righe: [{ descrizione: 'Kebab', quantita: 2, centesimi: 1200, aliquota: '10' }] });
-    const b = ricevutaTermica(contenutoRicevuta(s, new Date('2026-11-11T19:30:00Z')));
+    const righe = impagina(documentoCliente(s, new Date('2026-11-11T19:30:00Z'), ESERCENTE_PROVA), COLONNE, ascii);
+    expect(righe.every((r) => r.testo.length <= (r.grande ? COLONNE / 2 : COLONNE))).toBe(true);
+    const b = documentoTermico(righe);
     const t = testo(b);
     expect([...b.slice(0, 2)]).toEqual([0x1b, 0x40]);
     expect(t).toContain('VEGMAN');
-    expect(t).toContain('2 x Kebab              24,00 EUR');
-    expect(t).toContain('TOTALE                 24,00 EUR');
-    expect(t).toContain('Pagamento: Contanti');
-    expect(t).toContain('PROVA - non e un documento');
+    expect(t).toContain('N. 2 x 12.00EUR');
+    expect(t).toContain('Kebab            10.00     24.00');
+    expect(t).toContain('TOTALE COMPLESSIVO');
+    expect(t).toContain('Pagamento contante         24.00');
+    expect(t).toContain('PROVA - NON E UN DOCUMENTO');
     expect(t).not.toContain('€');
-    const vera = testo(ricevutaTermica(contenutoRicevuta({ ...s, ambiente: 'agenzia' }, new Date())));
-    expect(vera).toContain('Ricevuta di cortesia.');
-    expect(vera).not.toContain('allegato');
-    // con il logo: comando raster prima della scritta
-    const conLogo = ricevutaTermica(contenutoRicevuta(s, new Date()), { larghezza: 8, altezza: 1, punti: new Uint8Array([1, 0, 0, 0, 0, 0, 0, 1]) });
-    expect([...conLogo.slice(5, 14)]).toEqual([0x1d, 0x76, 0x30, 0, 1, 0, 1, 0, 0x81]);
+    // righe grandi in doppia larghezza e altezza (GS ! 0x11)
+    expect([...b]).toEqual(expect.arrayContaining([0x1d, 0x21, 0x11]));
   });
 
   it('raster: 8 punti per byte, righe allineate', () => {

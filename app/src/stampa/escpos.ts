@@ -1,10 +1,10 @@
 /**
  * Stampa termica ESC/POS (stampanti Bluetooth da 58 mm, 32 colonne), come in VegMan Planner.
- * Ricevuta di cortesia in bianco e nero (deciso da Matteo il 10/11/2026: fondo bianco, niente fasce
- * piene, marchio sottile) e comanda per la cucina (prodotti grandi, niente prezzi).
+ * Documento per il cliente (stesso contenuto del PDF, solo testo: deciso da Matteo il 27/11/2026) e
+ * comanda per la cucina (prodotti grandi, niente prezzi).
  * Modulo puro: produce i byte; il collegamento Bluetooth è in ui/stampanteBluetooth.ts.
  */
-import type { ContenutoRicevuta } from '../cassa/ricevuta';
+import type { RigaImpaginata } from '../cassa/documento';
 
 const ESC = 0x1b;
 const GS = 0x1d;
@@ -75,23 +75,13 @@ export function raster(img: Bitmap): number[] {
   return [GS, 0x76, 0x30, 0, perRiga & 0xff, perRiga >> 8, img.altezza & 0xff, img.altezza >> 8, ...dati];
 }
 
-export const NOTA_CARTA = 'Ricevuta di cortesia. Il documento commerciale (PDF) si riceve su WhatsApp o email.';
-
-/** Ricevuta di cortesia termica: niente fondi neri, marchio come immagine sottile (se c'è) o come scritta. */
-export function ricevutaTermica(c: ContenutoRicevuta, logo?: Bitmap): Uint8Array {
-  const o = new Byte().cmd(ESC, 0x40).centro();
-  if (logo) o.cmd(...raster(logo)).cmd(0x0a);
-  o.grassetto(true).dimensione(2).testo('VEGMAN').dimensione(0).grassetto(false)
-    .testo('Cibo 100% vegetale').testo(c.quando).sinistra().linea();
-  for (const r of c.righe) for (const x of colonne(r.testo, r.importo)) o.testo(x);
-  o.linea().grassetto(true).dimensione(1);
-  for (const x of colonne('TOTALE', c.totale)) o.testo(x);
-  o.dimensione(0).grassetto(false).testo(`Pagamento: ${c.pagamento}`).linea();
-  for (const x of aCapo(c.documento)) o.testo(x);
-  // Sulla carta non c'è un PDF «allegato»: la stampa è una cortesia, il documento è il PDF dell'Agenzia.
-  for (const x of aCapo(c.nota.startsWith('PROVA') ? c.nota : NOTA_CARTA)) o.testo(x);
-  o.centro().cmd(0x0a).testo('Grazie! Thank you!').fine();
-  return o.bytes();
+/** Documento per il cliente sulla carta: stesse righe del PDF (cassa/documento.ts), impaginate a 32 colonne. */
+export function documentoTermico(righe: readonly RigaImpaginata[]): Uint8Array {
+  const o = new Byte().cmd(ESC, 0x40).sinistra();
+  for (const r of righe) {
+    o.grassetto(r.grassetto).dimensione(r.grande ? 2 : 0).testo(r.testo);
+  }
+  return o.grassetto(false).dimensione(0).fine().bytes();
 }
 
 export interface Comanda {

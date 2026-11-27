@@ -32,8 +32,9 @@ import { descriviEvento, ErroreEvento, eventiPerCassa, eventoDelGiorno, fuoriIta
 import { creaEvento } from '../eventi/eventi.db';
 import { oggi } from '../dati/oggi';
 import { condividiScontrino } from './condividi';
-import { comandaTermica, ricevutaTermica } from '../stampa/escpos';
-import { contenutoRicevuta } from '../cassa/ricevuta';
+import { ascii, COLONNE, comandaTermica, documentoTermico } from '../stampa/escpos';
+import { documentoCliente, ESERCENTE_PROVA, esercenteDa, impagina, type Esercente } from '../cassa/documento';
+import { COLONNE_PDF, pdfScontrino, perPdf } from '../cassa/pdf';
 import { collegaStampante, dimenticaStampante, ErroreStampa, stampa, stampanteSalvata } from './stampanteBluetooth';
 import { ImpostazioniTelefono } from './ImpostazioniTelefono';
 import { deposito } from './portaleTelefono';
@@ -67,6 +68,8 @@ const TASTI = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['.', '0', '�
 const NOME_CASSA = 'vegman-nome-cassa';
 const EVENTO_CASSA = 'vegman-evento-cassa';
 const STAMPA_COMANDE = 'vegman-stampa-comande';
+/** Intestazione degli scontrini veri (dati dell'esercente letti dall'Agenzia all'ultimo collegamento). */
+const ESERCENTE = 'vegman-esercente';
 const APERTURA = 'vegman-apertura-cassa';
 const REGISTRO = 'vegman-registro-emergenza';
 const NUMERO_COMANDA = 'vegman-numero-comanda';
@@ -284,7 +287,7 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
     }
     let vivo = true;
     setCollegamento({ stato: 'collego' });
-    collegaCassaVera().then((c) => { if (vivo) { setCassa(c); setCollegamento({ stato: 'ok' }); } })
+    collegaCassaVera().then((c) => { scrivi(ESERCENTE, JSON.stringify(esercenteDa(c.cedente))); if (vivo) { setCassa(c); setCollegamento({ stato: 'ok' }); } })
       .catch((e: unknown) => { if (vivo) setCollegamento({ stato: 'errore', testo: messaggioSicuro(e) }); });
     return () => { vivo = false; };
   }, [tentativo]);
@@ -381,20 +384,30 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
     return ` · comanda ${numero}${nome ? ` (${nome})` : ''}`;
   }
 
+  /** Intestazione del documento: per le prove un esercente finto; per gli scontrini veri i dati dell'Agenzia. */
+  function esercente(s: ScontrinoArchivio): Esercente | null {
+    if (s.ambiente === 'simulatore') return ESERCENTE_PROVA;
+    if (cassa?.ambiente === 'agenzia') return esercenteDa(cassa.cedente);
+    try { const x = leggi(ESERCENTE); return x ? JSON.parse(x) as Esercente : null; } catch { return null; }
+  }
+  const senzaEsercente = 'Mancano i dati dell\'esercente: aspetta che l\'Agenzia sia collegata (✅ in alto) e riprova.';
+
+  /** Stampa sulla stampantina: lo stesso documento del PDF, in testo. */
   async function stampaRicevuta(s: ScontrinoArchivio, quando: Date) {
-    try { await stampa(ricevutaTermica(contenutoRicevuta(s, quando))); setAvvisoStampa(''); } catch (e) {
-      setAvvisoStampa(`🖨 Ricevuta non stampata: ${e instanceof ErroreStampa ? e.message : 'errore della stampante'}`);
+    const e = esercente(s);
+    if (!e) { setAvvisoStampa(`🖨 ${senzaEsercente}`); return; }
+    try { await stampa(documentoTermico(impagina(documentoCliente(s, quando, e), COLONNE, ascii))); setAvvisoStampa(''); } catch (err) {
+      setAvvisoStampa(`🖨 Scontrino non stampato: ${err instanceof ErroreStampa ? err.message : 'errore della stampante'}`);
     }
   }
 
-  /** Invio al cliente: ricevuta VegMan e, per gli scontrini veri, il PDF dell'Agenzia (il documento fiscale). */
+  /** Invio al cliente: il PDF a striscia (stesso contenuto della stampa), un solo file. */
   async function invia(s: ScontrinoArchivio, quando: Date) {
-    let pdf: Uint8Array | undefined;
-    if (s.ambiente === 'agenzia' && cassa?.ambiente === 'agenzia') {
-      try { pdf = await cassa.pdf(s.idtrx); } catch (e) { setAvviso({ testo: `PDF dell'Agenzia non scaricato (${messaggio(e)}): mando la ricevuta in testo; riprova dopo per il PDF.`, errore: true }); }
-    }
-    try { await condividiScontrino(s, quando, pdf); } catch (e) {
-      if (!/cancel/i.test((e as Error)?.message ?? '')) setAvviso({ testo: `Invio non riuscito: ${messaggio(e)}`, errore: true });
+    const e = esercente(s);
+    if (!e) { setAvviso({ testo: senzaEsercente, errore: true }); return; }
+    const pdf = pdfScontrino(impagina(documentoCliente(s, quando, e), COLONNE_PDF, perPdf), `Documento commerciale ${s.progressivo}`);
+    try { await condividiScontrino(s, pdf); } catch (err) {
+      if (!/cancel/i.test((err as Error)?.message ?? '')) setAvviso({ testo: `Invio non riuscito: ${messaggio(err)}`, errore: true });
     }
   }
 
