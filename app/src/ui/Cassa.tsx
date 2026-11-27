@@ -386,9 +386,11 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
 
   /** Intestazione del documento: per le prove un esercente finto; per gli scontrini veri i dati dell'Agenzia. */
   function esercente(s: ScontrinoArchivio): Esercente | null {
-    if (s.ambiente === 'simulatore') return ESERCENTE_PROVA;
-    if (cassa?.ambiente === 'agenzia') return esercenteDa(cassa.cedente);
-    try { const x = leggi(ESERCENTE); return x ? JSON.parse(x) as Esercente : null; } catch { return null; }
+    if (s.ambiente !== 'simulatore' && cassa?.ambiente === 'agenzia') return esercenteDa(cassa.cedente);
+    let salvato: Esercente | null = null;
+    try { const x = leggi(ESERCENTE); salvato = x ? JSON.parse(x) as Esercente : null; } catch { /* niente */ }
+    // Sulle prove i dati veri (se l'Agenzia si è già collegata su questo telefono), con «PROVA» sopra e sotto.
+    return s.ambiente === 'simulatore' ? salvato ?? ESERCENTE_PROVA : salvato;
   }
   const senzaEsercente = 'Mancano i dati dell\'esercente: aspetta che l\'Agenzia sia collegata (✅ in alto) e riprova.';
 
