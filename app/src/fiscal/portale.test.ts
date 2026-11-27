@@ -3,6 +3,7 @@ import { webNativo, type OpzioniHttp } from './nativo';
 import {
   AccessoRifiutato, accediPortale, codiceErrore, eLogin, ggmmaaaa, IVASERVIZI, letturaDiProva, partitaIvaDa,
   Interrotta, messaggioSicuro, PortaleCambiato, PORTALE, apriPagina, decodifica, pontePagina, senzaParametri, strutturaPagina, Traccia, type RichiestaWeb, type RispostaWeb,
+  PAGINA_ACCESSO,
 } from './portale';
 import { ErroreRete } from './trasporto';
 
@@ -24,7 +25,8 @@ function portaleFinto(o: Opzioni = {}) {
     viste.push(q);
     const u = new URL(q.url);
     const p = u.pathname;
-    if (p === '/portale/') return o.altraPagina ? r(200, 'https://www.agenziaentrate.gov.it/manutenzione', '<html><title>Manutenzione</title></html>') : r(200, LOGIN, SPA);
+    if (p === '/portale/') return r(200, 'https://ivaservizi.agenziaentrate.gov.it/instr/InstradamentofcWeb/wizard', '<html></html>');
+    if (p === '/sam/UI/Login' && q.metodo === 'GET' && !dentro) return o.altraPagina ? r(200, 'https://www.agenziaentrate.gov.it/manutenzione', '<html><title>Manutenzione</title></html>') : r(200, q.url, SPA);
     if (p === '/api/login/telematico' && q.metodo === 'POST') {
       if (o.erroreAccesso) return r(o.erroreAccesso, q.url, 'errore');
       const m = q.json as Record<string, string>;
@@ -203,12 +205,13 @@ describe('accesso al portale (finto) e letture di prova', () => {
     }
   });
 
-  it('se la pagina di accesso porta altrove, verso Fatture e Corrispettivi si va comunque', async () => {
+  it('si parte dalla pagina di accesso con ritorno al portale (non più da /portale/, cambiato il 27/11/2026)', async () => {
     const base = portaleFinto();
-    const web = async (q: RichiestaWeb) => (q.url.endsWith('/portale/') ? { stato: 200, url: 'https://iampe.agenziaentrate.gov.it/sam/UI/Login?realm=/agenziaentrate', intestazioni: {}, testo: SPA } : base.web(q));
-    const t = new Traccia(web);
+    const t = new Traccia(base.web);
     await accediPortale(t, CRED);
-    expect(base.viste.filter((v) => v.url.includes('PortaleWeb/home'))).toHaveLength(1);
+    expect(base.viste[0]!.url).toBe(PAGINA_ACCESSO);
+    expect(decodeURIComponent(PAGINA_ACCESSO)).toContain('goto=https://portale.agenziaentrate.gov.it/PortaleWeb/home?to=FATBTB');
+    expect(base.viste.some((v) => v.url.endsWith('/portale/'))).toBe(false);
   });
 
   it('portale cambiato: modulo assente, errore all\'invio, sessione non tenuta, scelta fallita', async () => {
@@ -244,7 +247,7 @@ describe('accesso al portale (finto) e letture di prova', () => {
   it('rete giù: il passo è segnato e l\'errore risale', async () => {
     const t = new Traccia(async () => { throw new ErroreRete('giù'); });
     await expect(accediPortale(t, CRED)).rejects.toBeInstanceOf(ErroreRete);
-    expect(t.passi).toEqual([{ passo: 'Pagina di accesso', metodo: 'GET', indirizzo: 'ivaservizi.agenziaentrate.gov.it/portale/', stato: 'rete', nota: 'errore: giù' }]);
+    expect(t.passi).toEqual([{ passo: 'Pagina di accesso', metodo: 'GET', indirizzo: 'iampe.agenziaentrate.gov.it/sam/UI/Login', stato: 'rete', nota: 'errore: giù' }]);
   });
 
   it('avanzamento passo per passo e interruzione', async () => {

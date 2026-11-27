@@ -231,6 +231,8 @@ export class Traccia {
 export const ts = () => `v=${Date.now()}`;
 
 const LOGIN_API = 'https://iampe.agenziaentrate.gov.it/api/login/telematico';
+/** Pagina di accesso con ritorno al portale verso Fatture e Corrispettivi (come il rimando che faceva «/portale/»). */
+export const PAGINA_ACCESSO = `https://iampe.agenziaentrate.gov.it/sam/UI/Login?realm=/agenziaentrate&goto=${encodeURIComponent(`${PORTALE}/PortaleWeb/home?to=FATBTB`)}`;
 
 /** Il codice d'errore («details») della risposta di accesso, se c'è. */
 export function codiceErrore(testo: string): string | undefined {
@@ -248,10 +250,12 @@ export async function accediPortale(t: Traccia, c: Credenziali): Promise<void> {
  * Lancia AccessoRifiutato (non ripetere!) o PortaleCambiato.
  */
 export async function entraNelPortale(t: Traccia, c: Credenziali): Promise<void> {
-  const pagina = await t.chiama('Pagina di accesso', { url: `${IVASERVIZI}/portale/`, metodo: 'GET' });
+  // Si apre direttamente la pagina di accesso: dal 27/11/2026 «/portale/» non ci rimanda più (va alla nuova
+  // pagina di Fatture e Corrispettivi, che chiede l'accesso col suo codice).
+  const pagina = await t.chiama('Pagina di accesso', { url: PAGINA_ACCESSO, metodo: 'GET' });
   if (!eLogin(pagina.url)) {
     t.passi[t.passi.length - 1]!.nota = strutturaPagina(pagina.testo, pagina.url);
-    throw new PortaleCambiato('La pagina di accesso non è quella attesa.');
+    throw new PortaleCambiato('La pagina di accesso dell\'Agenzia non è quella attesa (manutenzione o cambiamento del portale).');
   }
   const dopo = await t.chiama('Invio credenziali', {
     url: LOGIN_API, metodo: 'POST', json: { username: c.codiceFiscale, password: c.password, pin: c.pin },
