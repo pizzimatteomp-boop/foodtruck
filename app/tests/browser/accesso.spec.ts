@@ -634,12 +634,18 @@ test('cassa come Billy: quantità con ×, importo libero, contanti; importo digi
   await apri.getByText('⚙ Impostazioni di questo telefono').click();
   await expect(apri.getByRole('group', { name: 'Stampante' })).toContainText('Stampante finta');
   await expect(apri.getByLabel('Password Fisconline')).toHaveCount(0);
-  await apri.getByLabel('Stampa le comande per la cucina').check();
   await apri.getByLabel('Nome di questa cassa').fill('Furgone');
   await apri.getByLabel('Fondo cassa (contanti all\'inizio)').fill('50');
   await apri.getByRole('button', { name: 'Apri cassa' }).click();
   await expect(cassa).toContainText('· Furgone');
-  await expect(cassa).toContainText('🖨 comande');
+  // comande per la cucina: interruttore nella testata della cassa, si cambia durante il servizio
+  const comande = cassa.getByRole('button', { name: 'Stampa le comande per la cucina' });
+  await expect(comande).toHaveAttribute('aria-pressed', 'false');
+  await expect(cassa.getByLabel('Nome per la comanda')).toHaveCount(0);
+  await comande.click();
+  await expect(comande).toHaveAttribute('aria-pressed', 'true');
+  await expect(comande).toHaveText('🖨 ON');
+  await expect(cassa.getByLabel('Nome per la comanda')).toBeVisible();
   await expect(cassa).toContainText('· Furgone · fondo 50,00 €');
   // riaprendo la stessa cassa il fondo scritto prima è proposto e si può correggere
   await apriMenu();

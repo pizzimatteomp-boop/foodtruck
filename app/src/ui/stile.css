@@ -427,6 +427,8 @@ input.corto { width: 80px; }
 .cassa-modo { flex: none; font-weight: 700; font-size: 0.75rem; padding: 3px 8px; border-radius: 99px; background: var(--menta); color: #000; }
 .cassa-modo.vero { background: var(--arancio); }
 .cassa-info { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cassa-comande { flex: none; white-space: nowrap; opacity: 0.7; }
+.cassa-comande.accese { opacity: 1; background: var(--menta); color: #000; border-color: #000; font-weight: 700; }
 .cassa-apri-menu { flex: none; position: relative; font-size: 1.2rem; min-width: 48px; }
 .pallino-avviso { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; border-radius: 10px; background: var(--errore); color: #fff; font-size: 0.75rem; line-height: 20px; }
 .cassa-emergenza-breve { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; }

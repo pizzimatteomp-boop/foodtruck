@@ -108,7 +108,6 @@ function AperturaCassa({ db, eventi, titolare, ambiente, messaggio, onApri }: { 
   const proposto = eventoDelGiorno(lista, oggi())?.id ?? '';
   const [id, setId] = useState(proposto);
   const [nome, setNome] = useState(leggiNomeCassa());
-  const [comande, setComande] = useState(leggi(STAMPA_COMANDE) === '1');
   // Scontrini veri: spunta + «VERO» scritto in un campo della pagina (la finestra prompt() sul telefono non compare).
   // Mai già pronti: a ogni apertura si sceglie di nuovo (il 18/11/2026 la scelta ricordata ha aperto la cassa
   // sull'Agenzia vera durante le prove senza che Matteo se ne accorgesse).
@@ -135,7 +134,6 @@ function AperturaCassa({ db, eventi, titolare, ambiente, messaggio, onApri }: { 
     }
     const n = nomeCassa(nome);
     scrivi(NOME_CASSA, n);
-    scrivi(STAMPA_COMANDE, comande ? '1' : '0');
     // Passando dal simulatore all'Agenzia vera (o viceversa) la cassa riparte da zero: la chiusura non mescola prove e scontrini veri.
     const modoPrima = leggi(MODO) === 'agenzia' || (!prova && leggi(MODO) !== 'simulatore') ? 'agenzia' : 'simulatore';
     const modoNuovo = prova ? (vero ? 'agenzia' : 'simulatore') : (spuntaSimulatore && titolare ? 'simulatore' : 'agenzia');
@@ -167,7 +165,6 @@ function AperturaCassa({ db, eventi, titolare, ambiente, messaggio, onApri }: { 
           <label class="campo"><span>Nome di questa cassa</span><input value={nome} maxLength={30} onInput={(e) => setNome(e.currentTarget.value)} /></label>
           <label class="campo"><span>Fondo cassa (contanti all'inizio)</span><input inputMode="decimal" placeholder="0,00" value={fondo} onInput={(e) => { fondoScritto.current = true; setFondo(e.currentTarget.value); }} /></label>
           {giaAperta && <p class="nota">Questa cassa è già aperta su questo evento dal {new Date(giaAperta.da).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}: riaprendola si continua, col fondo scritto qui.</p>}
-          <label class="spunta"><input type="checkbox" checked={comande} onChange={(e) => setComande(e.currentTarget.checked)} /> Stampa le comande per la cucina</label>
           <ImpostazioniTelefono titolare={titolare} aperta={spuntaVero}>
             <Stampante />
             {!prova && titolare && NATIVA && (
@@ -223,7 +220,14 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
   const [descrizione, setDescrizione] = useState('');
   /** Nome per chiamare il cliente, solo sulla comanda (non si salva da nessuna parte). */
   const [cliente, setCliente] = useState('');
-  const conComande = leggi(STAMPA_COMANDE) === '1';
+  // Comande per la cucina: si accendono e si spengono dalla testata della cassa, anche durante il servizio.
+  const [conComande, setConComande] = useState(leggi(STAMPA_COMANDE) === '1');
+  function cambiaComande() {
+    const si = !conComande;
+    scrivi(STAMPA_COMANDE, si ? '1' : '0');
+    setConComande(si);
+    setAvvisoStampa(si && !stampanteSalvata() ? 'Comande accese, ma su questo telefono non c\'è una stampante collegata: collegala da ☰ → Cambia → ⚙ Impostazioni di questo telefono.' : '');
+  }
   const [iva, setIva] = useState<Aliquota>('10');
   const [gruppo, setGruppo] = useState('');
   const [cerca, setCerca] = useState('');
@@ -556,7 +560,9 @@ function Vendita({ db, uid, titolare, ambiente, evento, onCambia, onChiusa }: { 
         {modoVero
           ? <span class="cassa-modo vero" role="note">AGENZIA {collegamento.stato === 'ok' ? '✅' : collegamento.stato === 'collego' ? '…' : '❌'}</span>
           : <span class="cassa-modo simulatore" role="note">SIMULATORE</span>}
-        <span class="cassa-info">{infoEvento}<strong>{leggiNomeCassa()}</strong> · fondo {euro((leggiApertura()?.fondo ?? 0) / 100)}{leggi(STAMPA_COMANDE) === '1' ? ' · 🖨 comande' : ''}</span>
+        <span class="cassa-info">{infoEvento}<strong>{leggiNomeCassa()}</strong> · fondo {euro((leggiApertura()?.fondo ?? 0) / 100)}</span>
+        <button type="button" class={`secondario piccolo cassa-comande${conComande ? ' accese' : ''}`} aria-pressed={conComande} aria-label="Stampa le comande per la cucina"
+          title={conComande ? 'Comande per la cucina: accese (tocca per spegnere)' : 'Comande per la cucina: spente (tocca per accendere)'} onClick={cambiaComande}>🖨 {conComande ? 'ON' : 'OFF'}</button>
         <button type="button" class="secondario piccolo cassa-apri-menu" aria-label="Menu della cassa" aria-expanded={menu} onClick={() => setMenu(true)}>☰{aperteEmergenza.length ? <span class="pallino-avviso">{aperteEmergenza.length}</span> : null}</button>
       </div>
       {modoVero && collegamento.stato === 'errore' && (
